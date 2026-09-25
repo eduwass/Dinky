@@ -58,6 +58,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
         refresh()
         print("app: status item up, listening on \(socketPath)")
+        print("STATUS:READY")  // fut's run extension watches for this line
         fflush(stdout)
     }
 

@@ -1,0 +1,19 @@
+#:schema https://fut.sh/schemas/project.json
+
+[extension.wt]
+open_existing = true
+command = ["pi"]
+
+[extension.run]
+command = ["just", "run"]
+auto_start = false
+signal = "STATUS:READY"
+
+[[workspaces]]
+
+[[workspaces.tabs]]
+panes = [{ command = ["claude"] }]
+
+[[workspaces.tabs]]
+title = "agent"
+panes = [{ command = ["pi"] }]
