@@ -3,7 +3,7 @@ import Foundation
 
 // `dinky <command>`: checks the command, sends it to the running app and prints the reply.
 func runCli(_ args: [String]) -> Int32 {
-    let line = args.joined(separator: " ")
+    let line = Command.line(args)
     do {
         _ = try Command.parse(line)
     } catch {

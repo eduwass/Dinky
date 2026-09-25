@@ -74,12 +74,15 @@ enum Dispatcher {
             let on = toggle == .toggle ? !AppState.shared.enabled : toggle == .on
             AppState.shared.setEnabled(on)
             return .ok(on ? "enabled" : "disabled")
-        case .listWindows:
-            return .ok(listWindows())
-        case .listWorkspaces:
-            return .ok(listWorkspaces())
-        case .listDisplays:
-            return .ok(listDisplays())
+        case .listWindows(let query):
+            return listWindows(query)
+        case .listWorkspaces(let query):
+            return .ok(listWorkspaces(query))
+        case .listMonitors(let query):
+            return .ok(listMonitors(query))
+        case .execAndForget(let shell):
+            exec(["/bin/sh", "-c", shell])
+            return .ok("")
         }
     }
 
@@ -149,7 +152,7 @@ enum Dispatcher {
         guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
         let id = window ?? coordinator.focusedWindow
         guard let floating = coordinator.isFloating(id) else { return .error("layout: no window dinky manages is focused") }
-        let current: [LayoutName] = floating ? [.floating] : [.tiling, coordinator.mode(of: id) == .accordion ? .accordion : .tiles]
+        let current: [LayoutName] = floating ? [.floating] : [.tiling, coordinator.container(of: id)?.mode == .accordion ? .accordion : .tiles]
         let name = names.first { !current.contains($0) } ?? names[0]
         switch name {
         case .floating, .tiling:

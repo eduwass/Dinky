@@ -42,11 +42,23 @@ extension Command {
             description: "Reload ~/.config/dinky/dinky.toml. On an error the previous config stays."),
         Doc(syntax: "enable <on|off|toggle>",
             description: "Turn dinky's key bindings and app-activation following on or off."),
-        Doc(syntax: "list-windows",
-            description: "Print windows: id, app, title, frame, workspace and display."),
-        Doc(syntax: "list-workspaces",
-            description: "Print each display's workspaces, marking the current one."),
-        Doc(syntax: "list-displays",
-            description: "Print displays: index, id, UUID and whether it is the main one."),
+        Doc(syntax: "list-workspaces [--all|--focused|--monitor <focused|all|n>...] [--visible [no]] [--empty [no]] [--format <format>]",
+            description: "Print workspace numbers, one per line, of the focused display by default. --all covers every display, "
+                + "so numbers repeat unless --format adds %{monitor-id}. --focused prints the focused workspace. "
+                + "Format variables: " + vars(WorkspaceQuery.variables) + "."),
+        Doc(syntax: "list-windows [--all|--focused|--monitor <focused|all|n>...] [--workspace <focused|visible|n>...] "
+                + "[--app-bundle-id <id>] [--format <format>]",
+            description: "Print windows as 'id | app | title', of the focused display by default. --focused prints the focused window. "
+                + "Format variables: " + vars(WindowQuery.variables) + "."),
+        Doc(syntax: "list-monitors [--focused [no]] [--format <format>]",
+            description: "Print displays as 'number | name'. Format variables: " + vars(MonitorQuery.variables) + "."),
+        Doc(syntax: "list-displays [--focused [no]] [--format <format>]",
+            description: "The same as list-monitors."),
+        Doc(syntax: "exec-and-forget <shell command>",
+            description: "Run the rest of the line with /bin/sh -c without waiting. Its output goes to dinky's log."),
     ]
+}
+
+private func vars(_ names: [String]) -> String {
+    (names + ["right-padding", "newline", "tab"]).map { "%{\($0)}" }.joined(separator: ", ")
 }

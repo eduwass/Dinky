@@ -1,8 +1,10 @@
 import AppKit
+import DinkyCommands
 import DinkyPrivate
 
-// The list-* queries, and the window list they and the dispatcher share.
-// Output is one line per item, fields separated by " | " as AeroSpace prints them.
+// The list-* queries, and the window list they and the dispatcher share. Flags and output follow
+// AeroSpace's; the format rendering lives in DinkyCommands. Monitor ids are 1-based display indices
+// in the display model's order, workspaces are numbered per display.
 
 struct WindowInfo {
     let id: UInt32
@@ -13,7 +15,7 @@ struct WindowInfo {
     let frame: CGRect
 }
 
-/// Normal windows on any Space, front to back, filtered like the spike's `ls`.
+/// Normal windows on any Space, front to back, filtered like the spike's `ls`. dinky's own (borders) are left out.
 func windowList() -> [WindowInfo] {
     let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
     return info.compactMap { w in
@@ -25,61 +27,112 @@ func windowList() -> [WindowInfo] {
             title: w[kCGWindowName as String] as? String ?? "",
             frame: CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0))
         guard w[kCGWindowLayer as String] as? Int == 0, (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
-              window.app != "Dock", window.app != "WindowServer",
+              window.app != "Dock", window.app != "WindowServer", window.pid != getpid(),
               !window.title.isEmpty || (window.frame.width > 40 && window.frame.height > 40) else { return nil }
         return window
     }
 }
 
-/// `<id> | <app> | <title> | <x>,<y> <w>x<h> | <workspace> | <display>`, workspace and display 1-based,
-/// `-` for windows on no workspace (minimized ones, full-screen Spaces). Sorted by display, workspace, then id.
-func listWindows() -> String {
-    let displays = freshDisplays()
-    let windows = windowList()
-    let spaceIDs = dinky_space_ids_for_windows(windows.map { NSNumber(value: $0.id) }).map(\.uint64Value)
-    var rows: [(display: Int, workspace: Int, id: UInt32, line: String)] = []
-    for (window, sid) in zip(windows, spaceIDs) {
-        guard sid != 0 || !window.title.isEmpty else { continue }
-        let d = displays.firstIndex { $0.spaces.contains(sid) }
-        let w = d.flatMap { displays[$0].workspaces.firstIndex(of: sid) }
-        let f = window.frame
-        let line = ["\(window.id)", window.app, window.title, "\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))",
-                    w.map { "\($0 + 1)" } ?? "-", d.map { "\($0 + 1)" } ?? "-"]
-            .joined(separator: " | ")
-        rows.append((d ?? Int.max, w ?? Int.max, window.id, line))
-    }
-    rows.sort { ($0.display, $0.workspace, $0.id) < ($1.display, $1.workspace, $1.id) }
-    return rows.map(\.line).joined(separator: "\n")
-}
-
-/// `<display> | <workspace> | <space-id> | <kind>[ | *]`, one line per Space in Mission Control order.
-/// Full-screen Spaces have no workspace number (`-`); `*` marks each display's current Space.
-func listWorkspaces() -> String {
-    var lines: [String] = []
-    for (d, display) in freshDisplays().enumerated() {
-        for sid in display.spaces {
-            let workspace = display.workspaces.firstIndex(of: sid)
-            let current = sid == display.currentSpaceID ? " | *" : ""
-            lines.append("\(d + 1) | \(workspace.map { "\($0 + 1)" } ?? "-") | \(sid) | \(workspace == nil ? "fullscreen" : "user")\(current)")
+func listWorkspaces(_ query: WorkspaceQuery) -> String {
+    let now = QueryState()
+    let occupied = Set(now.windows.map(\.space))
+    var rows: [[String: String]] = []
+    for (i, display) in now.displays.enumerated() where now.matches(query.monitors, i) {
+        for (n, sid) in display.workspaces.enumerated() {
+            let visible = sid == display.currentSpaceID
+            if let only = query.visible, only != visible { continue }
+            if let empty = query.empty, empty == occupied.contains(sid) { continue }
+            rows.append(now.monitorValues(i).merging(now.workspaceValues(n, on: display)) { a, _ in a })
         }
     }
-    return lines.joined(separator: "\n")
+    return query.format.render(rows)
 }
 
-/// `<display> | <display-id> | <uuid> | <x>,<y> <w>x<h>[ | main][ | focused]`, frames in global CG coordinates.
-func listDisplays() -> String {
-    let displays = freshDisplays()
-    let focused = AppState.shared.displays.focusedDisplay()?.uuid
-    return displays.enumerated().map { d, display in
-        let f = display.frame
-        let main = display.isMain ? " | main" : ""
-        let focus = display.uuid == focused ? " | focused" : ""
-        return "\(d + 1) | \(display.id) | \(display.uuid) | \(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))\(main)\(focus)"
-    }.joined(separator: "\n")
+/// Windows sorted by display, workspace, then id. Windows on no Space (minimized ones) are left out.
+func listWindows(_ query: WindowQuery) -> Reply {
+    let now = QueryState()
+    let coordinator = AppState.shared.coordinator
+    var focused: UInt32?
+    if query.focused {
+        let id = coordinator?.focusedWindow ?? 0
+        focused = id != 0 ? id : frontWindowID()
+    }
+    var rows: [(display: Int, workspace: Int, id: UInt32, values: [String: String])] = []
+    for (window, sid) in now.windows {
+        guard let i = now.displays.firstIndex(where: { $0.spaces.contains(sid) }) else { continue }
+        let display = now.displays[i], n = display.workspaces.firstIndex(of: sid)
+        if let focused { guard window.id == focused else { continue } } else if !now.matches(query.monitors, i) { continue }
+        guard query.workspaces.isEmpty || query.workspaces.contains(where: { spec in
+            switch spec {
+            case .focused: display.uuid == now.focused?.uuid && sid == display.currentSpaceID
+            case .visible: sid == display.currentSpaceID
+            case .number(let k): n == k - 1
+            }
+        }) else { continue }
+        let app = NSRunningApplication(processIdentifier: window.pid)
+        if let bundleID = query.appBundleID, app?.bundleIdentifier != bundleID { continue }
+        // A native full-screen Space has no number and nothing is tiled there.
+        let layout = n == nil ? "fullscreen" : coordinator?.layoutName(of: window.id) ?? "floating"
+        var values = now.monitorValues(i).merging(n.map { now.workspaceValues($0, on: display) } ?? [:]) { a, _ in a }
+        values.merge([
+            "window-id": "\(window.id)", "window-title": window.title,
+            "window-layout": layout, "window-parent-container-layout": layout,
+            "window-is-floating": "\(layout == "floating")", "window-is-fullscreen": "\(layout == "fullscreen")",
+            "app-name": app?.localizedName ?? window.app, "app-bundle-id": app?.bundleIdentifier ?? "",
+            "app-pid": "\(window.pid)",
+        ]) { a, _ in a }
+        rows.append((i, n ?? Int.max, window.id, values))
+    }
+    if query.focused, rows.isEmpty { return .error("no window is focused") }
+    rows.sort { ($0.display, $0.workspace, $0.id) < ($1.display, $1.workspace, $1.id) }
+    return .ok(query.format.render(rows.map(\.values)))
 }
 
-private func freshDisplays() -> [Display] {
-    let model = AppState.shared.displays
-    model.reconcile()
-    return model.displays
+func listMonitors(_ query: MonitorQuery) -> String {
+    let now = QueryState()
+    let rows = now.displays.indices.filter { i in
+        query.focused.map { $0 == (now.displays[i].uuid == now.focused?.uuid) } ?? true
+    }.map(now.monitorValues)
+    return query.format.render(rows)
+}
+
+/// What the queries read, taken fresh once per query.
+private struct QueryState {
+    let displays: [Display]
+    let focused: Display?
+    /// Every listed window with the Space it is on, 0 for none.
+    let windows: [(window: WindowInfo, space: UInt64)]
+
+    init() {
+        let model = AppState.shared.displays
+        model.reconcile()
+        displays = model.displays
+        focused = model.focusedDisplay()
+        let list = windowList()
+        windows = Array(zip(list, dinky_space_ids_for_windows(list.map { NSNumber(value: $0.id) }).map(\.uint64Value)))
+    }
+
+    func matches(_ monitors: [MonitorSpec], _ index: Int) -> Bool {
+        monitors.contains { spec in
+            switch spec {
+            case .all: true
+            case .focused: displays[index].uuid == focused?.uuid
+            case .number(let n): index == n - 1
+            }
+        }
+    }
+
+    func monitorValues(_ index: Int) -> [String: String] {
+        let display = displays[index]
+        let number = NSDeviceDescriptionKey("NSScreenNumber")
+        let screen = NSScreen.screens.first { ($0.deviceDescription[number] as? NSNumber)?.uint32Value == display.id }
+        return ["monitor-id": "\(index + 1)", "monitor-name": screen?.localizedName ?? "", "monitor-is-main": "\(display.isMain)"]
+    }
+
+    /// Values for the 0-based workspace `n` of a display.
+    func workspaceValues(_ n: Int, on display: Display) -> [String: String] {
+        let visible = display.workspaces[n] == display.currentSpaceID
+        return ["workspace": "\(n + 1)", "workspace-is-visible": "\(visible)",
+                "workspace-is-focused": "\(visible && display.uuid == focused?.uuid)"]
+    }
 }

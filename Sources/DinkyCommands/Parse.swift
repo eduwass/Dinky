@@ -11,7 +11,7 @@ public struct CommandError: Error, Equatable, CustomStringConvertible {
 extension Command {
     /// Parses a command string such as `workspace 3`, `move-window-to-workspace 3 --follow` or `focus left`.
     public static func parse(_ string: String) throws(CommandError) -> Command {
-        let words = string.split(whereSeparator: \.isWhitespace).map(String.init)
+        let words = words(string)
         guard let name = words.first else {
             throw CommandError(input: string, message: "empty command")
         }
@@ -19,13 +19,25 @@ extension Command {
             let names = all.map(\.name).joined(separator: ", ")
             throw CommandError(input: string, message: "unknown command '\(string)', expected one of: \(names)")
         }
-        guard let command = parse(name, Array(words.dropFirst())) else {
+        if name == "exec-and-forget" {
+            let shell = string.drop(while: \.isWhitespace).dropFirst(name.count).drop(while: \.isWhitespace)
+            guard !shell.isEmpty else { throw CommandError(input: string, message: "can't parse '\(string)', expected '\(doc.syntax)'") }
+            return .execAndForget(String(shell))
+        }
+        let parsed: Command?
+        do {
+            parsed = try parse(name, Array(words.dropFirst()))
+        } catch {
+            throw CommandError(input: string, message: "can't parse '\(string)': \(error.message)")
+        }
+        guard let command = parsed else {
             throw CommandError(input: string, message: "can't parse '\(string)', expected '\(doc.syntax)'")
         }
         return command
     }
 
-    private static func parse(_ name: String, _ args: [String]) -> Command? {
+    /// Nil for arguments that don't fit; the list-* queries throw a message naming the bad flag.
+    private static func parse(_ name: String, _ args: [String]) throws(CommandError) -> Command? {
         let none = args.isEmpty
         let one = args.count == 1 ? args[0] : nil
         switch name {
@@ -68,14 +80,47 @@ extension Command {
         case "enable":
             return one.flatMap(Toggle.init(rawValue:)).map { .enable($0) }
         case "list-windows":
-            return none ? .listWindows : nil
+            return .listWindows(try WindowQuery(parsing: args))
         case "list-workspaces":
-            return none ? .listWorkspaces : nil
-        case "list-displays":
-            return none ? .listDisplays : nil
+            return .listWorkspaces(try WorkspaceQuery(parsing: args))
+        case "list-monitors", "list-displays":
+            return .listMonitors(try MonitorQuery(parsing: args))
         default:
             return nil
         }
+    }
+
+    /// Splits a command line into words at whitespace. Single or double quotes keep spaces inside a word,
+    /// as in `list-windows --format '%{app-name} | %{window-title}'`.
+    static func words(_ line: String) -> [String] {
+        var words: [String] = [], word = "", inWord = false
+        var quote: Character?
+        for c in line {
+            if let q = quote {
+                if c == q { quote = nil } else { word.append(c) }
+            } else if c == "'" || c == "\"" {
+                quote = c
+                inWord = true
+            } else if c.isWhitespace {
+                if inWord { words.append(word) }
+                (word, inWord) = ("", false)
+            } else {
+                word.append(c)
+                inWord = true
+            }
+        }
+        if inWord { words.append(word) }
+        return words
+    }
+
+    /// The command line for CLI arguments, quoting words with spaces or quotes so `words` splits it back
+    /// the same. `exec-and-forget` is shell text and is passed as written.
+    public static func line(_ args: [String]) -> String {
+        guard args.first != "exec-and-forget" else { return args.joined(separator: " ") }
+        return args.map { word in
+            guard word.isEmpty || word.contains(where: { $0.isWhitespace || $0 == "'" || $0 == "\"" }) else { return word }
+            return word.contains("'") ? "\"\(word)\"" : "'\(word)'"
+        }.joined(separator: " ")
     }
 
     private static func workspaceTarget(_ word: String) -> WorkspaceTarget? {

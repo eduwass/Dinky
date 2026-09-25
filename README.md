@@ -251,9 +251,10 @@ Bindings, the command line and the menu bar share one set of commands. `dinky he
 | `mode <name>` | Switch to a binding mode from the config, such as `main` or `service`. |
 | `reload-config` | Reload `~/.config/dinky/dinky.toml`. On an error the previous config stays. |
 | `enable <on\|off\|toggle>` | Turn dinky's key bindings and app-activation following on or off. |
-| `list-windows` | Print windows: id, app, title, frame, workspace and display. |
-| `list-workspaces` | Print each display's workspaces, marking the current one. |
-| `list-displays` | Print displays: index, id, UUID and whether it is the main one. |
+| `list-workspaces [flags]` | Print workspace numbers. See [Scripting and SketchyBar](#scripting-and-sketchybar). |
+| `list-windows [flags]` | Print windows as `id \| app \| title`. See below. |
+| `list-monitors [flags]` | Print displays as `number \| name`. `list-displays` is the same. |
+| `exec-and-forget <shell command>` | Run the rest of the line with `/bin/sh -c` without waiting. Its output goes to dinky's log. |
 
 Workspaces are counted per display, and workspace commands act on the display that has focus. A full-screen app's Space is not a numbered workspace; workspace commands there answer "not on a numbered workspace".
 
@@ -274,6 +275,40 @@ printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 ```
 
 A few subcommands are for the command line only: `dinky app` (above), `dinky recover` restores the windows a crashed session left tiled, and `dinky debug events` or `dinky debug windows` print the live window event stream or the current windows without the app, which is useful in a bug report.
+
+## Scripting and SketchyBar
+
+The queries and callbacks follow [AeroSpace](https://nikitabobko.github.io/AeroSpace/commands)'s names, flags and output, so bar scripts written for AeroSpace mostly work by changing `aerospace` to `dinky`: `aerospace list-windows --workspace 3` becomes `dinky list-windows --workspace 3` with the same output. The difference is that dinky's workspaces are numbers per display, so with two displays the numbers repeat.
+
+**Queries.** Each prints one line per item. Without a display flag they cover the focused display.
+
+| Query | Flags | Default output |
+|---|---|---|
+| `list-workspaces` | `--all` (every display), `--focused` (the focused workspace), `--monitor <focused\|all\|n>...`, `--visible [no]`, `--empty [no]`, `--format` | `%{workspace}` |
+| `list-windows` | `--all`, `--focused` (the focused window), `--monitor <focused\|all\|n>...`, `--workspace <focused\|visible\|n>...` (repeatable), `--app-bundle-id <id>`, `--format` | `%{window-id}%{right-padding} \| %{app-name}%{right-padding} \| %{window-title}` |
+| `list-monitors` | `--focused [no]`, `--format` | `%{monitor-id}%{right-padding} \| %{monitor-name}` |
+
+`--format` takes a string with `%{variable}`s; quote it. `%{right-padding}` pads to line up columns, `%{newline}` and `%{tab}` insert those characters.
+
+- Workspaces: `%{workspace}` (the number), `%{workspace-is-focused}`, `%{workspace-is-visible}`, `%{monitor-id}` (1-based display number), `%{monitor-name}`, `%{monitor-is-main}`.
+- Windows: `%{window-id}`, `%{window-title}`, `%{window-layout}` (`h_tiles`, `v_tiles`, `h_accordion`, `v_accordion`, `floating` or `fullscreen`), `%{window-is-floating}`, `%{window-is-fullscreen}`, `%{app-name}`, `%{app-bundle-id}`, `%{app-pid}`, plus the workspace and monitor variables.
+- Monitors: `%{monitor-id}`, `%{monitor-name}`, `%{monitor-is-main}`.
+
+`dinky list-workspaces --all` prints every display's numbers, so `for sid in $(dinky list-workspaces --all)` repeats them on two displays; `--format '%{monitor-id}-%{workspace}'` tells them apart.
+
+**Callbacks.** Top-level config keys, empty by default:
+
+```toml
+# A program and its arguments, run whenever a display's current workspace changes, by dinky or natively.
+exec-on-workspace-change = ['/bin/bash', '-c',
+    'sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$DINKY_FOCUSED_WORKSPACE'
+]
+# dinky commands, run when the focused window changes (debounced by 50 ms) and when the binding mode changes.
+on-focus-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
+on-mode-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
+```
+
+`exec-on-workspace-change` gets `DINKY_FOCUSED_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_MONITOR_ID` (the display that switched), and the first two again as `AEROSPACE_FOCUSED_WORKSPACE` and `AEROSPACE_PREV_WORKSPACE` so AeroSpace scripts keep working. Programs started by callbacks and `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Nothing fires while dinky starts up.
 
 ## Status
 

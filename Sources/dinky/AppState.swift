@@ -30,6 +30,7 @@ final class AppState {
     private(set) var coordinator: Coordinator?
     /// The journal of original frames that disable, quit and `dinky recover` restore.
     let recovery = Recovery()
+    private let callbacks = Callbacks()
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -52,6 +53,7 @@ final class AppState {
         guard coordinator == nil else { return }
         coordinator = Coordinator(displays: displays, config: config)
         coordinator?.start()
+        callbacks.start()
         coordinator.map { recovery.start(model: $0.model) }
     }
 

@@ -38,6 +38,9 @@ final class Coordinator {
     private var dirty: Set<SpaceKey> = []
     /// Classification attempts for windows whose AX element has not appeared yet.
     var attempts: [WindowID: Int] = [:]
+    /// Called when the focused window changes.
+    var onFocusChange: (() -> Void)?
+    private var lastFocused: WindowID = 0
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
 
@@ -48,7 +51,7 @@ final class Coordinator {
 
     func start() {
         model.onChange = { [weak self] event in self?.handle(event) }
-        displays.onChange = { [weak self] _ in self?.reconcile() }
+        displays.observe { [weak self] _ in self?.reconcile() }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
@@ -154,6 +157,10 @@ final class Coordinator {
     /// Follows focus into the trees, so new windows land beside the focused one and accordions show it.
     private func syncFocus() {
         let id = focusedWindow
+        if id != lastFocused {
+            lastFocused = id
+            onFocusChange?()
+        }
         if let focusing, focusing.id != id, Date() < focusing.until { return }
         focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }

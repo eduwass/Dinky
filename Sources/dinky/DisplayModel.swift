@@ -44,7 +44,7 @@ final class DisplayModel {
     private(set) var displays: [Display] = []
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
     private(set) var previousSpaceIDs: [String: UInt64] = [:]
-    var onChange: ((DisplayModel) -> Void)?
+    private var observers: [(DisplayModel) -> Void] = []
     private var started = false
 
     func start() {
@@ -79,7 +79,12 @@ final class DisplayModel {
         // A disconnected display takes its history with it.
         previousSpaceIDs = previousSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
         displays = fresh
-        onChange?(self)
+        observers.forEach { $0(self) }
+    }
+
+    /// Calls `handler` after every change, in the order observers were added.
+    func observe(_ handler: @escaping (DisplayModel) -> Void) {
+        observers.append(handler)
     }
 
     /// The display of the focused window, else the one under the cursor, else the main display.

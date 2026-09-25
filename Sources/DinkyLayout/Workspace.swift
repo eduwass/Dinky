@@ -101,9 +101,9 @@ public struct Workspace: Equatable, Sendable {
         return true
     }
 
-    /// The layout mode of the window's parent container, nil if the window is not here.
-    public func mode(of id: WindowID) -> LayoutMode? {
-        root.path(of: id).map { root.container(at: Array($0.dropLast())).mode }
+    /// The window's parent container, nil if the window is not here.
+    public func container(of id: WindowID) -> Container? {
+        root.path(of: id).map { root.container(at: Array($0.dropLast())) }
     }
 
     /// Set the layout mode of the focused window's parent container. Ratios are kept, so tiles come back as they were.

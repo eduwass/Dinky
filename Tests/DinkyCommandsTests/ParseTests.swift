@@ -58,9 +58,8 @@ final class ParseTests: XCTestCase {
         XCTAssertEqual(try parse("enable off"), .enable(.off))
         XCTAssertEqual(try parse("enable toggle"), .enable(.toggle))
         XCTAssertEqual(try parse("retile"), .retile)
-        XCTAssertEqual(try parse("list-windows"), .listWindows)
-        XCTAssertEqual(try parse("list-workspaces"), .listWorkspaces)
-        XCTAssertEqual(try parse("list-displays"), .listDisplays)
+        XCTAssertEqual(try parse("exec-and-forget sketchybar --trigger 'a b'"), .execAndForget("sketchybar --trigger 'a b'"))
+        XCTAssertEqual(try parse("  exec-and-forget   echo  hi"), .execAndForget("echo  hi"))
     }
 
     func testExtraWhitespaceIsIgnored() throws {
@@ -77,7 +76,7 @@ final class ParseTests: XCTestCase {
 
     func testEveryDocumentedNameParsesSomething() {
         XCTAssertEqual(Set(Command.all.map(\.name)).count, Command.all.count)
-        for doc in Command.all {
+        for doc in Command.all where doc.name != "exec-and-forget" {
             XCTAssertThrowsError(try parse("\(doc.name) bogus extra words"), doc.name)
         }
     }
@@ -110,12 +109,30 @@ final class ParseErrorTests: XCTestCase {
         for s in ["", "   ", "workspace", "workspace 0", "workspace -1", "workspace 1 2", "focus sideways",
                   "resize smart 50", "resize diagonal +50", "resize smart +x", "layout", "layout grid",
                   "layout tiles grid", "move-window-to-display 2", "move-window-to-workspace --follow",
-                  "mode", "mode a b", "enable maybe", "fullscreen now", "Workspace 1"] {
+                  "mode", "mode a b", "enable maybe", "fullscreen now", "Workspace 1", "exec-and-forget", "exec-and-forget  "] {
             XCTAssertNotEqual(message(s), "parsed", s)
         }
     }
 
     func testEmpty() {
         XCTAssertEqual(message(""), "empty command")
+    }
+}
+
+final class QuotingTests: XCTestCase {
+    func testWordsKeepQuotedSpaces() {
+        XCTAssertEqual(Command.words(#"list-windows --format '%{app-name} | %{window-title}'"#),
+                       ["list-windows", "--format", "%{app-name} | %{window-title}"])
+        XCTAssertEqual(Command.words(#"a "b 'c'" '' d"#), ["a", "b 'c'", "", "d"])
+    }
+
+    func testLineRoundTripsThroughWords() {
+        let args = ["list-windows", "--format", "%{window-id} | %{app-name}", "--workspace", "1", "it's"]
+        XCTAssertEqual(Command.words(Command.line(args)), args)
+        XCTAssertEqual(Command.line(["workspace", "3"]), "workspace 3")
+    }
+
+    func testExecAndForgetLineIsPassedAsWritten() {
+        XCTAssertEqual(Command.line(["exec-and-forget", "echo 'a b'", "> /tmp/x"]), "exec-and-forget echo 'a b' > /tmp/x")
     }
 }

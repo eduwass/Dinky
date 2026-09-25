@@ -154,6 +154,25 @@ final class ConfigTests: XCTestCase {
                     path: "on-window-detected[0].if.window-title-regex-substring", line: 2, contains: "not a valid regex")
     }
 
+    func testCallbacks() throws {
+        XCTAssertEqual(Config.default.execOnWorkspaceChange, [])
+        XCTAssertEqual(Config.default.onFocusChanged, [])
+        XCTAssertEqual(Config.default.onModeChanged, [])
+        let config = try Config.parse("""
+        exec-on-workspace-change = ['/bin/bash', '-c',
+            'sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE'
+        ]
+        on-focus-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
+        on-mode-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed', 'retile']
+        """)
+        XCTAssertEqual(config.execOnWorkspaceChange, ["/bin/bash", "-c",
+                                                      "sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$AEROSPACE_FOCUSED_WORKSPACE"])
+        XCTAssertEqual(config.onFocusChanged, ["exec-and-forget sketchybar --trigger aerospace_mode_changed"])
+        XCTAssertEqual(config.onModeChanged, ["exec-and-forget sketchybar --trigger aerospace_mode_changed", "retile"])
+        assertError("exec-on-workspace-change = '/bin/sh'\n", path: "exec-on-workspace-change", line: 1, contains: "list of strings")
+        assertError("on-mode-changed = [1]\n", path: "on-mode-changed", line: 1, contains: "list of strings")
+    }
+
     func testLoadFromMissingFileFails() {
         XCTAssertThrowsError(try Config.load(from: URL(fileURLWithPath: "/nonexistent/dinky.toml"))) { error in
             XCTAssertTrue("\(error)".contains("/nonexistent/dinky.toml"))

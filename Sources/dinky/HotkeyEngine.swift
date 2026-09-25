@@ -13,6 +13,8 @@ final class HotkeyEngine {
     private var modes: [String: [KeyPress: [String]]] = [:]
     private(set) var currentMode = "main"
     var enabled = true
+    /// Called with the new mode's name whenever the mode changes.
+    var onModeChange: ((String) -> Void)?
     private var tap: CFMachPort?
     private var source: CFRunLoopSource?
 
@@ -34,7 +36,7 @@ final class HotkeyEngine {
             }
             return bindings
         }
-        currentMode = "main"
+        enter("main")
     }
 
     func setMode(_ name: String) {
@@ -42,7 +44,13 @@ final class HotkeyEngine {
             fputs("hotkeys: unknown mode '\(name)', staying in '\(currentMode)'\n", stderr)
             return
         }
+        enter(name)
+    }
+
+    private func enter(_ name: String) {
+        guard name != currentMode else { return }
         currentMode = name
+        onModeChange?(name)
     }
 
     /// Creates the tap on the current run loop. False if it could not (Accessibility missing).

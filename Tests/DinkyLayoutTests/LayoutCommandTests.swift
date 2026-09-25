@@ -71,15 +71,22 @@ final class AccordionCommandTests: XCTestCase {
         ws.resize(by: 300)
         let tiles = ws.layout()
         ws.setMode(.accordion)
-        XCTAssertEqual(ws.mode(of: 3), .accordion)
+        XCTAssertEqual(ws.container(of: 3)?.mode, .accordion)
         XCTAssertNotEqual(ws.layout(), tiles)
         ws.setMode(.tiles)
-        XCTAssertEqual(ws.mode(of: 3), .tiles)
+        XCTAssertEqual(ws.container(of: 3)?.mode, .tiles)
         XCTAssertEqual(ws.layout(), tiles)
     }
 
-    func testModeOfUnknownWindowIsNil() {
-        XCTAssertNil(workspace(1).mode(of: 9))
+    func testContainerOfUnknownWindowIsNil() {
+        XCTAssertNil(workspace(1).container(of: 9))
+    }
+
+    func testContainerOfNestedWindow() {
+        let ws = workspace(3) // 1 on the left, 2 above 3 on the right
+        XCTAssertEqual(ws.container(of: 1)?.orientation, .horizontal)
+        XCTAssertEqual(ws.container(of: 3)?.orientation, .vertical)
+        XCTAssertEqual(ws.container(of: 3).map { shape($0) }, "v[2 3]")
     }
 }
 

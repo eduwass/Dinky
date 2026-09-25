@@ -19,6 +19,12 @@ public struct Config: Equatable {
     public var onWindowDetected: [WindowRule] = []
     /// Keyed by mode name, e.g. `main`, `service`.
     public var modes: [String: Mode] = [:]
+    /// A program and its arguments, run when a display's current workspace changes.
+    public var execOnWorkspaceChange: [String] = []
+    /// Commands run when the focused window changes.
+    public var onFocusChanged: [String] = []
+    /// Commands run when the binding mode changes.
+    public var onModeChanged: [String] = []
 
     public init() {}
 
@@ -73,6 +79,9 @@ public struct Config: Equatable {
         borders = try t.table("borders").map(Borders.init) ?? borders
         switching = try t.table("switching").map(Switching.init) ?? switching
         onWindowDetected = try t.tables("on-window-detected")?.map(WindowRule.init) ?? []
+        execOnWorkspaceChange = try t.strings("exec-on-workspace-change") ?? []
+        onFocusChanged = try t.strings("on-focus-changed") ?? []
+        onModeChanged = try t.strings("on-mode-changed") ?? []
         if let modeTable = try t.table("mode") {
             for name in modeTable.keys {
                 modes[name] = try Mode(modeTable.table(name)!)

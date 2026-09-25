@@ -21,9 +21,11 @@ public enum Command: Equatable, Sendable {
     case mode(String)
     case reloadConfig
     case enable(Toggle)
-    case listWindows
-    case listWorkspaces
-    case listDisplays
+    case listWindows(WindowQuery)
+    case listWorkspaces(WorkspaceQuery)
+    case listMonitors(MonitorQuery)
+    /// Shell text run with `/bin/sh -c`, not waited for.
+    case execAndForget(String)
 }
 
 /// A 1-based workspace number on the focused display, or its neighbour.
