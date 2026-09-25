@@ -1,6 +1,6 @@
 ---
 id: din-2h2u
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-09-25T22:21:15Z
@@ -18,3 +18,9 @@ Also: with a Finder window on workspace 1, 'open ~/Documents' from workspace 3 w
 
 Idea: defer the follow by ~150 ms and re-check whether the app now has a window on the current Space before switching.
 
+
+## Notes
+
+**2026-09-25T22:44:28Z**
+
+An activation of an app with no window on the current Space waits 250 ms; if a window of the app appears here meanwhile it stays, and a newer activation or a Space change meanwhile drops it. VM: TextEdit a.txt on 3, from empty 4 open -a TextEdit b.txt stays on 4 with b there; open /Library (and /Users) from 5 (and 2) with a Finder window on 6 stays. Opening a folder that already has a Finder window on another Space still follows to it (Finder reveals that window).

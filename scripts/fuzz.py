@@ -142,7 +142,7 @@ class Fuzzer:
         how = self.rng.choice(["dinky", "native"])
         if how == "dinky": self.cli("workspace", i + 1)
         else: self.native_switch(s, "right" if i > here else "left", abs(i - here))
-        if self.rng.random() < 0.4:  # activations within 1 s of a Space change are not followed, by design
+        if self.rng.random() < 0.4:  # 0.5 or 1.5 s later: past the arrival activation, so this one is followed
             delay = self.rng.choice([0.5, 1.5])
             time.sleep(delay)
             how += f" + activate after {delay} s"

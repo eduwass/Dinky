@@ -133,7 +133,9 @@ enum Dispatcher {
         guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         if let error = move(wid, to: space, arriving: "workspace \(to + 1)") { return error }
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
-        if follow { switchSpace(toSpaceID: space, on: display) }
+        // macOS activates another app when the Space left behind loses the active app's window, so focus the
+        // moved window once the display is on its Space.
+        if follow { switchSpace(toSpaceID: space, on: display) { AppState.shared.coordinator?.focus(wid) } }
         return .ok("moved window \(wid) to workspace \(to + 1)")
     }
 

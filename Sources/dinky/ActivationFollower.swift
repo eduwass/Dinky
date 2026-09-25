@@ -1,0 +1,145 @@
+import AppKit
+import DinkyPrivate
+
+// Follows app activation (Cmd-Tab, Dock click) to the display and Space of the app's window when the
+// "switch to a Space with open windows" setting is off. Only activations the user asked for are followed.
+// macOS also activates apps on its own, and chasing those throws the user off the Space they are on:
+// - Arriving on a Space activates whatever is there (Finder on an empty one). The first activation within
+//   `arrivalWindow` of a Space change is that one.
+// - When the active app quits, hides or loses its last window on the current Space, macOS activates another
+//   app. An activation within `goneWindow` of the previous app going away is that one.
+// - Opening a document activates the app before its new window exists. An app with no window on the
+//   current Space gets `windowGrace` for one to appear there before it is followed.
+
+var followEnabled = true
+
+private let ms: UInt64 = 1_000_000
+private let arrivalWindow = 300 * ms
+private let goneWindow = 300 * ms
+private let windowGrace = 250 * ms
+
+private func uptime() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
+
+// The Space-change notification is not reliable for swipes posted by other processes, so the last Space
+// seen on each display is remembered too, and checked on every activation and by a timer.
+private var lastSeenSpaceIDs: [String: UInt64] = [:]
+private var lastSpaceChangeAt: UInt64 = 0
+/// No activation has arrived since the last Space change.
+private var arrivalPending = false
+/// The app that last quit, hid or lost a window, and when.
+private var lastGone: (pid: pid_t, at: UInt64) = (0, 0)
+private var activePID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
+/// Counts activations, so a follow waiting for a window knows when a newer activation replaced it.
+private var activations = 0
+
+// Records the current Space of every display. True if any differs from the last one recorded.
+@discardableResult
+func noteCurrentSpace() -> Bool {
+    let model = AppState.shared.displays
+    model.reconcile()
+    let seen = Dictionary(model.displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { a, _ in a })
+    let changed = seen != lastSeenSpaceIDs
+    lastSeenSpaceIDs = seen
+    if changed { spaceChanged() }
+    return changed
+}
+
+// Tells the activation follower that this Space change, or this activation on the current Space, is
+// dinky's own, so the activation it causes is not followed.
+func noteOwnSwitch(to target: UInt64, on uuid: String) {
+    lastSeenSpaceIDs[uuid] = target
+    spaceChanged()
+}
+
+private func spaceChanged() {
+    lastSpaceChangeAt = uptime()
+    arrivalPending = true
+}
+
+func installActivationFollower() {
+    noteCurrentSpace()
+    Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in noteCurrentSpace() }
+    EventHub.shared.subscribe { event in
+        switch event.kind {
+        case .spaceChange:
+            noteCurrentSpace()
+        case .windowClose, .windowDestroy:
+            // Runs before the coordinator's model forgets the window, which knows its owner once it is gone.
+            let pid = event.pid != 0 ? event.pid : AppState.shared.coordinator?.model.windows[event.windowID]?.pid
+            if let pid { lastGone = (pid, uptime()) }
+        default:
+            break
+        }
+    }
+    let center = NSWorkspace.shared.notificationCenter
+    for name in [NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didHideApplicationNotification] {
+        center.addObserver(forName: name, object: nil, queue: .main) { note in
+            guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+            lastGone = (app.processIdentifier, uptime())
+        }
+    }
+    center.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { note in
+        guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+        let previous = activePID
+        activePID = app.processIdentifier
+        activations += 1
+        guard followEnabled, !isArrivalActivation() else { return }
+        activated(app.processIdentifier, name: app.localizedName ?? "?", previous: previous)
+    }
+}
+
+// Consumes the arrival: only the first activation after a Space change can be the one it causes.
+private func isArrivalActivation() -> Bool {
+    noteCurrentSpace()
+    defer { arrivalPending = false }
+    return arrivalPending && uptime() - lastSpaceChangeAt < arrivalWindow
+}
+
+// Stays if the app has a window on the focused display's current Space: then Cmd-Tab brings that window
+// forward. Otherwise waits for one to appear there, then follows the app unless the activation was macOS
+// replacing an app that went away, or something else happened meanwhile.
+private func activated(_ pid: pid_t, name: String, previous: pid_t) {
+    guard let here = AppState.shared.displays.focusedDisplay()?.currentSpaceID,
+          !windowSpaces(of: pid).contains(here) else { return }
+    let activatedAt = uptime()
+    let activation = activations
+    DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(windowGrace))) {
+        guard activation == activations, lastSpaceChangeAt < activatedAt else { return }
+        if windowSpaces(of: pid).contains(here) {
+            print("activate \(name): stayed, its new window opened here")
+        } else if lastGone.pid == previous, lastGone.at + goneWindow > activatedAt, !hasWindowOnScreen(previous) {
+            print("activate \(name): not followed, macOS replaced the app that went away")
+        } else {
+            follow(pid, name: name)
+        }
+        fflush(stdout)
+    }
+}
+
+// The Spaces of the app's normal windows, front to back: the first one is its frontmost window's.
+private func windowSpaces(of pid: pid_t) -> [UInt64] {
+    normalWindows(of: pid, [.optionAll]).map { dinky_window_space_id($0) }
+}
+
+// Whether the app shows a normal window on a current Space; a hidden app does not.
+private func hasWindowOnScreen(_ pid: pid_t) -> Bool {
+    !normalWindows(of: pid, [.optionOnScreenOnly]).isEmpty
+}
+
+private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UInt32] {
+    let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
+    return info.compactMap { w in
+        guard w[kCGWindowOwnerPID as String] as? pid_t == pid, w[kCGWindowLayer as String] as? Int == 0 else { return nil }
+        return w[kCGWindowNumber as String] as? UInt32
+    }
+}
+
+// Switches to the Space of the app's frontmost window.
+private func follow(_ pid: pid_t, name: String) {
+    let model = AppState.shared.displays
+    guard let (space, display) = windowSpaces(of: pid).lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first,
+          space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else { return }
+    let spaces = display.spaces
+    print(String(format: "activate %@: followed %d -> %d on display %u", name,
+                 (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1, display.id))
+}
