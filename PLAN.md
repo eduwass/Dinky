@@ -1,97 +1,113 @@
-# dinky spike
+# dinky v1: daily driver
 
-Prove or disprove the mechanics of a SIP-on tiling window manager built on native macOS Spaces. Nothing else.
+A SIP-on tiling window manager for macOS built on native Spaces. The spike (RESULTS.md) proved the mechanics: mimi's augmented Dock swipe switches Spaces in about 70 ms, the bridged SkyLight operation moves windows between Spaces in about 4 ms, AX raise focuses, AX frame writes tile. This plan takes that to something usable every day on the author's machines.
 
-Machine: macOS 27.0 (26A428), SIP enabled. Full research, alternatives and the post-spike plan live in RESEARCH.md.
+Agreed 25 September 2026. Work is tracked with `tk` in `.tickets/`; `tk ready` lists what can start. The research archive is RESEARCH.md.
 
-## The unknowns
+## Decisions
 
-Everything else in the earlier plan is known to work in some shipping window manager. Only these need proving on this OS build:
-
-1. Moving a window to another native Space through the private bridged operation, with SIP on.
-2. Switching Spaces fast enough to feel instant.
-3. Raising one specific window of an app that has windows on both Spaces, without dragging its sibling along.
-
-## Shape
-
-A throwaway command-line tool, `dinky`, run from the terminal. No app bundle, no menu bar, no onboarding, no settings, no recovery journal, no animation. Accessibility is granted to the terminal once. Test windows are disposable TextEdit and Safari windows plus one terminal and one Electron app. If a window gets stranded, Mission Control can drag it back.
-
-Swift package with one C/Objective-C target for the private calls and one Swift executable target. The private layer is lifted, not reimplemented:
-
-| Need | Source to lift |
+| Area | Decision |
 |---|---|
-| Space list | `SLSCopyManagedDisplaySpaces`, yabai `src/space_manager.c` |
-| Current Space, Space of a window | `SLSManagedDisplayGetCurrentSpace` and `SLSCopySpacesForWindows`, yabai `src/window.c` lines 61 to 93 |
-| Windows on a Space | `SLSCopyWindowsWithOptionsAndTags`, yabai |
-| Symbol lookup for the bridged dispatcher | mimi `internal/native/space.m`, `mimi_macho_find_symbol` and the resolve block around line 725 |
-| Move windows to a Space | `SLSBridgedMoveWindowsToManagedSpaceOperation initWithWindows:spaceID:`, yabai `space_manager_move_window_to_space`. Both yabai and mimi fall back to `SLSMoveWindowsToManagedSpace` when the bridged call fails. Do not lift the fallback. |
-| Swipe switching, Tuna form | Tuna `app/SystemExtension/SpacesRuntime.swift`. Already posts began/changed/ended, but sends multi-step swipes back to back with no delay and has no IOHID augmentation. |
-| Swipe switching, mimi form | mimi `space.m` `mimiPostAugmentedDockSwipe` plus `dockswipe.m`. Adds the IOHID payload and waits between steps. |
-| Direct switch, untested | `SLSBridgedManagedDisplaySetCurrentSpaceOperation initWithDisplayIdentifier:spaceID:` |
-| Focus a specific window | yabai `src/window_manager.c` lines 1269 to 1330: `_SLPSSetFrontProcessWithOptions` plus `window_manager_make_key_window`. Not part of the scripting addition. |
-| Stop apps animating AX frame writes | Clear `AXEnhancedUserInterface` on the app element before writing, yabai `src/misc/helpers.h` lines 516 to 529 |
+| Workspaces | Native Spaces, numbered 1..N per display. Config says how many; dinky creates missing ones on start and never removes any. |
+| Displays | Multi-display from the start. Each display has its own Spaces and its own layout trees. Bindings act on the focused display. Windows can be moved between displays. |
+| New windows | Tiled automatically as they appear. Sheets, dialogs, utility panels and per-app rules float. |
+| Layouts | Tiles with widest-axis insertion, stable split axes. Accordion as a container mode, AeroSpace style: children overlap, neighbours peek out by `accordion-padding`. |
+| Floating | Toggle per window, per-app rules in config. Floating windows keep native placement. |
+| Bindings | `alt` is the default modifier, AeroSpace vocabulary and key syntax. `ctrl-left/right` also bound to workspace prev/next. Modes supported. |
+| Moving windows | `move-window-to-workspace N` stays put; `--follow` or a second binding follows. Same for displays. |
+| Switching | mimi's augmented swipe on the target display. Cmd-Tab and Dock activations are followed with the same swipe, with the native "switch to a Space with open windows" setting off. Onboarding asks before changing that setting. |
+| Borders | Built in, JankyBorders approach reimplemented (it is GPL). Every focused window gets a border, tiled or floating. |
+| Gaps | Inner and outer, in config. |
+| Extras in v1 | Fullscreen toggle (tile fills the Space, tree kept), workspace back-and-forth, resize smart +/-, swap and join-with. |
+| Mouse | No focus-follows-mouse in v1. |
+| Menu bar | Current Space number plus the action menu, as in the spike. |
+| App | Signed bundle, launch at login, Accessibility onboarding, restore-on-quit. Direct build, no updater. |
+| CLI | `dinky <command>` talks to the app over a unix socket. Bindings and CLI share one command vocabulary. |
+| Config | `~/.config/dinky/dinky.toml`, parsed with TOMLDecoder, reloaded on change and by `reload-config`. |
 
-Cached checkouts are under `~/.cache/checkouts/github.com/`.
+## Config draft
 
-## Preconditions
+```toml
+config-version = 1
+start-at-login = true
+auto-reload-config = true
+workspaces = 5                 # per display; dinky creates missing Spaces, never removes
 
-Before any step, in System Settings:
+[layout]
+default = 'tiles'              # tiles | accordion
+accordion-padding = 30
 
-- Desktop & Dock, "Automatically rearrange Spaces based on most recent use": off. Otherwise Space indices change under the tool and step 2 means nothing.
-- Record the values of "When switching to an application, switch to a Space with open windows for the application" and Accessibility, Reduce Motion. Both change what steps 2 and 4 show.
+[gaps]
+inner = 8
+outer = { top = 8, bottom = 8, left = 8, right = 8 }
 
-## Steps
+[borders]
+enabled = true
+width = 4
+active-color = '#e1e3e4'
+inactive-color = '#494d64'
+style = 'round'                # round | square
 
-Each step is one subcommand. Do them in order. Stop at the first gate that fails and write down why.
+[switching]
+follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch
 
-### 1. `dinky ls`
+[[on-window-detected]]
+if.app-id = 'com.apple.systempreferences'
+run = 'layout floating'
 
-Print displays, the Spaces on the main display with the current one marked, and every normal window with its ID, app, title, frame and Space.
+[mode.main.binding]
+ctrl-left = 'workspace prev'
+ctrl-right = 'workspace next'
+alt-1 = 'workspace 1'          # ... alt-9
+alt-shift-1 = 'move-window-to-workspace 1'
+alt-tab = 'workspace-back-and-forth'
+alt-h = 'focus left'           # j k l
+alt-shift-h = 'move left'      # j k l
+alt-minus = 'resize smart -50'
+alt-equal = 'resize smart +50'
+alt-f = 'fullscreen'
+alt-shift-f = 'layout floating tiling'
+alt-comma = 'layout accordion'
+alt-slash = 'layout tiles'
+alt-shift-n = 'move-window-to-display next'
+alt-shift-semicolon = 'mode service'
 
-Gate: output matches what Mission Control shows.
+[mode.service.binding]
+esc = ['reload-config', 'mode main']
+r = ['flatten-workspace-tree', 'mode main']
+alt-shift-h = ['join-with left', 'mode main']   # j k l
+```
 
-### 2. `dinky switch <space-index>`
+## Architecture
 
-Try Tuna's swipe first. If the Dock ignores it, or multi-step swipes overshoot, port mimi's form. The bridged set-current-Space operation is a third path worth one attempt because it would remove the gesture entirely, but it is not required for the gate.
+```text
+dinky.app (menu bar, accessory)            dinky CLI ── unix socket ──┐
+  Config (TOML, watched) ─► Hotkeys (event tap, modes) ─► Commands ◄──┘
+  WindowServer events (SLSRegisterNotifyProc) ─► Window model, Display/Space model
+  Layout engine (pure, one tree per Space) ─► Frame applier (AX, per-app coalescing, gaps)
+  Borders (SLS windows ordered with the target) ◄── window model
+  Spaces adapter: mimi swipe per display, bridged move, bridged create
+```
 
-Latency is measured from posting to `SLSManagedDisplayGetCurrentSpace` reporting the target, polled on a tight loop. That flips before the switch animation finishes, so it is a lower bound, not the visual end.
+One serialized coordinator owns state. WindowServer notifications replace polling. Private calls stay behind the existing Objective-C target with capability checks. The pure layout engine is tested without macOS.
 
-Test: adjacent, two away, and ten rapid alternating switches.
+## Epics, in build order
 
-Gate: at least one path lands on the requested Space every time, nothing jumps after input stops, and it subjectively feels as immediate as Hyprland. Record which path won and the measured latency.
+1. **Foundation.** App bundle and onboarding, config, command dispatcher, CLI socket, and the WindowServer event stream that everything else consumes.
+2. **Spaces and displays.** Two spikes first: creating Spaces with the bridged operation, and fast switching on a display that does not have the cursor. Then the display/Space model, ensuring the workspace count, workspace commands, moving windows, activation following.
+3. **Layout.** Tree model with pure tests, frame applier, automatic tiling on events, floating rules, directional commands, accordion, resize, fullscreen, join-with, native tabs and dialogs.
+4. **Visuals.** Borders, then border polish.
+5. **Hotkeys.** Engine with modes and chained commands, default config.
+6. **Release.** Restore-on-quit and crash recovery, menu bar wiring, host validation with SIP on, docs.
 
-### 3. `dinky move <window-id> <space-index> [--follow]`
+## Risks
 
-Move one window through the bridged operation only. Confirm with `dinky ls` and with Mission Control, not with the return value.
+- **Space creation** through `SLSBridgedSpaceCreateOperation` is untested. If it fails, v1 asks the user to create desktops in Mission Control and the "ensure count" feature waits.
+- **Non-cursor display switching.** The Dock swipe acts on the display the gesture is attributed to. mimi and Tuna target the cursor's display. Needs a spike; the fallback is warping the cursor for the duration of the swipe.
+- **Bridged set-current-Space** was unreliable in the spike and is not used.
+- **WindowServer notifications** and border ordering are proven in JankyBorders on 26, not yet on 27.
+- **Beta build and SIP off in the VM.** The spike ran on 26A5416b with SIP disabled. Host validation with SIP on is a release ticket, not an afterthought.
 
-Test: move away, move back onto the current Space from a hidden one, move and follow, move the frontmost focused window and note where focus goes, a window whose app has another window on the source Space, a window with a sheet open, and the same window moved back and forth five times quickly.
+## Not in v1
 
-Gate: membership is correct in both `ls` and Mission Control after every case, the sibling stays put, the sheet travels with its window, and Dock and Mission Control stay coherent afterwards.
-
-### 4. `dinky focus <window-id>`
-
-Raise a specific window. Try AX raise plus app activation first, since that is the public path and the one expected to pull you over to the sibling's Space. Then try yabai's private focus path. Test with two windows of the same app on the same Space and again with one on each Space.
-
-Gate: with at least one path, the requested window comes to front and the sibling on the other Space does not pull the current Space away. Record which path won and the switch-on-activate setting it was tested under.
-
-### 5. `dinky tile`
-
-Tile every normal window on the current Space through AX, then read frames back. The only layout code in the spike: sort windows by ID, split the rectangle along its longer side into two halves, give the first half of the list to one side and the rest to the other, recurse. No gaps. Clear `AXEnhancedUserInterface` first and write size, position, size, so Safari and Electron do not animate or clamp.
-
-Gate: three windows land where computed, an app that rejects a size does not block the others, and switching between two tiled Spaces with `switch` feels like a working tiling WM.
-
-## Deliberately not in the spike
-
-App shell, permissions UI, recovery, accordion, layout tree, focus-follows-mouse, hotkeys, animation, multi-display, Space creation. All deferred to RESEARCH.md's phases, which only matter if all five gates pass.
-
-## Decision
-
-All five gates pass: start the real app from the RESEARCH.md phases, with the winning switch and focus paths and the measured latency as the baseline.
-
-Step 1 fails: the private query layer does not match this build. Fix it or stop, nothing else can be trusted.
-
-Step 2 or 3 fails: native Spaces are not a viable SIP-on backend on this build. Do not fall back to corner parking silently. Decide between waiting for a build where it works, or a different backend, as a separate conversation.
-
-Step 4 fails: same-app windows across Spaces cannot be focused independently. The backend works but the accordion and any same-app workflow are compromised. Decide whether that is acceptable before building further.
-
-Step 5 fails: the failure is in AX frame handling, which every shipping tiler has solved. Debug it, it is not evidence against the design.
+Focus-follows-mouse, animation, named workspaces, removing Spaces, a tab-bar stack mode, scripting hooks, an updater, App Store.
