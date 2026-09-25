@@ -10,7 +10,7 @@ public struct Format: Equatable, Sendable {
 
     public let parts: [Part]
 
-    static let special: Set<String> = ["right-padding", "newline", "tab"]
+    static let special = ["right-padding", "newline", "tab"]
 
     /// Parses a format string, accepting only `variables` and the special ones. Throws a message naming
     /// the offending token.

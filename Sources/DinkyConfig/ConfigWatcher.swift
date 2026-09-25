@@ -7,16 +7,14 @@ import Foundation
 /// watched descriptor pointing at a deleted file. So after every change the file is reopened,
 /// and while it is missing it is polled until it comes back.
 public final class ConfigWatcher {
-    public let url: URL
-    private let debounce: TimeInterval
+    private let url: URL
     private let onChange: (Result<Config, ConfigError>) -> Void
     private let queue = DispatchQueue(label: "dinky.config-watcher")
     private var source: DispatchSourceFileSystemObject?
     private var pending: DispatchWorkItem?
 
-    public init(url: URL, debounce: TimeInterval = 0.1, onChange: @escaping (Result<Config, ConfigError>) -> Void) {
+    public init(url: URL, onChange: @escaping (Result<Config, ConfigError>) -> Void) {
         self.url = url
-        self.debounce = debounce
         self.onChange = onChange
         queue.sync { watch() }
     }
@@ -64,7 +62,7 @@ public final class ConfigWatcher {
         pending?.cancel()
         let work = DispatchWorkItem { [weak self] in self?.reload() }
         pending = work
-        queue.asyncAfter(deadline: .now() + debounce, execute: work)
+        queue.asyncAfter(deadline: .now() + 0.1, execute: work)
     }
 
     private func reload() {

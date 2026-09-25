@@ -39,17 +39,14 @@ final class ConfigCheckTests: XCTestCase {
     }
 
     func testRuleAndCallbackCommandsAreChecked() throws {
-        let toml = """
+        let findings = try check("""
+        on-focus-changed = ['exec-and-forget true', 'nonsense']
         [mode.main.binding]
         alt-h = 'focus left'
-        on-focus-changed = ['exec-and-forget true', 'nonsense']
         [[on-window-detected]]
         if.app-id = 'com.apple.finder'
         run = 'layout floating'
-        """
-        // Callbacks after a table header belong to that table in TOML, so put them first.
-        let fixed = "on-focus-changed = ['exec-and-forget true', 'nonsense']\n" + toml.replacingOccurrences(of: "on-focus-changed = ['exec-and-forget true', 'nonsense']\n", with: "")
-        let findings = try check(fixed)
+        """)
         XCTAssertEqual(findings.count, 1)
         XCTAssertTrue(findings[0].message.hasPrefix("on-focus-changed:"))
     }

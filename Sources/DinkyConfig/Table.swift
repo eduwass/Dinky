@@ -53,13 +53,8 @@ final class Table {
     /// A list of strings, e.g. bundle IDs.
     func strings(_ key: String) throws -> [String]? {
         guard use(key) else { return nil }
-        let error = ConfigError(path: path(key), "expected a list of strings")
-        guard let array = try? table.array(forKey: key) else { throw error }
-        return try (0..<array.count).map { index in
-            // As in string(_:): rule integers out before reading a string.
-            guard (try? array.integer(atIndex: index)) == nil, let string = try? array.string(atIndex: index) else { throw error }
-            return string
-        }
+        guard let strings = stringArray(key) else { throw ConfigError(path: path(key), "expected a list of strings") }
+        return strings
     }
 
     func table(_ key: String) throws -> Table? {
@@ -73,28 +68,18 @@ final class Table {
         guard use(key) else { return nil }
         guard let array = try? table.array(forKey: key) else { throw ConfigError(path: path(key), "expected a list of tables") }
         return try (0..<array.count).map { index in
-            guard let nested = try? array.table(atIndex: index) else {
-                throw ConfigError(path: "\(path(key))[\(index)]", "expected a table")
-            }
-            return Table(nested, path: "\(path(key))[\(index)]")
+            let path = "\(path(key))[\(index)]"
+            guard let nested = try? array.table(atIndex: index) else { throw ConfigError(path: path, "expected a table") }
+            return Table(nested, path: path)
         }
     }
 
     /// A command string or a list of them, none empty. Commands stay strings here;
     /// the dispatcher owns the vocabulary.
     func commands(_ key: String) throws -> [String]? {
-        guard table.contains(key: key) else { use(key); return nil }
-        let error = ConfigError(path: path(key), "expected a command string or a list of them")
-        var commands: [String]
-        if let array = try? table.array(forKey: key) {
-            use(key)
-            commands = try (0..<array.count).map { index in
-                guard (try? array.integer(atIndex: index)) == nil, let command = try? array.string(atIndex: index) else { throw error }
-                return command
-            }
-        } else {
-            guard let command = try? string(key) else { throw error }
-            commands = [command]
+        guard use(key) else { return nil }
+        guard let commands = stringArray(key) ?? (try? string(key)).map({ [$0] }) else {
+            throw ConfigError(path: path(key), "expected a command string or a list of them")
         }
         if commands.isEmpty || commands.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
             throw ConfigError(path: path(key), "commands can't be empty")
@@ -106,7 +91,7 @@ final class Table {
     func contains(_ key: String) -> Bool { use(key) }
 
     /// The raw array at `key`, nil if absent or not an array. Marks it read.
-    func array(_ key: String) throws -> TOMLArray? {
+    func array(_ key: String) -> TOMLArray? {
         guard use(key) else { return nil }
         return try? table.array(forKey: key)
     }
@@ -121,10 +106,21 @@ final class Table {
     }
 
     /// Marks `key` as read; returns whether it is present.
-    @discardableResult
     private func use(_ key: String) -> Bool {
         used.insert(key)
         return table.contains(key: key)
+    }
+
+    /// The array at `key` if it holds only strings.
+    private func stringArray(_ key: String) -> [String]? {
+        guard let array = try? table.array(forKey: key) else { return nil }
+        var strings: [String] = []
+        for index in 0..<array.count {
+            // As in string(_:): rule integers out before reading a string.
+            guard (try? array.integer(atIndex: index)) == nil, let string = try? array.string(atIndex: index) else { return nil }
+            strings.append(string)
+        }
+        return strings
     }
 
     private func scalar<T>(_ key: String, _ expected: String, _ read: (TOMLTable) throws -> T) throws -> T? {

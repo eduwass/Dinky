@@ -36,7 +36,7 @@ extension Command {
         return command
     }
 
-    /// Nil for arguments that don't fit; the list-* queries throw a message naming the bad flag.
+    /// Nil for arguments that don't fit; `focus` and the list-* queries throw a message naming the problem.
     private static func parse(_ name: String, _ args: [String]) throws(CommandError) -> Command? {
         let none = args.isEmpty
         let one = args.count == 1 ? args[0] : nil

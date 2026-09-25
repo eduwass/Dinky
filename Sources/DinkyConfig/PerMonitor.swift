@@ -72,7 +72,7 @@ extension Table {
         guard contains(key) else { return nil }
         if let value = try? int(key) { return PerMonitor(value) }
         let error = ConfigError(path: path(key), "expected a number or a list of numbers and { monitor.<pattern> = number } tables")
-        guard let array = try array(key) else { throw error }
+        guard let array = array(key) else { throw error }
         return PerMonitor(try (0..<array.count).map { index in
             if let value = try? array.integer(atIndex: index) { return PerMonitor.Entry(nil, Int(value)) }
             guard let nested = try? array.table(atIndex: index) else { throw error }

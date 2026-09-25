@@ -70,5 +70,5 @@ extension Command {
 }
 
 private func vars(_ names: [String]) -> String {
-    (names + ["right-padding", "newline", "tab"]).map { "%{\($0)}" }.joined(separator: ", ")
+    (names + Format.special).map { "%{\($0)}" }.joined(separator: ", ")
 }

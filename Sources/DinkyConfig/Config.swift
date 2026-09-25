@@ -142,7 +142,6 @@ public struct Inner: Equatable {
     public init(_ both: PerMonitor) { (horizontal, vertical) = (both, both) }
 
     init(_ t: Table) throws {
-        self.init(0)
         horizontal = try t.perMonitor("horizontal") ?? 0
         vertical = try t.perMonitor("vertical") ?? 0
         try t.done()
@@ -156,7 +155,6 @@ public struct Sides: Equatable {
     public init(_ all: PerMonitor) { (top, bottom, left, right) = (all, all, all, all) }
 
     init(_ t: Table) throws {
-        self.init(0)
         top = try t.perMonitor("top") ?? 0
         bottom = try t.perMonitor("bottom") ?? 0
         left = try t.perMonitor("left") ?? 0
