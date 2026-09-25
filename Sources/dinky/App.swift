@@ -13,8 +13,14 @@ func runApp(_ args: [String]) -> Int32 {
 
 final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
+    private let onboarding = Onboarding()
 
     func applicationDidFinishLaunching(_ note: Notification) {
+        applyStartAtLogin()
+        onboarding.run { [weak self] in self?.start() }
+    }
+
+    private func start() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .bold)
         statusItem.menu = NSMenu()

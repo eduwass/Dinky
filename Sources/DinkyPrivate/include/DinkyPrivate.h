@@ -3,3 +3,4 @@
 #import "switch.h"
 #import "move.h"
 #import "focus.h"
+#import "spaces.h"

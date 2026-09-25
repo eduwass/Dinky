@@ -18,3 +18,9 @@ Parse command strings like 'workspace 3', 'move-window-to-workspace 3 --follow',
 
 Every command in the PLAN.md config draft parses; unknown commands fail with a message naming the offending string.
 
+
+## Notes
+
+**2026-09-25T10:25:03Z**
+
+Also: wire DinkyConfig into the app (load ~/.config/dinky/dinky.toml, ConfigWatcher, keep previous config on error and show it in the menu bar and log, reload-config command, start-at-login from config replacing the UserDefaults TODO in Onboarding.swift).

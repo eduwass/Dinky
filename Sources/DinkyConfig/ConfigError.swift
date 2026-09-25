@@ -1,0 +1,52 @@
+import Foundation
+
+/// Any problem loading the config: bad TOML, an unknown key, a wrong type or value.
+/// `description` is the text to show in the menu bar and the log.
+public struct ConfigError: Error, Equatable, CustomStringConvertible, LocalizedError {
+    /// Dotted key path such as `gaps.outer.top` or `on-window-detected[0].if.app-id`; empty for file-level errors.
+    public var path: String
+    public var message: String
+    public var line: Int?
+
+    public init(path: String = "", _ message: String, line: Int? = nil) {
+        self.path = path
+        self.message = message
+        self.line = line
+    }
+
+    public var description: String {
+        let location = [line.map { "line \($0)" }, path.isEmpty ? nil : path].compactMap { $0 }
+        return location.isEmpty ? message : location.joined(separator: ", ") + ": " + message
+    }
+
+    public var errorDescription: String? { description }
+}
+
+/// Best effort line lookup for a key path, for errors TOMLDecoder gives no line for, such as unknown keys.
+/// Tracks `[table]` headers and dotted keys, and returns the line whose full key is the longest
+/// prefix of `path` (so a typo inside an inline table points at the line holding the table).
+func lineNumber(of path: String, in toml: String) -> Int? {
+    let target = keyParts(path.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression))
+    var header: [String] = []
+    var best: (line: Int, length: Int)?
+    for (index, rawLine) in toml.components(separatedBy: .newlines).enumerated() {
+        let line = rawLine.trimmingCharacters(in: .whitespaces)
+        let full: [String]
+        if line.hasPrefix("[") {
+            header = keyParts(line.trimmingCharacters(in: CharacterSet(charactersIn: "[] ")))
+            full = header
+        } else if let equals = line.firstIndex(of: "="), !line.hasPrefix("#") {
+            full = header + keyParts(String(line[..<equals]))
+        } else {
+            continue
+        }
+        if full.count > (best?.length ?? 0), full.count <= target.count, Array(target.prefix(full.count)) == full {
+            best = (index + 1, full.count)
+        }
+    }
+    return best?.line
+}
+
+private func keyParts(_ key: String) -> [String] {
+    key.split(separator: ".").map { $0.trimmingCharacters(in: CharacterSet(charactersIn: " \"'")) }
+}

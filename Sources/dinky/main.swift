@@ -1,9 +1,11 @@
 import Foundation
 
-let usage = "usage: dinky ls | switch <space-index> | move <window-id> <space-index> [--follow] | focus <window-id> | tile | hotkeys | app\n"
+let usage = "usage: dinky ls | switch <space-index> | move <window-id> <space-index> [--follow] | focus <window-id> | tile | hotkeys | app | spaces\n"
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let command = args.first else {
+    // Launched from the app bundle with no arguments: run the menu bar app.
+    if Bundle.main.bundleIdentifier != nil { exit(runApp([])) }
     fputs(usage, stderr)
     exit(64)
 }
@@ -17,6 +19,7 @@ case "focus": exit(runFocus(rest))
 case "tile": exit(runTile(rest))
 case "hotkeys": exit(runHotkeys(rest))
 case "app": exit(runApp(rest))
+case "spaces": exit(runSpaces(rest))
 default:
     fputs(usage, stderr)
     exit(64)

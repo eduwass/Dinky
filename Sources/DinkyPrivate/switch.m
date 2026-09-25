@@ -275,18 +275,55 @@ static bool mimi_post_swipe(double sign)
     return true;
 }
 
+static void pump(CFTimeInterval seconds)
+{
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, seconds, false);
+}
+
+static CGPoint cursor_location(void)
+{
+    CGEventRef event = CGEventCreate(NULL);
+    CGPoint point = CGEventGetLocation(event);
+    CFRelease(event);
+    return point;
+}
+
+static bool cursor_is_on_display(CGDirectDisplayID displayID)
+{
+    return CGRectContainsPoint(CGDisplayBounds(displayID), cursor_location());
+}
+
 // mimi MimiFocusSpaceUsingGesture, augmented branch. mimi pumps the run loop after every step and
 // once more for count+1 delays at the end; we skip the wait after the last step, Swift polls instead.
-static bool mimi_post_swipes(double sign, int count)
+//
+// The Dock swipes the display under the cursor; nothing in the event or the IOHID payload names a
+// display. So, as mimi, yabai and bobrwm do, warp the cursor to the centre of the target display
+// first. Unlike them we put it back afterwards, which costs two extra delays on a cross-display switch.
+static bool mimi_post_swipes(double sign, int count, CGDirectDisplayID displayID)
 {
     static dispatch_once_t once;
     dispatch_once(&once, ^{ [NSApplication sharedApplication]; });  // mimiEnsureApplication
 
-    for (int i = 0; i < count; i++) {
-        if (!mimi_post_swipe(sign)) return false;
-        if (i < count - 1) CFRunLoopRunInMode(kCFRunLoopDefaultMode, kMimiStepDelay, false);
+    bool warp = !cursor_is_on_display(displayID);
+    CGPoint restore = cursor_location();
+    if (warp) {
+        CGRect bounds = CGDisplayBounds(displayID);
+        CGWarpMouseCursorPosition(CGPointMake(CGRectGetMidX(bounds), CGRectGetMidY(bounds)));
+        pump(kMimiStepDelay);  // mimi waits this long after its warp too
     }
-    return true;
+
+    bool posted = true;
+    for (int i = 0; i < count && posted; i++) {
+        posted = mimi_post_swipe(sign);
+        if (warp || i < count - 1) pump(kMimiStepDelay);  // with a warp, let the last swipe land first
+    }
+
+    if (warp) {
+        CGWarpMouseCursorPosition(restore);
+        // A warp holds back real mouse movement for a moment; reattaching the mouse ends that.
+        CGAssociateMouseAndMouseCursorPosition(true);
+    }
+    return posted;
 }
 
 #pragma clang diagnostic pop
@@ -416,8 +453,22 @@ static bool keys_post_number(int index)
     return true;
 }
 
+static CGDirectDisplayID display_id_for_uuid(CFStringRef displayUUID)
+{
+    for (DinkyDisplay *display in dinky_displays()) {
+        if ([display.uuid isEqualToString:(__bridge NSString *)displayUUID]) return display.displayID;
+    }
+    return kCGNullDirectDisplay;
+}
+
 bool dinky_switch_to_space_index(DinkySwitchPath path, int fromIndex, int toIndex, uint64_t targetSpaceID, CFStringRef displayUUID)
 {
+    CGDirectDisplayID displayID = displayUUID ? display_id_for_uuid(displayUUID) : kCGNullDirectDisplay;
+    if (displayID == kCGNullDirectDisplay) {
+        fprintf(stderr, "switch: no display with UUID %s\n", displayUUID ? [(__bridge NSString *)displayUUID UTF8String] : "(null)");
+        return false;
+    }
+
     int steps = abs(toIndex - fromIndex);
     bool right = toIndex > fromIndex;
 
@@ -425,7 +476,7 @@ bool dinky_switch_to_space_index(DinkySwitchPath path, int fromIndex, int toInde
     case DinkySwitchPathTuna:
         return tuna_post_swipe(right, steps);
     case DinkySwitchPathMimi:
-        return mimi_post_swipes(right ? 1.0 : -1.0, steps);
+        return mimi_post_swipes(right ? 1.0 : -1.0, steps, displayID);
     case DinkySwitchPathBridged:
         return bridged_set_current_space(targetSpaceID, displayUUID);
     case DinkySwitchPathKeys:

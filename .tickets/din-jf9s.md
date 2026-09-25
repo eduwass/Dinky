@@ -1,6 +1,6 @@
 ---
 id: din-jf9s
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-09-25T09:32:53Z
@@ -18,3 +18,13 @@ tags: [foundation, config]
 
 The draft config in PLAN.md loads. A typo in a key name is reported with the line. Editing the file applies within a second without restart.
 
+
+## Notes
+
+**2026-09-25T10:08:49Z**
+
+DinkyConfig done: Config.parse/load, strict key checks (unknown keys name path + line), KeyCombo (AeroSpace key names), Color, Config.defaultTOML/Config.default, ConfigWatcher (debounced DispatchSource, survives atomic saves). 16 tests pass. Walks TOMLTable directly: TOMLDecoder 0.4.4's Decodable layer crashes on custom CodingKeys and TOMLTable.string(forKey:) crashes on one-digit integers (guarded). Remaining for this ticket: app wiring (start ConfigWatcher on ~/.config/dinky/dinky.toml, keep previous config on error, show error in menu bar + log, reload-config command).
+
+**2026-09-25T10:25:02Z**
+
+Library complete with 16 tests. App wiring (start watcher, keep previous config on error, show error in menu bar, reload-config command) moves to din-g6bk (command dispatcher). Closing.
