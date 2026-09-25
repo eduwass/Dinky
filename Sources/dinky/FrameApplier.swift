@@ -10,11 +10,15 @@ final class FrameApplier {
     private var scheduler: FrameScheduler!
     private let lock = NSLock()
     private var elements: [WindowID: AXUIElement] = [:]
-    /// The largest minimum size any window of an app has shown this session, by bundle id.
+    /// The largest minimum size any window of an app has shown, by bundle id. Kept across sessions in
+    /// Application Support, so the write-settle-retry chain that discovers a minimum runs once per app ever.
     private var appMinimums: [String: CGSize] = [:]
     private let raiseQueue = DispatchQueue(label: "dinky.frames.raise")
+    private static let minimumsURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        .appendingPathComponent("dinky/minimum-sizes.json")
 
     init() {
+        appMinimums = Self.loadMinimums()
         scheduler = FrameScheduler(
             prepare: { pid in
                 // Enhanced UI (set by VoiceOver and some utilities) makes apps animate and fight frame writes.
@@ -62,6 +66,20 @@ final class FrameApplier {
                   let app = NSRunningApplication(processIdentifier: result.job.pid)?.bundleIdentifier else { continue }
             lock.withLock { appMinimums[app] = appMinimums[app]?.grown(to: minimum) ?? minimum }
         }
+        if results.contains(where: \.retried) { saveMinimums() }
+    }
+
+    private static func loadMinimums() -> [String: CGSize] {
+        guard let data = try? Data(contentsOf: minimumsURL),
+              let raw = try? JSONDecoder().decode([String: [CGFloat]].self, from: data) else { return [:] }
+        return raw.compactMapValues { $0.count == 2 ? CGSize(width: $0[0], height: $0[1]) : nil }
+    }
+
+    private func saveMinimums() {
+        let raw = lock.withLock { appMinimums.mapValues { [$0.width, $0.height] } }
+        guard let data = try? JSONEncoder().encode(raw) else { return }
+        try? FileManager.default.createDirectory(at: Self.minimumsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try? data.write(to: Self.minimumsURL, options: .atomic)
     }
 
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.
