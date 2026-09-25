@@ -64,6 +64,16 @@ public struct Workspace: Equatable, Sendable {
         }
     }
 
+    /// Put `new` in `old`'s place, keeping its size, focus and fullscreen: another tab of the same native tab group
+    /// became the one shown. Does nothing if `old` is not here or `new` already is.
+    public mutating func replace(_ old: WindowID, with new: WindowID) {
+        guard let path = root.path(of: old), !contains(new) else { return }
+        root.modify(at: Array(path.dropLast())) { $0.replace(at: path.last!, with: .window(new)) }
+        if focused == old { focused = new }
+        if fullscreen == old { fullscreen = new }
+        minimumSizes[old] = nil
+    }
+
     /// Collapse all nesting into the root, keeping window order, with equal ratios.
     public mutating func flatten() {
         fullscreen = nil

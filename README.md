@@ -273,17 +273,11 @@ The CLI talks to the app over a unix socket at `$TMPDIR/dinky.sock` (your per-us
 printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 ```
 
-`dinky help` also lists some development subcommands (`ls`, `switch`, `move <window-id>`, `focus <window-id>`, `tile`, `hotkeys`, `spaces`, `events`, `borders`). They are left over from the spike, run on their own without the app, and will be removed.
+A few subcommands are for the command line only: `dinky app` (above), `dinky recover` restores the windows a crashed session left tiled, and `dinky debug events` or `dinky debug windows` print the live window event stream or the current windows without the app, which is useful in a bug report.
 
 ## Status
 
-dinky is being built, and this README describes v1 as planned. At the time of writing:
-
-- `resize width`, `resize height`, and the `layout floating` and `layout tiling` commands answer "not yet". `resize smart` and `layout tiles` or `layout accordion` work.
-- `[[on-window-detected]]` rules only act on `layout floating`; other commands in `run` are ignored.
-- Quitting does not yet put windows back where they were, and there is no crash recovery.
-
-If a command answers "not yet", that part is not finished.
+Every v1 command in `dinky help` is implemented and was verified in a macOS 27 VM. What has not yet been run anywhere is listed in the next section.
 
 ## Known limits and what is unverified
 

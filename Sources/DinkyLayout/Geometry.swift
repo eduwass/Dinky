@@ -37,6 +37,11 @@ public struct Layout: Equatable, Sendable {
     public var frames: [WindowID: CGRect] = [:]
     /// Windows front to back: the first should be frontmost.
     public var order: [WindowID] = []
+
+    public init(frames: [WindowID: CGRect] = [:], order: [WindowID] = []) {
+        self.frames = frames
+        self.order = order
+    }
 }
 
 extension Container {

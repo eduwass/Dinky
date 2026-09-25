@@ -12,7 +12,7 @@ struct KeyPress: Hashable {
 }
 
 extension KeyPress {
-    /// Nil if the combo names a key without a keycode (`dinky hotkeys --check` lists those).
+    /// Nil if the combo names a key without a keycode.
     init?(_ combo: KeyCombo) {
         guard let code = keyCodes[combo.key] else { return nil }
         self.init(code: code, modifiers: combo.modifiers)

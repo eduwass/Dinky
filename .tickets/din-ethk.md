@@ -24,3 +24,7 @@ Moving keeps the source layout intact and inserts the window into the target tre
 **2026-09-25T11:28:53Z**
 
 move-window-to-display next|prev [--follow] now works from DisplayModel: target = next/prev display (wrapping), bridged move to its current Space, wait for arrival, a floating window keeps its offset from the display corner, Coordinator.windowMoved re-tracks it (out of the source tree, into the target tree, both applied), --follow focuses it. Single-display VM: both 'move-window-to-display next' and 'prev --follow' answer 'no other display'. move-window-to-workspace also calls windowMoved now; verified 'move-window-to-workspace 4 --follow' from ws5 inserted beside the focused tile on ws4 and focused it. NOT validated: the two-display path (does the bridged move place the window on the other display's frame, does the target tree apply, does follow focus it) — do it on the host with two displays.
+
+**2026-09-25T11:46:55Z**
+
+Two-display validation: RESULTS.md, Display targeting for switching, step 7.

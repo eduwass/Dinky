@@ -168,9 +168,8 @@ final class Recovery {
     private func writeFrames(_ entries: [Entry]) -> [UInt32: FrameResult] {
         guard !entries.isEmpty else { return [:] }
         let stacking = onScreenOrder()
-        var layout = Workspace(bounds: .zero).layout()  // an empty Layout; it has no public initializer
-        for entry in entries { layout.frames[entry.id] = entry.frame }
-        layout.order = entries.map(\.id).sorted { (stacking[$0] ?? .max) < (stacking[$1] ?? .max) }
+        let layout = Layout(frames: Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.frame) }),
+                            order: entries.map(\.id).sorted { (stacking[$0] ?? .max) < (stacking[$1] ?? .max) })
         let done = DispatchSemaphore(value: 0)
         var results: [FrameResult] = []
         applier.apply(layout, pids: Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.pid) })) {

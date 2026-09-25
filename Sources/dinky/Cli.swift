@@ -24,6 +24,9 @@ func runHelp() -> Int32 {
     for doc in Command.all {
         print("  \(doc.syntax)\n      \(doc.description)")
     }
-    print("\nspike subcommands: ls | switch | move <window-id> | focus <window-id> | tile | hotkeys | app | spaces | events")
+    print("\ncommand line only:")
+    print("  app\n      Run the app in the foreground, logging to the terminal.")
+    print("  recover\n      Ask the running app to restore windows a crashed session left tiled.")
+    print("  debug events|windows\n      Print the live window event stream, or the current windows, for bug reports.")
     return 0
 }

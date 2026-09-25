@@ -85,6 +85,8 @@ final class AppState {
             self.config = config
             configError = nil
             hotkeys.load(modes: config.modes)
+            // At launch the app creates the Spaces itself, before the coordinator starts.
+            if coordinator != nil { ensureWorkspaceCount() }
             coordinator?.update(config: config)
         case .failure(let error):
             configError = error

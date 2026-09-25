@@ -42,17 +42,5 @@ EOF
 log "guest configured"
 scp $SSH_OPTS /Users/mikker/dev/dinky/.build/debug/dinky admin@$IP:/Users/admin/dinky && log "binary copied"
 
-# Three Spaces: hover the top of Mission Control to expand the bar, then click the + button.
-ssh $SSH_OPTS admin@$IP 'bash -s' <<'EOF'
-spaces() { ~/dinky ls | grep -c 'space='; }
-for try in 1 2 3 4 5; do
-  [ "$(spaces)" -ge 3 ] && break
-  osascript -e 'tell application "System Events" to key code 126 using control down'; sleep 2.5
-  if [ "$(spaces)" -eq 1 ]; then /tmp/click 994 100 click; else /tmp/click 994 20; sleep 1.5; /tmp/click 994 100 click; fi
-  sleep 2
-  osascript -e 'tell application "System Events" to key code 53'; sleep 1.5
-done
-echo "spaces: $(spaces)"
-~/dinky ls | head -6
-EOF
+# No Spaces to set up: the app creates the configured number of workspaces when it starts.
 log "done"

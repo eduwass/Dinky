@@ -95,26 +95,3 @@ final class BorderManager {
         })
     }
 }
-
-// `dinky borders [--only-focused] [--above]` runs a WindowModel and a BorderManager with the
-// default config until killed.
-func runBorders(_ args: [String]) -> Int32 {
-    // SkyLight only delivers notifications while AppKit drains the connection's event port.
-    let app = NSApplication.shared
-    app.setActivationPolicy(.prohibited)
-
-    let model = WindowModel()
-    guard model.start() else {
-        fputs("borders: could not register for WindowServer notifications\n", stderr)
-        return 1
-    }
-    var config = Borders()
-    if args.contains("--above") { config.order = .above }
-    let manager = BorderManager(config: config, model: model)
-    manager.onlyFocused = args.contains("--only-focused")
-    model.onChange = manager.handle
-    print("borders on \(model.windows.count) windows, ctrl-c to stop")
-    fflush(stdout)
-    app.run()
-    return 0
-}

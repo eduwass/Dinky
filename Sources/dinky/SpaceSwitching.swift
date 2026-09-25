@@ -73,10 +73,12 @@ func noteOwnSwitch(to target: UInt64, on uuid: String) {
     lastSpaceChangeAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
 }
 
-// Switches the display holding the app's frontmost window to that window's Space.
+// Switches to the Space of the app's frontmost window, unless the app has a window on the focused display's
+// current Space: then Cmd-Tab stays put and the app's window here comes forward.
 private func followActivation(of pid: pid_t, name: String) {
     let start = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
     let model = AppState.shared.displays
+    let here = model.focusedDisplay()?.currentSpaceID
     // Front-to-back list of the app's normal windows on any Space; the first one is its frontmost.
     let info = CGWindowListCopyWindowInfo([.optionAll], kCGNullWindowID) as? [[String: Any]] ?? []
     var target: (space: UInt64, display: Display)?
@@ -85,9 +87,9 @@ private func followActivation(of pid: pid_t, name: String) {
               w[kCGWindowLayer as String] as? Int == 0,
               let wid = w[kCGWindowNumber as String] as? UInt32 else { continue }
         let sid = dinky_window_space_id(wid)
-        guard let display = model.display(containingSpace: sid) else { continue }
+        if sid == here { return }
+        guard target == nil, let display = model.display(containingSpace: sid) else { continue }
         target = (sid, display)
-        break
     }
     guard let target, target.space != target.display.currentSpaceID,
           switchSpace(toSpaceID: target.space, on: target.display) else { return }
@@ -147,7 +149,7 @@ final class SpaceSwitcher {
         flights[uuid] = flight
         noteOwnSwitch(to: flight.target, on: uuid)
         posting = true
-        let ok = dinky_switch_to_space_index(.mimi, Int32(from + 1), Int32(to + 1), flight.target, uuid as CFString)
+        let ok = dinky_switch_to_space_index(Int32(from + 1), Int32(to + 1), uuid as CFString)
         posting = false
         if !ok { finish(uuid, "switch: posting the swipe to Space \(to + 1) failed") }
     }

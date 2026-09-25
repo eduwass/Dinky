@@ -1,6 +1,6 @@
 ---
 id: din-xfjb
-status: open
+status: closed
 deps: [din-5sdy]
 links: []
 created: 2026-09-25T09:32:54Z
@@ -18,3 +18,9 @@ Drop the Tuna and bridged set-current-Space paths, the keys and number experimen
 
 switch.m contains only the mimi path; the spike subcommands are gone.
 
+
+## Notes
+
+**2026-09-25T11:32:12Z**
+
+switch.m reduced to the mimi swipe with cursor warp; Tuna, bridged, keys, number paths and DINKY_SWIPE_VELOCITY gone. DinkySwitchPath kept as single-case enum (Mimi) with unused path/targetSpaceID params because SpaceSwitching.swift calls it. Removed CLI: ls, switch, move <wid>, focus <wid>, tile, hotkeys, spaces, events, borders. Added dinky debug events|windows. help lists app/recover/debug. waitUntil moved to Wait.swift. vm-setup.sh no longer creates Spaces via dinky ls (app ensures workspace count).

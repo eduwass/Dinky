@@ -42,6 +42,8 @@ public final class FrameScheduler: @unchecked Sendable {
     private let lock = NSLock()
     private var apps: [Int32: App] = [:]
     private var minimums: [WindowID: CGSize] = [:]
+    /// Bumped by `cancel`; writes queued under an older generation are dropped.
+    private var generation = 0
 
     /// `prepare` runs once per process before its first write; `read` and `write` run on that process's queue.
     public init(settle: TimeInterval = 0.1, prepare: @escaping (Int32) -> Void = { _ in },
@@ -77,24 +79,33 @@ public final class FrameScheduler: @unchecked Sendable {
         }
     }
 
+    /// Drops every frame not written yet, including a second try already under way. Completions still run,
+    /// with the results of what was written.
+    public func cancel() {
+        lock.withLock {
+            generation += 1
+            for app in apps.values { app.pending = [] }
+        }
+    }
+
     /// Take everything pending for one process and write it. Runs on the process's queue.
     private func drain(_ app: App) {
-        let (jobs, batches, needsPrepare) = lock.withLock {
+        let (jobs, batches, needsPrepare, generation) = lock.withLock {
             defer { app.pending = []; app.batches = []; app.scheduled = false; app.prepared = true }
-            return (app.pending, app.batches, !app.prepared)
+            return (app.pending, app.batches, !app.prepared, self.generation)
         }
         if needsPrepare { prepare(app.pid) }
-        let results = run(jobs)
+        let results = run(jobs) { self.lock.withLock { self.generation } == generation }
         for batch in batches { batch.report(results) }
     }
 
-    /// Write, settle, read back; write the misses once more, settle, read back again.
-    private func run(_ jobs: [FrameJob]) -> [FrameResult] {
+    /// Write, settle, read back; write the misses once more, settle, read back again. Writes only while `live`.
+    private func run(_ jobs: [FrameJob], live: () -> Bool) -> [FrameResult] {
         var results = jobs.map { job in
             let current = read(job)
-            let inPlace = current?.isClose(to: job.frame, within: 1) ?? false
-            if !inPlace { write(job) }
-            return FrameResult(job: job, got: current, written: !inPlace)
+            let write = live() && !(current?.isClose(to: job.frame, within: 1) ?? false)
+            if write { self.write(job) }
+            return FrameResult(job: job, got: current, written: write)
         }
         let written = results.indices.filter { results[$0].written }
         guard !written.isEmpty else { return results }
@@ -103,7 +114,7 @@ public final class FrameScheduler: @unchecked Sendable {
 
         // Only windows that answered and landed elsewhere; an unreadable (possibly hung) one is not worth a second try.
         let misses = written.filter { results[$0].got != nil && !results[$0].matched }
-        guard !misses.isEmpty else { return results }
+        guard !misses.isEmpty, live() else { return results }
         for i in misses {
             write(results[i].job)
             results[i].retried = true

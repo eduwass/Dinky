@@ -107,6 +107,39 @@ final class FrameSchedulerTests: XCTestCase {
         hold.signal()
     }
 
+    func testCancelDropsQueuedFrames() {
+        let fake = FakeWindows()
+        let hold = DispatchSemaphore(value: 0)
+        fake.holds[10] = hold
+        let scheduler = fake.scheduler()
+        let done = XCTestExpectation(description: "cancelled batch")
+        scheduler.submit([job(1, 10, 0)])
+        Thread.sleep(forTimeInterval: 0.05)  // the queue is now stuck in window 10's write
+        var results: [FrameResult] = []
+        scheduler.submit([job(1, 10, 1), job(1, 11, 1)]) { results = $0; done.fulfill() }
+        scheduler.cancel()
+        hold.signal()
+        wait(for: [done], timeout: 2)
+        XCTAssertEqual(fake.writes(to: 10).map(\.minX), [0])
+        XCTAssertTrue(fake.writes(to: 11).isEmpty)
+        XCTAssertTrue(results.isEmpty)
+        XCTAssertEqual(submitAndWait(scheduler, [job(1, 11, 2)]).map(\.matched), [true])
+    }
+
+    func testCancelStopsTheSecondTry() {
+        var writes = 0
+        let scheduler = FrameScheduler(settle: 0.2, read: { _ in CGRect(x: 0, y: 0, width: 574, height: 100) },
+                                       write: { _ in writes += 1 })
+        let done = XCTestExpectation(description: "results")
+        var results: [FrameResult] = []
+        scheduler.submit([job(1, 10, 0)]) { results = $0; done.fulfill() }
+        Thread.sleep(forTimeInterval: 0.1)  // the first write is done and settling
+        scheduler.cancel()
+        wait(for: [done], timeout: 2)
+        XCTAssertEqual(writes, 1)
+        XCTAssertEqual(results.map(\.retried), [false])
+    }
+
     func testCompletionWaitsForEveryProcess() {
         let fake = FakeWindows()
         let results = submitAndWait(fake.scheduler(), [job(1, 10, 0), job(2, 20, 0), job(3, 30, 0)])

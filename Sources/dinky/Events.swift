@@ -1,20 +1,24 @@
 import AppKit
 import DinkyPrivate
 
-// din-5rp2: `dinky events` prints the WindowServer event stream with the model's view of each
-// window; `dinky events --windows` prints the seeded model and exits.
-func runEvents(_ args: [String]) -> Int32 {
+// `dinky debug events` prints the WindowServer event stream with the model's view of each window until
+// killed; `dinky debug windows` prints the model's windows and exits. Both run without the app.
+func runDebug(_ args: [String]) -> Int32 {
+    guard args == ["events"] || args == ["windows"] else {
+        fputs("usage: dinky debug events|windows\n", stderr)
+        return 64
+    }
     let model = WindowModel()
     // SkyLight only delivers notifications while AppKit drains the connection's event port.
     let app = NSApplication.shared
     app.setActivationPolicy(.prohibited)
 
     guard model.start() else {
-        fputs("events: could not register for WindowServer notifications\n", stderr)
+        fputs("debug: could not register for WindowServer notifications\n", stderr)
         return 1
     }
 
-    if args.contains("--windows") {
+    if args == ["windows"] {
         for window in model.windows.values.sorted(by: { $0.id < $1.id }) { print(describe(window)) }
         return 0
     }

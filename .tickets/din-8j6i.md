@@ -37,3 +37,7 @@ Setup: two displays attached, "Displays have separate Spaces" on (the default), 
 8. If step 3 switches the secondary display instead, or times out: the warp did not reach the Dock in time. Record the output. The next things to try are a longer wait after the warp in `mimi_post_swipes`, then setting the swipe events' location to the target display with `CGEventSetLocation` instead of warping (see RESULTS.md).
 
 Pass means steps 3, 4 and 7 behave as described. Then close din-8j6i.
+
+**2026-09-25T11:46:55Z**
+
+Test procedure rewritten for the shipped CLI (the spike subcommands are gone): see RESULTS.md, Display targeting for switching, steps 1 to 9. Also covers din-ethk's move-window-to-display.

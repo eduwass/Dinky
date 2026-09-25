@@ -23,18 +23,21 @@ struct Placement {
 final class Coordinator {
     let model = WindowModel()
     var enabled = true {
-        didSet { if enabled, !oldValue { reconcile() } }
+        didSet {
+            if !enabled { applier.cancel() }
+            if enabled, !oldValue { reconcile() }
+        }
     }
 
     private let displays: DisplayModel
-    private var config: Config
+    private(set) var config: Config
     private let applier = FrameApplier()
     private var borders: BorderManager?
     private(set) var workspaces: [SpaceKey: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
     private var dirty: Set<SpaceKey> = []
     /// Classification attempts for windows whose AX element has not appeared yet.
-    private var attempts: [WindowID: Int] = [:]
+    var attempts: [WindowID: Int] = [:]
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
 
@@ -46,6 +49,11 @@ final class Coordinator {
     func start() {
         model.onChange = { [weak self] event in self?.handle(event) }
         displays.onChange = { [weak self] _ in self?.reconcile() }
+        // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
+        let center = NSWorkspace.shared.notificationCenter
+        for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in self?.reconcile() }
+        }
         guard model.start() else {
             fputs("coordinator: no WindowServer events\n", stderr)
             return
@@ -96,7 +104,7 @@ final class Coordinator {
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
-    /// while it is not minimized.
+    /// while it is shown: minimized windows, windows of hidden apps and inactive tabs read as minimized.
     func track(_ window: Window) {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
@@ -108,8 +116,22 @@ final class Coordinator {
         let new = window.isMinimized ? nil : key(of: window)
         guard old != new else { return }
         if let old { edit(old) { $0.remove(window.id) } }
-        if let new { edit(new) { $0.insert(window.id) } }
+        if let new, let tab = tab(replacedBy: window, in: new) {
+            edit(new) { $0.replace(tab, with: window.id) }
+            placements[tab]!.space = nil
+        } else if let new {
+            edit(new) { $0.insert(window.id) }
+        }
         placements[window.id]!.space = new
+    }
+
+    /// The tile a window takes over as the newly shown tab of a native tab group: AppKit gives it the group's
+    /// frame and orders it in, then orders the previous tab out. Only another tab shares a tile's exact frame.
+    private func tab(replacedBy window: Window, in key: SpaceKey) -> WindowID? {
+        workspaces[key]?.windows.first { id in
+            guard id != window.id, let other = model.windows[id] else { return false }
+            return other.pid == window.pid && other.frame.isClose(to: window.frame, within: 1)
+        }
     }
 
     private func forget(_ id: WindowID) {
@@ -187,13 +209,13 @@ final class Coordinator {
         let overlaps = !layout.raises(current: []).isEmpty
         let front = overlaps ? workspace.focused.flatMap { model.windows[$0] } : nil
         let focusedHere = placements[focusedWindow]?.space == key
-        applier.apply(layout, pids: pids) { _ in
-            DispatchQueue.main.async { [weak self] in
-                guard let self else { return }
-                if let front, focusedHere { focus(front.id) }
-                if minimumSizes(in: workspace) != workspace.minimumSizes {
-                    dirty.insert(key)
-                    flush()
+        applier.apply(layout, pids: pids) { [weak self] _ in
+            DispatchQueue.main.async {
+                guard let self, self.enabled else { return }
+                if let front, focusedHere { self.focus(front.id) }
+                if self.minimumSizes(in: workspace) != workspace.minimumSizes {
+                    self.dirty.insert(key)
+                    self.flush()
                 }
             }
         }
@@ -201,38 +223,6 @@ final class Coordinator {
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
         applier.minimumSizes.filter { workspace.contains($0.key) }
-    }
-
-    // MARK: Classification
-
-    /// False for a window to tile, true for one to float, nil while its AX element is not there yet
-    /// (a retry is scheduled; after a few, the window floats since dinky could not move it anyway).
-    private func classify(_ window: Window) -> Bool? {
-        guard let element = axWindow(pid: window.pid, wid: window.id, timeout: FrameApplier.timeout) else {
-            let tries = attempts[window.id, default: 0] + 1
-            attempts[window.id] = tries
-            guard tries < 5 else { return true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) { [weak self] in
-                guard let self, let window = model.windows[window.id] else { return }
-                track(window)
-                flush()
-            }
-            return nil
-        }
-        attempts[window.id] = nil
-        let kind = windowKind(subrole: axString(element, kAXSubroleAttribute))
-        var resizable: DarwinBoolean = false
-        AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
-        let title = axString(element, kAXTitleAttribute) ?? ""
-        let rules = config.commands(for: window, kind: kind, title: title)
-        // Other rule commands, such as move-window-to-workspace, run for this window once it is placed.
-        for command in rules where command != .layout([.floating]) {
-            DispatchQueue.main.async {
-                let reply = Dispatcher.run(command, window: window.id)
-                if !reply.ok { fputs("on-window-detected: \(reply.text)\n", stderr) }
-            }
-        }
-        return kind != .normal || !resizable.boolValue || rules.contains(.layout([.floating]))
     }
 }
 

@@ -26,19 +26,6 @@ func axWindowID(_ element: AXUIElement) -> UInt32 {
     return _AXUIElementGetWindow(element, &wid) == .success ? wid : 0
 }
 
-private func spaceIndex(_ sid: UInt64) -> String {
-    let displays = dinky_displays()
-    let main = displays.first { $0.displayID == CGMainDisplayID() } ?? displays.first
-    guard let i = main?.spaces.firstIndex(where: { $0.spaceID == sid }) else { return "sid:\(sid)" }
-    return String(i + 1)
-}
-
-private func currentSpaceID() -> UInt64 {
-    let displays = dinky_displays()
-    let main = displays.first { $0.displayID == CGMainDisplayID() } ?? displays.first
-    return main?.currentSpaceID ?? 0
-}
-
 func frontWindowID() -> UInt32 {
     guard let app = NSWorkspace.shared.frontmostApplication else { return 0 }
     var value: CFTypeRef?
@@ -59,48 +46,4 @@ func focusWindow(pid: pid_t, id: UInt32) {
         AXUIElementPerformAction(element, kAXRaiseAction as CFString)
     }
     NSRunningApplication(processIdentifier: pid)?.activate()
-}
-
-func runFocus(_ args: [String]) -> Int32 {
-    guard let first = args.first, let wid = UInt32(first) else {
-        fputs("usage: dinky focus <window-id> [--path ax|private]\n", stderr)
-        return 64
-    }
-    var path = "ax"
-    if let i = args.firstIndex(of: "--path"), i + 1 < args.count { path = args[i + 1] }
-    guard path == "ax" || path == "private" else {
-        fputs("focus: unknown path \(path)\n", stderr)
-        return 64
-    }
-    guard let pid = windowPID(wid) else {
-        fputs("focus: no window \(wid)\n", stderr)
-        return 1
-    }
-
-    let before = currentSpaceID()
-    print("path=\(path) pid=\(pid) current=\(spaceIndex(before)) window=\(spaceIndex(dinky_window_space_id(wid))) front=\(frontWindowID())")
-
-    if path == "ax" {
-        guard let window = axWindow(pid: pid, wid: wid) else {
-            fputs("focus: no AX window for \(wid)\n", stderr)
-            return 1
-        }
-        let err = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-        if err != .success { fputs("focus: AXRaise error \(err.rawValue)\n", stderr) }
-        let activated = NSRunningApplication(processIdentifier: pid)?.activate() ?? false
-        if !activated { fputs("focus: activate returned false\n", stderr) }
-    } else {
-        if !dinky_focus_window_private(pid, wid) { fputs("focus: private focus failed\n", stderr) }
-        // yabai follows the private calls with an AX raise; without it the window often stays behind.
-        if let window = axWindow(pid: pid, wid: wid) {
-            let err = AXUIElementPerformAction(window, kAXRaiseAction as CFString)
-            if err != .success { fputs("focus: AXRaise error \(err.rawValue)\n", stderr) }
-        }
-    }
-
-    usleep(300_000)
-    let after = currentSpaceID()
-    let front = frontWindowID()
-    print("after current=\(spaceIndex(after)) front=\(front) \(front == wid ? "hit" : "miss") space \(after == before ? "unchanged" : "changed")")
-    return 0
 }

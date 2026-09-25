@@ -29,6 +29,9 @@ final class FrameApplier {
     /// Sizes windows refused to shrink below, from readback.
     var minimumSizes: [WindowID: CGSize] { scheduler.minimumSizes }
 
+    /// Drops every frame not written yet.
+    func cancel() { scheduler.cancel() }
+
     /// Write every frame in `layout`, then raise overlapping windows into the layout's order if they are not.
     /// `completion` runs on a background queue with the readback of every app touched.
     func apply(_ layout: Layout, pids: [WindowID: pid_t], completion: @escaping ([FrameResult]) -> Void = { _ in }) {

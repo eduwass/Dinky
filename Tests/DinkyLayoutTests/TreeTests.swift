@@ -128,3 +128,24 @@ final class FlattenAndModeTests: XCTestCase {
         XCTAssertEqual(shape(ws.root), "h[1 av[2 3]]")
     }
 }
+
+final class ReplaceTests: XCTestCase {
+    func testReplaceKeepsPlaceSizeAndFocus() {
+        var ws = workspace(3)
+        ws.focus(2)
+        ws.toggleFullscreen()
+        let before = ws.layout()
+        ws.replace(2, with: 9)
+        XCTAssertEqual(shape(ws.root), "h[1 v[9 3]]")
+        XCTAssertEqual(ws.focused, 9)
+        XCTAssertEqual(ws.fullscreen, 9)
+        XCTAssertEqual(ws.layout().frames[9], before.frames[2])
+    }
+
+    func testReplaceIgnoresMissingOrPresentWindows() {
+        var ws = workspace(2)
+        ws.replace(7, with: 9)
+        ws.replace(1, with: 2)
+        XCTAssertEqual(shape(ws.root), "h[1 2]")
+    }
+}
