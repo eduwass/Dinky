@@ -27,6 +27,17 @@ let package = Package(
             dependencies: ["DinkyLayout"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
+        // The command vocabulary shared by bindings, CLI and menu: parsing and reference. Unit tested.
+        .target(
+            name: "DinkyCommands",
+            dependencies: ["DinkyLayout"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
+        .testTarget(
+            name: "DinkyCommandsTests",
+            dependencies: ["DinkyCommands", "DinkyConfig"],
+            swiftSettings: [.swiftLanguageMode(.v5)]
+        ),
         // Config types and TOML loading. No AppKit. Unit tested.
         .target(
             name: "DinkyConfig",
@@ -41,7 +52,7 @@ let package = Package(
         // The app and CLI.
         .executableTarget(
             name: "dinky",
-            dependencies: ["DinkyPrivate", "DinkyLayout", "DinkyConfig"],
+            dependencies: ["DinkyPrivate", "DinkyLayout", "DinkyConfig", "DinkyCommands"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

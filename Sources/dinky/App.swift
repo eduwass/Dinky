@@ -1,8 +1,13 @@
 import AppKit
 import DinkyPrivate
 
-// `dinky app`: a menu bar item showing the current Space number, with the spike's actions as menu items.
+// `dinky app`: a menu bar item showing the current Space number, with commands as menu items, and the
+// socket the CLI talks to.
 func runApp(_ args: [String]) -> Int32 {
+    guard !appIsRunning() else {
+        fputs("dinky: already running (\(socketPath))\n", stderr)
+        return 1
+    }
     let app = NSApplication.shared
     app.setActivationPolicy(.accessory)
     let delegate = DinkyApp()
@@ -13,11 +18,17 @@ func runApp(_ args: [String]) -> Int32 {
 
 final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
+    private var socket: SocketServer?
     private let onboarding = Onboarding()
 
     func applicationDidFinishLaunching(_ note: Notification) {
-        applyStartAtLogin()
+        AppState.shared.loadConfig()
+        socket = SocketServer(handle: Dispatcher.run)
         onboarding.run { [weak self] in self?.start() }
+    }
+
+    func applicationWillTerminate(_ note: Notification) {
+        socket?.stop()
     }
 
     private func start() {
@@ -25,14 +36,14 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.font = NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .bold)
         statusItem.menu = NSMenu()
         statusItem.menu?.delegate = self
-        _ = installHotkeyTap()
+        _ = AppState.shared.hotkeys.start()
         installActivationFollower()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh),
                                                           name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
         // Fallback: our own swipes do not always produce the notification promptly.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
         refresh()
-        print("app: status item up")
+        print("app: status item up, listening on \(socketPath)")
         fflush(stdout)
     }
 
@@ -41,47 +52,53 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             statusItem.button?.title = "?"
             return
         }
+        AppState.shared.noteWorkspace(current)
         statusItem.button?.title = "\(current + 1)"
     }
 
+    // Every action is a command string, run exactly as `dinky <command>` would run it.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
+        if let error = AppState.shared.configError {
+            menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "").isEnabled = false
+            menu.addItem(.separator())
+        }
         guard let main = mainDisplay(), let current = currentSpaceIndex(main) else {
             menu.addItem(withTitle: "No display", action: nil, keyEquivalent: "")
             return
         }
         let count = main.spaces.count
-        menu.addItem(withTitle: "Space \(current + 1) of \(count)", action: nil, keyEquivalent: "")
+        menu.addItem(withTitle: "Workspace \(current + 1) of \(count)", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
 
         let go = NSMenu()
         let moveTo = NSMenu()
         let moveFollow = NSMenu()
         for i in 0..<count {
-            let title = "Space \(i + 1)" + (i == current ? " (current)" : "")
-            go.addItem(item(title, #selector(goToSpace(_:)), tag: i, enabled: i != current))
-            moveTo.addItem(item(title, #selector(moveWindowToSpace(_:)), tag: i, enabled: i != current))
-            moveFollow.addItem(item(title, #selector(moveWindowAndFollow(_:)), tag: i, enabled: i != current))
+            let title = "Workspace \(i + 1)" + (i == current ? " (current)" : "")
+            go.addItem(item(title, "workspace \(i + 1)", enabled: i != current))
+            moveTo.addItem(item(title, "move-window-to-workspace \(i + 1)", enabled: i != current))
+            moveFollow.addItem(item(title, "move-window-to-workspace \(i + 1) --follow", enabled: i != current))
         }
-        menu.addItem(submenu("Go to Space", go))
-        menu.addItem(submenu("Move Window to Space", moveTo))
+        menu.addItem(submenu("Go to Workspace", go))
+        menu.addItem(submenu("Move Window to Workspace", moveTo))
         menu.addItem(submenu("Move Window and Follow", moveFollow))
-        menu.addItem(item("Tile This Space", #selector(tileSpace(_:))))
+        menu.addItem(item("Tile This Workspace", "layout tiles"))
         menu.addItem(.separator())
-        let hk = item("Ctrl-Arrow Switching", #selector(toggleHotkeys(_:)))
-        hk.state = hotkeysEnabled ? .on : .off
-        menu.addItem(hk)
-        let fo = item("Follow Cmd-Tab to Window's Space", #selector(toggleFollow(_:)))
-        fo.state = followEnabled ? .on : .off
-        menu.addItem(fo)
+        let enabled = item("Enabled", "enable toggle")
+        enabled.state = AppState.shared.enabled ? .on : .off
+        menu.addItem(enabled)
+        menu.addItem(item("Reload Config", "reload-config"))
         menu.addItem(.separator())
-        menu.addItem(item("Quit dinky", #selector(quit(_:))))
+        let quit = NSMenuItem(title: "Quit dinky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
+        menu.addItem(quit)
     }
 
-    private func item(_ title: String, _ action: Selector, tag: Int = 0, enabled: Bool = true) -> NSMenuItem {
-        let it = NSMenuItem(title: title, action: action, keyEquivalent: "")
+    private func item(_ title: String, _ command: String, enabled: Bool = true) -> NSMenuItem {
+        let it = NSMenuItem(title: title, action: #selector(runCommand(_:)), keyEquivalent: "")
         it.target = self
-        it.tag = tag
+        it.representedObject = command
+        it.toolTip = "dinky \(command)"
         it.isEnabled = enabled
         return it
     }
@@ -92,32 +109,12 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return it
     }
 
-    @objc private func goToSpace(_ sender: NSMenuItem) {
-        switchSpace(to: sender.tag)
+    @objc private func runCommand(_ sender: NSMenuItem) {
+        guard let command = sender.representedObject as? String else { return }
+        let reply = Dispatcher.run(command)
+        if !reply.ok {
+            fputs("\(command): \(reply.text)\n", stderr)
+            NSSound.beep()
+        }
     }
-
-    @objc private func moveWindowToSpace(_ sender: NSMenuItem) {
-        moveFrontWindow(to: sender.tag, follow: false)
-    }
-
-    @objc private func moveWindowAndFollow(_ sender: NSMenuItem) {
-        moveFrontWindow(to: sender.tag, follow: true)
-    }
-
-    private func moveFrontWindow(to target: Int, follow: Bool) {
-        guard let main = mainDisplay(), main.spaces.indices.contains(target) else { return }
-        let wid = frontWindowID()
-        guard wid != 0 else { NSSound.beep(); return }
-        var ids = [wid]
-        guard dinky_move_windows_to_space(&ids, 1, main.spaces[target].spaceID) else { NSSound.beep(); return }
-        if follow { switchSpace(to: target) }
-    }
-
-    @objc private func tileSpace(_ sender: NSMenuItem) {
-        _ = runTile([])
-    }
-
-    @objc private func toggleHotkeys(_ sender: NSMenuItem) { hotkeysEnabled.toggle() }
-    @objc private func toggleFollow(_ sender: NSMenuItem) { followEnabled.toggle() }
-    @objc private func quit(_ sender: NSMenuItem) { NSApp.terminate(nil) }
 }

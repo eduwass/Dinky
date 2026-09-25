@@ -1,0 +1,80 @@
+import DinkyConfig
+import Foundation
+
+// State that outlives a single command: the current config, the hotkey engine, whether dinky is
+// enabled, and the workspace history for back-and-forth. Main thread only.
+final class AppState {
+    static let shared = AppState()
+
+    /// Runs each binding's commands in order through the dispatcher. Started by the app once
+    /// Accessibility is granted.
+    let hotkeys = HotkeyEngine { commands in
+        for command in commands {
+            let reply = Dispatcher.run(command)
+            if !reply.ok { fputs("\(command): \(reply.text)\n", stderr) }
+        }
+    }
+
+    /// The config in effect. A config that fails to load leaves the previous one here.
+    private(set) var config = Config.default
+    /// The last load error, shown first in the status item's menu. Nil once a load succeeds.
+    private(set) var configError: ConfigError?
+    private(set) var enabled = true
+    /// 0-based Space indexes on the main display.
+    private(set) var previousWorkspace: Int?
+    private var currentWorkspace: Int?
+    private var watcher: ConfigWatcher?
+
+    private init() {
+        hotkeys.load(modes: config.modes)
+    }
+
+    /// Loads `~/.config/dinky/dinky.toml`, writing the default config there first if it is missing.
+    @discardableResult
+    func loadConfig() -> ConfigError? {
+        let url = Config.userConfigURL
+        if !FileManager.default.fileExists(atPath: url.path) {
+            try? FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+            try? (Config.defaultTOML + "\n").write(to: url, atomically: true, encoding: .utf8)
+        }
+        apply(Result { () throws(ConfigError) in try Config.load(from: url) })
+        return configError
+    }
+
+    func setEnabled(_ on: Bool) {
+        enabled = on
+        applyConfig()
+    }
+
+    /// Records the Space now current, so back-and-forth knows where it came from.
+    func noteWorkspace(_ index: Int) {
+        guard index != currentWorkspace else { return }
+        previousWorkspace = currentWorkspace
+        currentWorkspace = index
+    }
+
+    private func apply(_ result: Result<Config, ConfigError>) {
+        switch result {
+        case .success(let config):
+            self.config = config
+            configError = nil
+            hotkeys.load(modes: config.modes)
+        case .failure(let error):
+            configError = error
+            fputs("config: \(error), keeping the previous config\n", stderr)
+        }
+        applyConfig()
+    }
+
+    private func applyConfig() {
+        hotkeys.enabled = enabled
+        followEnabled = enabled && config.switching.followAppActivation
+        applyStartAtLogin(config.startAtLogin)
+        if config.autoReloadConfig, watcher == nil {
+            watcher = ConfigWatcher(url: Config.userConfigURL) { [weak self] in self?.apply($0) }
+        } else if !config.autoReloadConfig {
+            watcher?.stop()
+            watcher = nil
+        }
+    }
+}

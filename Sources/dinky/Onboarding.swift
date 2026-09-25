@@ -115,10 +115,10 @@ final class Onboarding: NSObject {
     }
 }
 
-// Registers or unregisters dinky as a login item to match the setting.
-func applyStartAtLogin() {
-    // TODO(din-jf9s): read `start-at-login` from the config instead of UserDefaults.
-    let wanted = UserDefaults.standard.bool(forKey: "start-at-login")
+// Registers or unregisters dinky as a login item to match `start-at-login`. Only for the app bundle:
+// a bare binary run from a shell is not a login item.
+func applyStartAtLogin(_ wanted: Bool) {
+    guard Bundle.main.bundleIdentifier != nil else { return }
     let service = SMAppService.mainApp
     do {
         if wanted, service.status != .enabled { try service.register() }

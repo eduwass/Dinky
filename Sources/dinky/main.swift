@@ -1,6 +1,6 @@
 import Foundation
 
-let usage = "usage: dinky ls | switch <space-index> | move <window-id> <space-index> [--follow] | focus <window-id> | tile | hotkeys | app | spaces\n"
+let usage = "usage: dinky <command> (see dinky help) | app\n"
 
 let args = Array(CommandLine.arguments.dropFirst())
 guard let command = args.first else {
@@ -14,13 +14,15 @@ let rest = Array(args.dropFirst())
 switch command {
 case "ls": exit(runLs(rest))
 case "switch": exit(runSwitch(rest))
-case "move": exit(runMove(rest))
-case "focus": exit(runFocus(rest))
+// The spike's `move` and `focus` take a window id; with a direction they are commands for the app.
+case "move" where rest == ["--check"] || UInt32(rest.first ?? "") != nil: exit(runMove(rest))
+case "focus" where UInt32(rest.first ?? "") != nil: exit(runFocus(rest))
 case "tile": exit(runTile(rest))
 case "hotkeys": exit(runHotkeys(rest))
 case "app": exit(runApp(rest))
 case "spaces": exit(runSpaces(rest))
-default:
-    fputs(usage, stderr)
-    exit(64)
+case "events": exit(runEvents(rest))
+case "borders": exit(runBorders(rest))
+case "help", "--help", "-h": exit(runHelp())
+default: exit(runCli(args))
 }
