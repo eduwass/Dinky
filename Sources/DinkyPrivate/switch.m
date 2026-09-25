@@ -261,7 +261,12 @@ static bool cursor_is_on_display(CGDirectDisplayID displayID)
 static bool mimi_post_swipes(double sign, int count, CGDirectDisplayID displayID)
 {
     static dispatch_once_t once;
-    dispatch_once(&once, ^{ [NSApplication sharedApplication]; });  // mimiEnsureApplication
+    dispatch_once(&once, ^{
+        [NSApplication sharedApplication];  // mimiEnsureApplication
+        // After CGWarpMouseCursorPosition macOS drops the user's mouse events for a quarter second
+        // unless the suppression interval is zero. yabai sets this at startup for the same reason.
+        CGSetLocalEventsSuppressionInterval(0.0);
+    });
 
     bool warp = !cursor_is_on_display(displayID);
     CGPoint restore = cursor_location();

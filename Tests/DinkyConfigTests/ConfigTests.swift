@@ -68,6 +68,8 @@ final class ConfigTests: XCTestCase {
 
     func testColours() throws {
         XCTAssertEqual(try Color(hex: "#ff000080"), Color(red: 1, green: 0, blue: 0, alpha: 128 / 255))
+        XCTAssertEqual(try Color(hex: "0x80ff0000"), Color(red: 1, green: 0, blue: 0, alpha: 128 / 255))
+        XCTAssertEqual(try Color(hex: "0xff0000"), Color(red: 1, green: 0, blue: 0, alpha: 1))
         XCTAssertEqual(try Color(hex: "#00FF00"), Color(red: 0, green: 1, blue: 0))
         for bad in ["e1e3e4", "#e1e3", "#e1e3e4g", "#+1e3e4"] {
             XCTAssertThrowsError(try Color(hex: bad), bad)
