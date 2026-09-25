@@ -18,16 +18,17 @@ func runCli(_ args: [String]) -> Int32 {
     return reply.ok ? 0 : 1
 }
 
-// `dinky help`: the command reference.
+// `dinky help`: the command reference, then the subcommands main.swift handles itself.
 func runHelp() -> Int32 {
+    let cliOnly = [
+        ("app", "Run the app in the foreground, logging to the terminal."),
+        ("recover", "Ask the running app to restore windows a crashed session left tiled."),
+        ("debug events|windows", "Print the live window event stream, or the current windows, for bug reports."),
+        ("doctor [--config <path>]", "Check the config and the macOS settings dinky depends on. Exit 1 on errors."),
+    ]
     print("usage: dinky <command>, sent to the running app over \(socketPath)\n")
-    for doc in Command.all {
-        print("  \(doc.syntax)\n      \(doc.description)")
-    }
+    for doc in Command.all { print("  \(doc.syntax)\n      \(doc.description)") }
     print("\ncommand line only:")
-    print("  app\n      Run the app in the foreground, logging to the terminal.")
-    print("  recover\n      Ask the running app to restore windows a crashed session left tiled.")
-    print("  debug events|windows\n      Print the live window event stream, or the current windows, for bug reports.")
-    print("  doctor [--config <path>]\n      Check the config and the macOS settings dinky depends on. Exit 1 on errors.")
+    for (syntax, description) in cliOnly { print("  \(syntax)\n      \(description)") }
     return 0
 }

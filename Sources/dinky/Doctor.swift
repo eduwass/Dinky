@@ -69,7 +69,8 @@ func runDoctor(_ args: [String]) -> Int32 {
     return errors == 0 ? 0 : 1
 }
 
-private func dockSetting(_ key: String) -> Bool? {
+/// A boolean Dock setting, nil when unset.
+func dockSetting(_ key: String) -> Bool? {
     CFPreferencesCopyAppValue(key as CFString, "com.apple.dock" as CFString) as? Bool
 }
 

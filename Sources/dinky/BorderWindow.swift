@@ -13,7 +13,7 @@ final class BorderWindow {
         var style: BorderStyle
     }
 
-    let target: UInt32
+    private let target: UInt32
     private var id: UInt32 = 0
     private var scale = 0.0
     private var spaceID: UInt64 = 0

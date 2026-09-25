@@ -3,7 +3,7 @@ import DinkyPrivate
 
 // `dinky app`: a menu bar item showing the focused display's workspace number, with commands as menu
 // items, and the socket the CLI talks to.
-func runApp(_ args: [String]) -> Int32 {
+func runApp() -> Int32 {
     guard !appIsRunning() else {
         fputs("dinky: already running (\(socketPath))\n", stderr)
         return 1
@@ -62,7 +62,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fflush(stdout)
     }
 
-    @objc private func refresh() {
+    private func refresh() {
         let state = AppState.shared
         let workspace = state.displays.focusedDisplay()?.currentWorkspace
         statusItem.button?.title = (workspace.map { "\($0 + 1)" } ?? "?") + (state.configError == nil ? "" : "!")

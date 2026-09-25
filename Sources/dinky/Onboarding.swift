@@ -45,8 +45,7 @@ final class Onboarding: NSObject {
     // MARK: Step 2, switch to a Space with open windows
 
     private func shouldAskAboutSwoosh() -> Bool {
-        let dockSetting = CFPreferencesCopyAppValue("workspaces-auto-swoosh" as CFString, "com.apple.dock" as CFString) as? Bool
-        return dockSetting != false && !UserDefaults.standard.bool(forKey: Onboarding.swooshAskedKey)
+        (dockSetting("workspaces-auto-swoosh") ?? true) && !UserDefaults.standard.bool(forKey: Onboarding.swooshAskedKey)
     }
 
     private func showSwooshStep() {

@@ -51,10 +51,11 @@ final class AppState {
 
     func startCoordinator() {
         guard coordinator == nil else { return }
-        coordinator = Coordinator(displays: displays, config: config)
-        coordinator?.start()
+        let coordinator = Coordinator(displays: displays, config: config)
+        self.coordinator = coordinator
+        coordinator.start()
         callbacks.start()
-        coordinator.map { recovery.start(model: $0.model) }
+        recovery.start(model: coordinator.model)
     }
 
     /// Off stops tiling and puts every window back where it was before dinky touched it.

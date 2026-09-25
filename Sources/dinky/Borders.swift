@@ -4,12 +4,10 @@ import DinkyPrivate
 
 // din-nt98: focus borders. One BorderWindow per document window on a visible Space; the
 // focused window's border gets the active colour, the rest the inactive one (JankyBorders'
-// behaviour). `onlyFocused` draws the focused window's border alone.
+// behaviour).
 //
 // The owner feeds it the WindowModel's events through handle(_:).
 final class BorderManager {
-    var onlyFocused = false { didSet { syncAll() } }
-
     private var config: Borders
     private let model: WindowModel
     private var borders: [UInt32: BorderWindow] = [:]
@@ -65,13 +63,11 @@ final class BorderManager {
             borders[window.id] = nil
             return
         }
-        let focused = window.id == focusedID
-        let shown = window.isOrderedIn && !window.isMinimized && visibleSpaces.contains(window.spaceID)
-            && (focused || !onlyFocused)
-        guard shown else {
+        guard window.isOrderedIn, !window.isMinimized, visibleSpaces.contains(window.spaceID) else {
             borders[window.id]?.hide()
             return
         }
+        let focused = window.id == focusedID
         let border = borders[window.id] ?? BorderWindow(target: window.id)
         borders[window.id] = border
         border.update(window, color: focused ? config.activeColor : config.inactiveColor, config: config)
