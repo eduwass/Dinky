@@ -35,9 +35,11 @@ final class Coordinator {
     private var borders: BorderManager?
     private(set) var workspaces: [SpaceKey: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
-    private var dirty: Set<SpaceKey> = []
+    var dirty: Set<SpaceKey> = []
     /// Classification attempts for windows whose AX element has not appeared yet.
     var attempts: [WindowID: Int] = [:]
+    /// The tiled window being dragged with the mouse, until the button is released. See Drag.swift.
+    var dragging: WindowID?
     /// Called when the focused window changes.
     var onFocusChange: (() -> Void)?
     private var lastFocused: WindowID = 0
@@ -87,6 +89,7 @@ final class Coordinator {
             event.change == .removed ? forget(window.id) : track(window)
         }
         if [.frontApp, .windowReorder, .windowCreate].contains(event.kind) { syncFocus() }
+        if let window = event.window, [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         flush()
     }
 

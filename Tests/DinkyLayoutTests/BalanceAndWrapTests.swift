@@ -74,3 +74,20 @@ final class WrapAroundTests: XCTestCase {
         XCTAssertEqual(ws.focused, 1)
     }
 }
+
+final class SwapByIDTests: XCTestCase {
+    func testSwapTwoWindowsKeepsTilesAndFocus() {
+        var ws = Workspace(bounds: CGRect(x: 0, y: 0, width: 1000, height: 600))
+        ws.insert(1); ws.insert(2); ws.insert(3)
+        ws.focus(2)
+        let before = ws.layout().frames
+        XCTAssertTrue(ws.swap(1, 3))
+        let after = ws.layout().frames
+        XCTAssertEqual(after[1], before[3])
+        XCTAssertEqual(after[3], before[1])
+        XCTAssertEqual(after[2], before[2])
+        XCTAssertEqual(ws.focused, 2)
+        XCTAssertFalse(ws.swap(1, 1))
+        XCTAssertFalse(ws.swap(1, 99))
+    }
+}

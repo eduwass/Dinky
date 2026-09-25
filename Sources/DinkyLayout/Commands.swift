@@ -30,11 +30,17 @@ extension Workspace {
     /// Swap the focused window with its neighbour in `direction`. Focus stays with the moved window.
     @discardableResult
     public mutating func swap(_ direction: Direction) -> Bool {
-        guard let focused, let other = neighbor(of: focused, direction),
-              let a = root.path(of: focused), let b = root.path(of: other) else { return false }
-        root.modify(at: Array(a.dropLast())) { $0.replace(at: a.last!, with: .window(other)) }
-        root.modify(at: Array(b.dropLast())) { $0.replace(at: b.last!, with: .window(focused)) }
-        focus(focused)
+        guard let focused, let other = neighbor(of: focused, direction) else { return false }
+        return swap(focused, other)
+    }
+
+    /// Swap two windows' places in the tree, keeping both tiles' sizes. Focus stays where it was.
+    @discardableResult
+    public mutating func swap(_ first: WindowID, _ second: WindowID) -> Bool {
+        guard first != second, let a = root.path(of: first), let b = root.path(of: second) else { return false }
+        root.modify(at: Array(a.dropLast())) { $0.replace(at: a.last!, with: .window(second)) }
+        root.modify(at: Array(b.dropLast())) { $0.replace(at: b.last!, with: .window(first)) }
+        if let focused { focus(focused) }
         return true
     }
 
