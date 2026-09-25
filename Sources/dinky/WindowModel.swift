@@ -48,22 +48,13 @@ final class WindowModel {
     private let ownPID = getpid()
     private var started = false
 
+    /// Subscribes to the shared WindowServer stream and seeds the table. False if WindowServer refused.
     func start() -> Bool {
         guard !started else { return true }
-        let context = Unmanaged.passUnretained(self).toOpaque()
-        started = dinky_events_start({ event, context in
-            let model = Unmanaged<WindowModel>.fromOpaque(context!).takeUnretainedValue()
-            DispatchQueue.main.async { model.handle(event) }
-        }, context)
+        started = EventHub.shared.subscribe { [weak self] event in self?.handle(event) }
         guard started else { return false }
         seed()
         return true
-    }
-
-    func stop() {
-        guard started else { return }
-        dinky_events_stop()
-        started = false
     }
 
     // Sanity pass for callers that suspect drift: drops windows that no longer exist,

@@ -1,7 +1,7 @@
 import AppKit
 import DinkyPrivate
 
-// Spike din-19v3: create Spaces through the bridged SLSBridgedSpaceCreateOperation.
+// `dinky spaces`: list Spaces, or create one through the bridged SLSBridgedSpaceCreateOperation (spike din-19v3).
 func runSpaces(_ args: [String]) -> Int32 {
     switch args.first {
     case "ls":
@@ -50,7 +50,7 @@ private func createSpace(_ args: [String]) -> Int32 {
     guard spaceID != 0 else { return 1 }
     print("created space=\(spaceID)")
 
-    let listed = waitFor(2000) { spaceIDs(display.uuid).contains(spaceID) }
+    let listed = waitUntil(2) { spaceIDs(display.uuid).contains(spaceID) }
     let after = spaceIDs(display.uuid)
     print("managed list \(listed ? "shows" : "does not show") it: \(after.count) Spaces \(after)")
 
@@ -72,8 +72,10 @@ private func spaceIDs(_ uuid: String) -> [UInt64] {
     dinky_displays().first { $0.uuid == uuid }?.spaces.map(\.spaceID) ?? []
 }
 
-private func waitFor(_ ms: Int, _ condition: () -> Bool) -> Bool {
-    for _ in 0..<(ms / 10) {
+/// Polls every 10 ms until the condition holds or the time is up. True if it held.
+func waitUntil(_ seconds: Double, _ condition: () -> Bool) -> Bool {
+    let deadline = Date(timeIntervalSinceNow: seconds)
+    while Date() < deadline {
         if condition() { return true }
         usleep(10_000)
     }

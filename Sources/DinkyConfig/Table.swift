@@ -50,6 +50,18 @@ final class Table {
         }
     }
 
+    /// A list of strings, e.g. bundle IDs.
+    func strings(_ key: String) throws -> [String]? {
+        guard use(key) else { return nil }
+        let error = ConfigError(path: path(key), "expected a list of strings")
+        guard let array = try? table.array(forKey: key) else { throw error }
+        return try (0..<array.count).map { index in
+            // As in string(_:): rule integers out before reading a string.
+            guard (try? array.integer(atIndex: index)) == nil, let string = try? array.string(atIndex: index) else { throw error }
+            return string
+        }
+    }
+
     func table(_ key: String) throws -> Table? {
         guard use(key) else { return nil }
         guard let nested = try? table.table(forKey: key) else { throw ConfigError(path: path(key), "expected a table") }

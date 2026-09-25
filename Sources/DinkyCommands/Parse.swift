@@ -59,6 +59,8 @@ extension Command {
             return none ? .fullscreen : nil
         case "flatten-workspace-tree":
             return none ? .flattenWorkspaceTree : nil
+        case "retile":
+            return none ? .retile : nil
         case "mode":
             return one.map { .mode($0) }
         case "reload-config":

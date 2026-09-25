@@ -57,6 +57,7 @@ final class ParseTests: XCTestCase {
         XCTAssertEqual(try parse("enable on"), .enable(.on))
         XCTAssertEqual(try parse("enable off"), .enable(.off))
         XCTAssertEqual(try parse("enable toggle"), .enable(.toggle))
+        XCTAssertEqual(try parse("retile"), .retile)
         XCTAssertEqual(try parse("list-windows"), .listWindows)
         XCTAssertEqual(try parse("list-workspaces"), .listWorkspaces)
         XCTAssertEqual(try parse("list-displays"), .listDisplays)

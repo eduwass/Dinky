@@ -55,27 +55,22 @@ func currentSpaceIndex(_ main: DinkyDisplay) -> Int? {
     main.spaces.firstIndex { $0.spaceID == main.currentSpaceID }
 }
 
-/// Switches a display, the focused one by default, to a 0-based workspace index. False if nothing to do.
+/// Swipes the display to one of its Spaces, full-screen ones included. False if it is already there.
+/// Returns once the swipe is posted; `SpaceSwitcher` confirms it and coalesces rapid requests.
 @discardableResult
-func switchSpace(to workspace: Int, on display: Display? = nil, path: DinkySwitchPath = .mimi) -> Bool {
-    let model = AppState.shared.displays
-    model.reconcile()
-    guard let display = display.flatMap({ d in model.displays.first { $0.uuid == d.uuid } }) ?? model.focusedDisplay(),
-          display.workspaces.indices.contains(workspace) else { return false }
-    return switchSpace(toSpaceID: display.workspaces[workspace], on: display, path: path)
+func switchSpace(toSpaceID target: UInt64, on display: Display) -> Bool {
+    SpaceSwitcher.shared.request(target, on: display.uuid)
 }
 
-/// Swipes the display to one of its Spaces, full-screen ones included. False if nothing to do.
-@discardableResult
-func switchSpace(toSpaceID target: UInt64, on display: Display, path: DinkySwitchPath = .mimi) -> Bool {
-    guard let from = display.spaces.firstIndex(of: display.currentSpaceID),
-          let to = display.spaces.firstIndex(of: target), from != to else { return false }
-    let posted = dinky_switch_to_space_index(path, Int32(from + 1), Int32(to + 1), target, display.uuid as CFString)
-    if posted {
-        lastSeenSpaceIDs[display.uuid] = target
-        lastSpaceChangeAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
-    }
-    return posted
+/// The Space the display is on, or is switching to while a switch is in flight.
+func targetSpaceID(on display: Display) -> UInt64 {
+    SpaceSwitcher.shared.target(on: display.uuid) ?? display.currentSpaceID
+}
+
+// Tells the activation follower that this Space change is ours, so the activation it causes is not followed.
+func noteOwnSwitch(to target: UInt64, on uuid: String) {
+    lastSeenSpaceIDs[uuid] = target
+    lastSpaceChangeAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
 }
 
 // Switches the display holding the app's frontmost window to that window's Space.
@@ -101,4 +96,101 @@ private func followActivation(of pid: pid_t, name: String) {
                  (spaces.firstIndex(of: target.display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: target.space) ?? -1) + 1,
                  target.display.id, Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - start) / 1_000_000))
     fflush(stdout)
+}
+
+// One switch in flight per display. A request while one is in flight only replaces its target: once the
+// posted swipe lands, the display goes on to the newest target from wherever it is, so a burst of requests
+// never replays obsolete swipes. Landing is observed with `dinky_current_space_id`, not assumed; a swipe
+// that has not landed after `timeout` is posted once more, then reported and dropped.
+final class SpaceSwitcher {
+    static let shared = SpaceSwitcher()
+
+    private struct Flight {
+        var target: UInt64      // the newest request
+        var posted: UInt64 = 0  // what the last swipe went for
+        var postedAt: UInt64 = 0
+        var retried = false
+        let startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+    }
+
+    private var flights: [String: Flight] = [:]
+    private var timer: Timer?
+    // The mimi path pumps the run loop between steps; the poll and new requests must not post meanwhile.
+    private var posting = false
+    private let timeout: UInt64 = 1_000_000_000
+
+    func target(on uuid: String) -> UInt64? { flights[uuid]?.target }
+
+    func request(_ target: UInt64, on uuid: String) -> Bool {
+        if flights[uuid] != nil {
+            flights[uuid]!.target = target
+            flights[uuid]!.retried = false
+            return true
+        }
+        guard dinky_current_space_id(uuid as CFString) != target else { return false }
+        flights[uuid] = Flight(target: target)
+        if !posting { post(on: uuid) }
+        startPolling()
+        return true
+    }
+
+    /// Posts a swipe from the display's observed Space to the flight's target. Drops the flight if it can't.
+    private func post(on uuid: String) {
+        guard var flight = flights[uuid] else { return }
+        let spaces = dinky_displays().first { $0.uuid == uuid }?.spaces.map(\.spaceID) ?? []
+        let current = dinky_current_space_id(uuid as CFString)
+        guard let from = spaces.firstIndex(of: current), let to = spaces.firstIndex(of: flight.target) else {
+            return finish(uuid, "switch: Space \(flight.target) is not on display \(uuid)")
+        }
+        flight.posted = flight.target
+        flight.postedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        flights[uuid] = flight
+        noteOwnSwitch(to: flight.target, on: uuid)
+        posting = true
+        let ok = dinky_switch_to_space_index(.mimi, Int32(from + 1), Int32(to + 1), flight.target, uuid as CFString)
+        posting = false
+        if !ok { finish(uuid, "switch: posting the swipe to Space \(to + 1) failed") }
+    }
+
+    private func poll() {
+        guard !posting else { return }
+        for (uuid, flight) in flights {
+            let observed = dinky_current_space_id(uuid as CFString)
+            let ms = Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - flight.startedAt) / 1_000_000
+            if flight.posted == 0 {
+                post(on: uuid)  // requested while another display's swipe was being posted
+            } else if observed == flight.posted, observed == flight.target {
+                finish(uuid, String(format: "switch: landed on Space %llu in %.0f ms", observed, ms))
+            } else if observed == flight.posted {
+                post(on: uuid)  // landed on an older request; go on to the newest
+            } else if clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - flight.postedAt > timeout {
+                // The posted swipe did not land. Waiting for it first means it can't land late, after this.
+                if observed == flight.target {
+                    finish(uuid, String(format: "switch: on Space %llu after %.0f ms", observed, ms))
+                } else if flight.retried {
+                    finish(uuid, "switch: gave up on Space \(flight.target), display is on Space \(observed)", error: true)
+                } else {
+                    flights[uuid]!.retried = true
+                    post(on: uuid)
+                }
+            }
+        }
+        if flights.isEmpty {
+            timer?.invalidate()
+            timer = nil
+        }
+    }
+
+    private func finish(_ uuid: String, _ message: String, error: Bool = false) {
+        flights[uuid] = nil
+        if error { fputs(message + "\n", stderr) } else { print(message) }
+        fflush(stdout)
+    }
+
+    private func startPolling() {
+        guard timer == nil, !flights.isEmpty else { return }
+        let timer = Timer(timeInterval: 0.01, repeats: true) { [weak self] _ in self?.poll() }
+        RunLoop.main.add(timer, forMode: .common)
+        self.timer = timer
+    }
 }

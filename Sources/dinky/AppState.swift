@@ -2,7 +2,7 @@ import DinkyConfig
 import Foundation
 
 // State that outlives a single command: the current config, the hotkey engine, whether dinky is
-// enabled, and the display model. Main thread only.
+// enabled, the display model and the coordinator that tiles. Main thread only.
 final class AppState {
     static let shared = AppState()
 
@@ -26,6 +26,8 @@ final class AppState {
         model.start()
         return model
     }()
+    /// Tiling and borders, started by the app once Accessibility is granted.
+    private(set) var coordinator: Coordinator?
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -44,6 +46,12 @@ final class AppState {
         return configError
     }
 
+    func startCoordinator() {
+        guard coordinator == nil else { return }
+        coordinator = Coordinator(displays: displays, config: config)
+        coordinator?.start()
+    }
+
     func setEnabled(_ on: Bool) {
         enabled = on
         applyConfig()
@@ -58,6 +66,7 @@ final class AppState {
             self.config = config
             configError = nil
             hotkeys.load(modes: config.modes)
+            coordinator?.update(config: config)
         case .failure(let error):
             configError = error
             fputs("config: \(error), keeping the previous config\n", stderr)
@@ -67,6 +76,7 @@ final class AppState {
 
     private func applyConfig() {
         hotkeys.enabled = enabled
+        coordinator?.enabled = enabled
         followEnabled = enabled && config.switching.followAppActivation
         applyStartAtLogin(config.startAtLogin)
         if config.autoReloadConfig, watcher == nil {

@@ -5,12 +5,20 @@
 NS_ASSUME_NONNULL_BEGIN
 
 // Border windows: plain SkyLight windows owned by dinky, one per decorated window, ordered
-// directly below their target so they never cover its content. The JankyBorders approach,
+// directly below or above their target. Either way they never cover its content: the ring's
+// interior is transparent and the whole window ignores the mouse. The JankyBorders approach,
 // reimplemented. Every function takes the border's own window ID. Main thread only.
 
 typedef NS_ENUM(int, DinkyBorderStyle) {
     DinkyBorderStyleRound = 0,   // follows the target's corner radius
-    DinkyBorderStyleSquare = 1,  // square corners, visible behind the target's rounded ones
+    DinkyBorderStyleSquare = 1,  // square corners, filled in around the target's rounded ones
+};
+
+// As CGSOrderingMode. Below, the target's own shadow falls on the ring and darkens it a
+// little, as in JankyBorders; above, the ring is drawn over the shadow and keeps its colour.
+typedef NS_ENUM(int, DinkyBorderOrder) {
+    DinkyBorderOrderBelow = -1,
+    DinkyBorderOrderAbove = 1,
 };
 
 typedef struct {
@@ -21,20 +29,21 @@ typedef struct {
 // backing scale). Returns 0 on failure.
 uint32_t dinky_border_create(double scale);
 
-// Reshapes and redraws the border as a `width`-point stroke hugging `frame` (the target's
+// Reshapes and redraws the border as a `width`-point ring hugging `frame` (the target's
 // frame in global top-left coordinates) on the outside, then moves it, copies the target's
-// level and orders it directly below `target`, all in one transaction.
+// level and sub-level and orders it directly next to `target`, all in one transaction.
 void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cornerRadius,
-                         DinkyBorderColor color, double width, DinkyBorderStyle style);
+                         DinkyBorderColor color, double width, DinkyBorderStyle style,
+                         DinkyBorderOrder order);
 
 // Moves and re-orders without redrawing: the cheap path for drags and re-tiles that keep the size.
-void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width);
+void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width,
+                       DinkyBorderOrder order);
 
 // Puts the border on the target's Space. New borders start on the current Space.
 void dinky_border_move_to_space(uint32_t border, uint64_t spaceID);
 
 void dinky_border_hide(uint32_t border);
-void dinky_border_show(uint32_t border, uint32_t target);
 void dinky_border_destroy(uint32_t border);
 
 // The front app's frontmost document window on a visible Space, 0 if none.

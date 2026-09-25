@@ -38,6 +38,8 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu?.delegate = self
         _ = AppState.shared.hotkeys.start()
         installActivationFollower()
+        ensureWorkspaceCount()
+        AppState.shared.startCoordinator()
         NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh),
                                                           name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
         // Fallback: our own swipes do not always produce the notification promptly.
@@ -83,7 +85,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Go to Workspace", go))
         menu.addItem(submenu("Move Window to Workspace", moveTo))
         menu.addItem(submenu("Move Window and Follow", moveFollow))
-        menu.addItem(item("Tile This Workspace", "layout tiles"))
+        menu.addItem(item("Re-tile", "retile"))
         menu.addItem(.separator())
         let enabled = item("Enabled", "enable toggle")
         enabled.state = AppState.shared.enabled ? .on : .off

@@ -21,6 +21,9 @@ extension Config {
     active-color = '#e1e3e4'
     inactive-color = '#494d64'
     style = 'round'                # round | square
+    order = 'below'                # below | above (a click-through ring over the window)
+    exclude-apps = []              # bundle IDs that get no border
+    only-apps = []                 # when set, only these bundle IDs get borders
 
     [switching]
     follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch

@@ -41,10 +41,25 @@ enum Dispatcher {
         case .focus(let direction):
             return focus(direction)
         case .layout([.tiles]):
-            // The spike's split tiling until the tree is wired (din-ftk4 and friends).
-            return runTile([]) == 0 ? .ok("tiled") : .error("nothing to tile")
-        case .move, .joinWith, .resize, .layout, .fullscreen, .flattenWorkspaceTree:
-            return .error("not yet: the layout tree is not wired to windows")
+            return tree("layout tiles") { $0.setMode(.tiles); return true }
+        case .layout([.accordion]):
+            return tree("layout accordion") { $0.setMode(.accordion); return true }
+        case .move(let direction):
+            return tree("move \(direction)") { $0.move(direction) }
+        case .joinWith(let direction):
+            return tree("join-with \(direction)") { $0.join(direction) }
+        case .resize(.smart, let delta):
+            return tree("resize smart \(delta)") { $0.resize(by: CGFloat(delta)) }
+        case .fullscreen:
+            return tree("fullscreen") { $0.toggleFullscreen(); return true }
+        case .flattenWorkspaceTree:
+            return tree("flatten-workspace-tree") { $0.flatten(); return true }
+        case .retile:
+            guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
+            coordinator.reconcile()
+            return .ok("retiled")
+        case .resize, .layout:
+            return .error("not yet")
         case .mode(let name):
             guard AppState.shared.config.modes[name] != nil else { return .error("no mode '\(name)' in the config") }
             AppState.shared.hotkeys.setMode(name)
@@ -76,11 +91,13 @@ enum Dispatcher {
         }
     }
 
-    /// The focused display, freshly read, and its current 0-based workspace. Nil on a full-screen Space.
+    /// The focused display, freshly read, and its current 0-based workspace, or the one it is switching to
+    /// so that rapid `workspace next` requests add up. Nil on a full-screen Space.
     private static func focusedWorkspace() -> (Display, Int)? {
         let model = AppState.shared.displays
         model.reconcile()
-        guard let display = model.focusedDisplay(), let current = display.currentWorkspace else { return nil }
+        guard let display = model.focusedDisplay(),
+              let current = display.workspaces.firstIndex(of: targetSpaceID(on: display)) else { return nil }
         return (display, current)
     }
 
@@ -89,7 +106,7 @@ enum Dispatcher {
         let to = index(target, current: current)
         guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
         guard to != current else { return .ok("already on workspace \(to + 1)") }
-        guard switchSpace(to: to, on: display) else { return .error("switch to workspace \(to + 1) failed") }
+        guard switchSpace(toSpaceID: display.workspaces[to], on: display) else { return .error("switch to workspace \(to + 1) failed") }
         return .ok("workspace \(to + 1)")
     }
 
@@ -101,9 +118,22 @@ enum Dispatcher {
         guard wid != 0 else { return .error("no focused window") }
         guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         var ids = [wid]
-        guard dinky_move_windows_to_space(&ids, 1, display.workspaces[to]) else { return .error("move failed") }
-        if follow { _ = switchWorkspace(.number(to + 1)) }
+        let space = display.workspaces[to]
+        guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
+        // The bridged move is asynchronous; follow only once the window is really there.
+        guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {
+            return .error("window \(wid) did not arrive on workspace \(to + 1)")
+        }
+        if follow { switchSpace(toSpaceID: space, on: display) }
         return .ok("moved window \(wid) to workspace \(to + 1)")
+    }
+
+    // MARK: Layout tree
+
+    /// Runs a change on the focused window's tree; `change` returns false when there was nothing to do.
+    private static func tree(_ name: String, _ change: (inout Workspace) -> Bool) -> Reply {
+        guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
+        return coordinator.command(change) ? .ok(name) : .error("\(name): nothing to do, or the focused window is not tiled")
     }
 
     // MARK: Windows

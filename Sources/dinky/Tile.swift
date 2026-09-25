@@ -3,9 +3,14 @@ import DinkyConfig
 import DinkyLayout
 import DinkyPrivate
 
-// `dinky tile [--gap N] [--accordion]`: tile the normal windows on the main display's current Space
-// through the layout engine and the frame applier, then print the readback.
+// `dinky tile`: asks the running app to re-tile. Without the app, `dinky tile [--gap N] [--accordion]` tiles
+// the normal windows on the main display's current Space once, through the layout engine and the frame
+// applier, and prints the readback.
 func runTile(_ args: [String]) -> Int32 {
+    if let reply = sendToApp("retile") {
+        print(reply.text)
+        return reply.ok ? 0 : 1
+    }
     let displays = dinky_displays()
     guard let main = displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? displays.first,
           let screen = NSScreen.main else {
@@ -19,9 +24,7 @@ func runTile(_ args: [String]) -> Int32 {
     }
 
     let config = Config.default
-    var gaps = DinkyLayout.Gaps(inner: CGFloat(config.gaps.inner),
-                                top: CGFloat(config.gaps.outer.top), bottom: CGFloat(config.gaps.outer.bottom),
-                                left: CGFloat(config.gaps.outer.left), right: CGFloat(config.gaps.outer.right))
+    var gaps = DinkyLayout.Gaps(config.gaps)
     if let i = args.firstIndex(of: "--gap"), i + 1 < args.count, let gap = Double(args[i + 1]) {
         gaps = DinkyLayout.Gaps(all: CGFloat(gap))
     }

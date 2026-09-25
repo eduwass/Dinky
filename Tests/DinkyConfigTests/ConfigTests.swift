@@ -75,6 +75,32 @@ final class ConfigTests: XCTestCase {
         assertError("[borders]\nactive-color = 'red'\n", path: "borders.active-color", line: 2, contains: "'red' is not a colour")
     }
 
+    func testBorderOrderAndAppLists() throws {
+        XCTAssertEqual(Config().borders.order, .below)
+        let borders = try Config.parse("""
+        [borders]
+        order = 'above'
+        exclude-apps = ['com.apple.finder', 'com.apple.Terminal']
+        only-apps = []
+        """).borders
+        XCTAssertEqual(borders.order, .above)
+        XCTAssertEqual(borders.excludeApps, ["com.apple.finder", "com.apple.Terminal"])
+        XCTAssertEqual(borders.onlyApps, [])
+        XCTAssertFalse(borders.decorates(bundleID: "com.apple.finder"))
+        XCTAssertTrue(borders.decorates(bundleID: "com.apple.TextEdit"))
+        XCTAssertTrue(borders.decorates(bundleID: nil))
+
+        var only = Borders()
+        only.onlyApps = ["com.apple.TextEdit"]
+        XCTAssertTrue(only.decorates(bundleID: "com.apple.TextEdit"))
+        XCTAssertFalse(only.decorates(bundleID: "com.apple.finder"))
+        XCTAssertFalse(only.decorates(bundleID: nil))
+
+        assertError("[borders]\norder = 'over'\n", path: "borders.order", line: 2, contains: "'below', 'above'")
+        assertError("[borders]\nexclude-apps = 'com.apple.finder'\n", path: "borders.exclude-apps", line: 2, contains: "list of strings")
+        assertError("[borders]\nonly-apps = [1]\n", path: "borders.only-apps", line: 2, contains: "list of strings")
+    }
+
     func testBindingValues() throws {
         let config = try Config.parse("""
         [mode.main.binding]

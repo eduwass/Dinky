@@ -37,7 +37,11 @@ final class BorderManager {
             refocus()
             syncAll()
             return
-        case .frontApp, .windowReorder, .windowCreate, .windowDestroy, .windowUpdate, .windowTitle:
+        case .frontApp:
+            refocus()
+            // The new app's front window can settle a few ms after the app (JankyBorders waits 20 ms).
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
+        case .windowReorder, .windowCreate, .windowDestroy, .windowUpdate, .windowTitle:
             refocus()
         default:
             break
@@ -57,7 +61,7 @@ final class BorderManager {
     }
 
     private func sync(_ window: Window) {
-        guard config.enabled, window.isDocument else {
+        guard config.enabled, window.isDocument, config.decorates(bundleID: window.bundleID) else {
             borders[window.id] = nil
             return
         }
@@ -92,7 +96,8 @@ final class BorderManager {
     }
 }
 
-// `dinky borders` runs a WindowModel and a BorderManager with the default config until killed.
+// `dinky borders [--only-focused] [--above]` runs a WindowModel and a BorderManager with the
+// default config until killed.
 func runBorders(_ args: [String]) -> Int32 {
     // SkyLight only delivers notifications while AppKit drains the connection's event port.
     let app = NSApplication.shared
@@ -103,7 +108,9 @@ func runBorders(_ args: [String]) -> Int32 {
         fputs("borders: could not register for WindowServer notifications\n", stderr)
         return 1
     }
-    let manager = BorderManager(config: Borders(), model: model)
+    var config = Borders()
+    if args.contains("--above") { config.order = .above }
+    let manager = BorderManager(config: config, model: model)
     manager.onlyFocused = args.contains("--only-focused")
     model.onChange = manager.handle
     print("borders on \(model.windows.count) windows, ctrl-c to stop")

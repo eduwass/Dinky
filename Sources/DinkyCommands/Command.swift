@@ -17,6 +17,7 @@ public enum Command: Equatable, Sendable {
     case layout([LayoutName])
     case fullscreen
     case flattenWorkspaceTree
+    case retile
     case mode(String)
     case reloadConfig
     case enable(Toggle)

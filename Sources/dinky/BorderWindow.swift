@@ -2,7 +2,7 @@ import AppKit
 import DinkyConfig
 import DinkyPrivate
 
-// The border of one window: a dinky-owned SkyLight window kept directly below its target.
+// The border of one window: a dinky-owned SkyLight window kept directly below or above its target.
 // Redraws only when the look or size changes; a plain move just re-places it.
 final class BorderWindow {
     struct Look: Equatable {
@@ -39,12 +39,13 @@ final class BorderWindow {
             dinky_border_move_to_space(id, window.spaceID)
             spaceID = window.spaceID
         }
+        let order: DinkyBorderOrder = config.order == .above ? .above : .below
         if look == drawn {
-            dinky_border_move(id, target, window.frame, config.width)
+            dinky_border_move(id, target, window.frame, config.width, order)
         } else {
             let rgba = DinkyBorderColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
             let style: DinkyBorderStyle = config.style == .round ? .round : .square
-            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, style)
+            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, style, order)
             drawn = look
         }
         isShown = true
@@ -57,6 +58,7 @@ final class BorderWindow {
     }
 
     // JankyBorders sets the resolution once, at creation; a display change gets a new window.
+    // Widths and radii stay in points; the resolution alone decides the pixels.
     private func recreate(scale: Double) {
         if id != 0 { dinky_border_destroy(id) }
         id = dinky_border_create(scale)

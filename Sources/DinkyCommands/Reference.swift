@@ -34,6 +34,8 @@ extension Command {
             description: "Toggle the focused window filling the workspace. The tree is kept."),
         Doc(syntax: "flatten-workspace-tree",
             description: "Put every window on the workspace back into one flat container."),
+        Doc(syntax: "retile",
+            description: "Re-read every window and re-apply the layout of every workspace on screen."),
         Doc(syntax: "mode <name>",
             description: "Switch to a binding mode from the config, such as 'main' or 'service'."),
         Doc(syntax: "reload-config",

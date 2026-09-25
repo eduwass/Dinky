@@ -137,12 +137,22 @@ public enum BorderStyle: String, CaseIterable {
     case round, square
 }
 
+/// Below the target, or above it as a ring that never covers content or takes clicks.
+public enum BorderOrder: String, CaseIterable {
+    case below, above
+}
+
 public struct Borders: Equatable {
     public var enabled = true
     public var width = 4.0
     public var activeColor = try! Color(hex: "#e1e3e4")
     public var inactiveColor = try! Color(hex: "#494d64")
     public var style = BorderStyle.round
+    public var order = BorderOrder.below
+    /// Bundle IDs whose windows get no border.
+    public var excludeApps: [String] = []
+    /// Bundle IDs that alone get borders, when not empty.
+    public var onlyApps: [String] = []
 
     public init() {}
 
@@ -152,7 +162,16 @@ public struct Borders: Equatable {
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
         style = try t.choice("style") ?? style
+        order = try t.choice("order") ?? order
+        excludeApps = try t.strings("exclude-apps") ?? excludeApps
+        onlyApps = try t.strings("only-apps") ?? onlyApps
         try t.done()
+    }
+
+    /// Whether windows of the app with this bundle ID get a border.
+    public func decorates(bundleID: String?) -> Bool {
+        if !onlyApps.isEmpty { return bundleID.map(onlyApps.contains) ?? false }
+        return !(bundleID.map(excludeApps.contains) ?? false)
     }
 }
 

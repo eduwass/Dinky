@@ -13,6 +13,7 @@ extern CGError SLSSetWindowResolution(int cid, uint32_t wid, double resolution);
 extern CGError SLSSetWindowOpacity(int cid, uint32_t wid, bool isOpaque);
 extern CGError SLSWindowSetShadowProperties(uint32_t wid, CFDictionaryRef properties);
 extern CGError SLSGetWindowLevel(int cid, uint32_t wid, int64_t *level);
+extern int32_t SLSGetWindowSubLevel(int cid, uint32_t wid) __attribute__((weak_import));
 extern CGContextRef SLWindowContextCreate(int cid, uint32_t wid, CFDictionaryRef options);
 extern CGError SLSFlushWindowContentRegion(int cid, uint32_t wid, void *dirty);
 extern CGError SLSDisableUpdate(int cid);
@@ -22,13 +23,15 @@ extern CGError SLSGetConnectionIDForPSN(int cid, ProcessSerialNumber *psn, int *
 extern CFTypeRef SLSTransactionCreate(int cid);
 extern CGError SLSTransactionMoveWindowWithGroup(CFTypeRef transaction, uint32_t wid, CGPoint point);
 extern CGError SLSTransactionSetWindowLevel(CFTypeRef transaction, uint32_t wid, int level);
+extern CGError SLSTransactionSetWindowSubLevel(CFTypeRef transaction, uint32_t wid, int level) __attribute__((weak_import));
 extern CGError SLSTransactionOrderWindow(CFTypeRef transaction, uint32_t wid, int order, uint32_t relativeTo);
 extern CGError SLSTransactionCommit(CFTypeRef transaction, int synchronous);
 
-// SLSTransactionOrderWindow orders, as CGSOrderingMode.
-enum { OrderOut = 0, OrderBelow = -1 };
+// SLSTransactionOrderWindow's order-out mode; DinkyBorderOrder holds the other two.
+enum { OrderOut = 0 };
 
-// JankyBorders window_create: floating (bit 1) and click-through (bit 9).
+// JankyBorders window_create: floating (bit 1) and ignores mouse events (bit 9), so clicks
+// anywhere in the border window, ring or interior, go to the window below it.
 static const uint64_t border_tags = (1ULL << 1) | (1ULL << 9);
 
 uint32_t dinky_border_create(double scale)
@@ -58,8 +61,10 @@ static CGRect outer_frame(CGRect frame, double width)
     return CGRectInset(frame, -width, -width);
 }
 
-// Moves, copies the level and orders below the target, in one transaction.
-static void place(uint32_t border, uint32_t target, CGPoint origin)
+// Moves, copies the level and sub-level and orders next to the target, in one transaction.
+// SLSGetWindowSubLevel needs Screen Recording and returns 0 without it (JankyBorders
+// 7ba72e5), which is every normal window's sub-level anyway.
+static void place(uint32_t border, uint32_t target, CGPoint origin, DinkyBorderOrder order)
 {
     int cid = dinky_connection();
     int64_t level = 0;
@@ -69,13 +74,25 @@ static void place(uint32_t border, uint32_t target, CGPoint origin)
     if (!transaction) return;
     SLSTransactionMoveWindowWithGroup(transaction, border, origin);
     SLSTransactionSetWindowLevel(transaction, border, (int)level);
-    SLSTransactionOrderWindow(transaction, border, OrderBelow, target);
+    if (SLSGetWindowSubLevel && SLSTransactionSetWindowSubLevel) {
+        SLSTransactionSetWindowSubLevel(transaction, border, SLSGetWindowSubLevel(cid, target));
+    }
+    SLSTransactionOrderWindow(transaction, border, order, target);
     SLSTransactionCommit(transaction, 0);
     CFRelease(transaction);
 }
 
-// A stroke whose inner edge is the target's frame: the path runs width/2 outside it, with
-// the corner radius grown by the same amount so the inner edge follows the window's corners.
+// CGPathAddRoundedRect needs the radius to fit in the rect.
+static void add_rounded_rect(CGMutablePathRef path, CGRect rect, double radius)
+{
+    radius = MAX(0, MIN(radius, MIN(rect.size.width, rect.size.height) / 2));
+    CGPathAddRoundedRect(path, NULL, rect, radius, radius);
+}
+
+// A ring filled between the outer edge and the target's own rounded outline, interior left
+// transparent. Everything is in points: the context comes scaled to the border's resolution,
+// so the same width and radii are right at 1x and 2x. Round rings grow the target's radius by
+// the width; square rings fill in behind (or, ordered above, around) the target's corners.
 static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColor color,
                  double width, DinkyBorderStyle style)
 {
@@ -84,17 +101,15 @@ static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColo
     if (!context) return;
 
     CGRect bounds = { CGPointZero, size };
-    CGRect path = CGRectInset(bounds, width / 2, width / 2);
-    double radius = style == DinkyBorderStyleRound ? cornerRadius + width / 2 : 0;
-    radius = MIN(radius, MIN(path.size.width, path.size.height) / 2);
+    CGMutablePathRef ring = CGPathCreateMutable();
+    add_rounded_rect(ring, bounds, style == DinkyBorderStyleRound ? cornerRadius + width : 0);
+    add_rounded_rect(ring, CGRectInset(bounds, width, width), cornerRadius);
 
     CGContextClearRect(context, bounds);
-    CGContextSetRGBStrokeColor(context, color.red, color.green, color.blue, color.alpha);
-    CGContextSetLineWidth(context, width);
-    CGPathRef stroke = CGPathCreateWithRoundedRect(path, radius, radius, NULL);
-    CGContextAddPath(context, stroke);
-    CGContextStrokePath(context);
-    CGPathRelease(stroke);
+    CGContextSetRGBFillColor(context, color.red, color.green, color.blue, color.alpha);
+    CGContextAddPath(context, ring);
+    CGContextEOFillPath(context);
+    CGPathRelease(ring);
 
     CGContextFlush(context);
     CGContextRelease(context);
@@ -102,7 +117,7 @@ static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColo
 }
 
 void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cornerRadius,
-                         DinkyBorderColor color, double width, DinkyBorderStyle style)
+                         DinkyBorderColor color, double width, DinkyBorderStyle style, DinkyBorderOrder order)
 {
     int cid = dinky_connection();
     CGRect outer = outer_frame(frame, width);
@@ -115,14 +130,14 @@ void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cor
     SLSDisableUpdate(cid);
     SLSSetWindowShape(cid, border, 0, 0, region);
     draw(border, outer.size, cornerRadius, color, width, style);
-    place(border, target, outer.origin);
+    place(border, target, outer.origin, order);
     SLSReenableUpdate(cid);
     CFRelease(region);
 }
 
-void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width)
+void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width, DinkyBorderOrder order)
 {
-    place(border, target, outer_frame(frame, width).origin);
+    place(border, target, outer_frame(frame, width).origin, order);
 }
 
 void dinky_border_move_to_space(uint32_t border, uint64_t spaceID)
@@ -130,17 +145,14 @@ void dinky_border_move_to_space(uint32_t border, uint64_t spaceID)
     SLSMoveWindowsToManagedSpace(dinky_connection(), (__bridge CFArrayRef)@[@(border)], spaceID);
 }
 
-static void order(uint32_t border, int mode, uint32_t target)
+void dinky_border_hide(uint32_t border)
 {
     CFTypeRef transaction = SLSTransactionCreate(dinky_connection());
     if (!transaction) return;
-    SLSTransactionOrderWindow(transaction, border, mode, target);
+    SLSTransactionOrderWindow(transaction, border, OrderOut, 0);
     SLSTransactionCommit(transaction, 0);
     CFRelease(transaction);
 }
-
-void dinky_border_hide(uint32_t border) { order(border, OrderOut, 0); }
-void dinky_border_show(uint32_t border, uint32_t target) { order(border, OrderBelow, target); }
 
 void dinky_border_destroy(uint32_t border)
 {
