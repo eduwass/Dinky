@@ -28,6 +28,8 @@ final class AppState {
     }()
     /// Tiling and borders, started by the app once Accessibility is granted.
     private(set) var coordinator: Coordinator?
+    /// The journal of original frames that disable, quit and `dinky recover` restore.
+    let recovery = Recovery()
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -50,15 +52,32 @@ final class AppState {
         guard coordinator == nil else { return }
         coordinator = Coordinator(displays: displays, config: config)
         coordinator?.start()
+        coordinator.map { recovery.start(model: $0.model) }
     }
 
+    /// Off stops tiling and puts every window back where it was before dinky touched it.
+    /// This is the emergency path: `dinky enable off`, or the menu's Enabled item.
     func setEnabled(_ on: Bool) {
+        if on { recovery.resume() }
         enabled = on
         applyConfig()
+        if !on { recovery.restore() }
     }
 
-    /// Superseded by the display model's per-display history; App.swift still calls it.
-    func noteWorkspace(_ index: Int) {}
+    /// `dinky recover` and the menu's restore item: after a crash, stops tiling and restores every
+    /// journaled window, including those the crashed session left tiled.
+    func recover() -> Reply {
+        guard recovery.recoverable > 0 else { return .error("no windows from a previous session to restore") }
+        enabled = false
+        applyConfig()
+        return .ok(recovery.restore() + "; dinky is disabled, `dinky enable on` tiles again")
+    }
+
+    /// Quitting stops tiling and puts every window back.
+    func quit() {
+        coordinator?.enabled = false
+        recovery.restore()
+    }
 
     private func apply(_ result: Result<Config, ConfigError>) {
         switch result {

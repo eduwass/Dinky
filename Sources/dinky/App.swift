@@ -1,8 +1,8 @@
 import AppKit
 import DinkyPrivate
 
-// `dinky app`: a menu bar item showing the current Space number, with commands as menu items, and the
-// socket the CLI talks to.
+// `dinky app`: a menu bar item showing the focused display's workspace number, with commands as menu
+// items, and the socket the CLI talks to.
 func runApp(_ args: [String]) -> Int32 {
     guard !appIsRunning() else {
         fputs("dinky: already running (\(socketPath))\n", stderr)
@@ -20,14 +20,24 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
     private var socket: SocketServer?
     private let onboarding = Onboarding()
+    private var signals: [DispatchSourceSignal] = []
 
     func applicationDidFinishLaunching(_ note: Notification) {
         AppState.shared.loadConfig()
-        socket = SocketServer(handle: Dispatcher.run)
+        socket = SocketServer(handle: handleCommand)
+        // `kill` and logout quit through NSApplication, so windows are restored on the way out.
+        for sig in [SIGTERM, SIGINT] {
+            signal(sig, SIG_IGN)
+            let source = DispatchSource.makeSignalSource(signal: sig, queue: .main)
+            source.setEventHandler { NSApp.terminate(nil) }
+            source.resume()
+            signals.append(source)
+        }
         onboarding.run { [weak self] in self?.start() }
     }
 
     func applicationWillTerminate(_ note: Notification) {
+        AppState.shared.quit()
         socket?.stop()
     }
 
@@ -40,8 +50,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installActivationFollower()
         ensureWorkspaceCount()
         AppState.shared.startCoordinator()
-        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(refresh),
-                                                          name: NSWorkspace.activeSpaceDidChangeNotification, object: nil)
+        // After the display model's own subscription, so it has read the new Space.
+        EventHub.shared.subscribe { [weak self] event in
+            if event.kind == .spaceChange { self?.refresh() }
+        }
         // Fallback: our own swipes do not always produce the notification promptly.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.refresh() }
         refresh()
@@ -50,27 +62,23 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func refresh() {
-        guard let main = mainDisplay(), let current = currentSpaceIndex(main) else {
-            statusItem.button?.title = "?"
-            return
-        }
-        AppState.shared.noteWorkspace(current)
-        statusItem.button?.title = "\(current + 1)"
+        let state = AppState.shared
+        let workspace = state.displays.focusedDisplay()?.currentWorkspace
+        statusItem.button?.title = (workspace.map { "\($0 + 1)" } ?? "?") + (state.configError == nil ? "" : "!")
+        statusItem.button?.appearsDisabled = !state.enabled
     }
 
     // Every action is a command string, run exactly as `dinky <command>` would run it.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        if let error = AppState.shared.configError {
-            menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "").isEnabled = false
-            menu.addItem(.separator())
+        let state = AppState.shared
+        let display = state.displays.focusedDisplay()
+        let count = display?.workspaces.count ?? 0
+        let current = display?.currentWorkspace
+        menu.addItem(withTitle: "Space \(current.map { "\($0 + 1)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
+        if let error = state.configError {
+            menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "")
         }
-        guard let main = mainDisplay(), let current = currentSpaceIndex(main) else {
-            menu.addItem(withTitle: "No display", action: nil, keyEquivalent: "")
-            return
-        }
-        let count = main.spaces.count
-        menu.addItem(withTitle: "Workspace \(current + 1) of \(count)", action: nil, keyEquivalent: "")
         menu.addItem(.separator())
 
         let go = NSMenu()
@@ -86,14 +94,17 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(submenu("Move Window to Workspace", moveTo))
         menu.addItem(submenu("Move Window and Follow", moveFollow))
         menu.addItem(item("Re-tile", "retile"))
-        menu.addItem(.separator())
-        let enabled = item("Enabled", "enable toggle")
-        enabled.state = AppState.shared.enabled ? .on : .off
-        menu.addItem(enabled)
         menu.addItem(item("Reload Config", "reload-config"))
         menu.addItem(.separator())
-        let quit = NSMenuItem(title: "Quit dinky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "")
-        menu.addItem(quit)
+        let enabled = item("Enabled", "enable toggle")
+        enabled.state = state.enabled ? .on : .off
+        menu.addItem(enabled)
+        let recoverable = state.recovery.recoverable
+        if recoverable > 0 {
+            menu.addItem(item("Restore \(recoverable) windows from the previous session", "recover"))
+        }
+        menu.addItem(.separator())
+        menu.addItem(NSMenuItem(title: "Quit dinky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
     }
 
     private func item(_ title: String, _ command: String, enabled: Bool = true) -> NSMenuItem {
@@ -113,10 +124,15 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     @objc private func runCommand(_ sender: NSMenuItem) {
         guard let command = sender.representedObject as? String else { return }
-        let reply = Dispatcher.run(command)
+        let reply = handleCommand(command)
         if !reply.ok {
             fputs("\(command): \(reply.text)\n", stderr)
             NSSound.beep()
         }
     }
+}
+
+/// A command from the menu or the CLI. `recover` belongs to the app rather than the command vocabulary.
+private func handleCommand(_ line: String) -> Reply {
+    line == "recover" ? AppState.shared.recover() : Dispatcher.run(line)
 }

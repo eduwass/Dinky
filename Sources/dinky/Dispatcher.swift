@@ -24,7 +24,9 @@ enum Dispatcher {
         }
     }
 
-    static func run(_ command: Command) -> Reply {
+    /// Runs a command. `window` stands in for the focused window in commands that act on one, for
+    /// on-window-detected rules; bindings and the CLI leave it nil.
+    static func run(_ command: Command, window: WindowID? = nil) -> Reply {
         switch command {
         case .workspace(let target):
             return switchWorkspace(target)
@@ -35,21 +37,24 @@ enum Dispatcher {
             }
             return switchWorkspace(.number(previous + 1))
         case .moveWindowToWorkspace(let target, let follow):
-            return moveWindowToWorkspace(target, follow: follow)
+            return moveWindowToWorkspace(target, follow: follow, window: window ?? frontWindowID())
         case .moveWindowToDisplay(let target, let follow):
-            return moveWindowToDisplay(target, follow: follow)
+            return moveWindowToDisplay(target, follow: follow, window: window ?? frontWindowID())
         case .focus(let direction):
             return focus(direction)
-        case .layout([.tiles]):
-            return tree("layout tiles") { $0.setMode(.tiles); return true }
-        case .layout([.accordion]):
-            return tree("layout accordion") { $0.setMode(.accordion); return true }
+        case .layout(let names):
+            return layout(names, window: window)
         case .move(let direction):
             return tree("move \(direction)") { $0.move(direction) }
         case .joinWith(let direction):
             return tree("join-with \(direction)") { $0.join(direction) }
-        case .resize(.smart, let delta):
-            return tree("resize smart \(delta)") { $0.resize(by: CGFloat(delta)) }
+        case .resize(let dimension, let delta):
+            let axis: Orientation? = switch dimension {
+            case .smart: nil
+            case .width: .horizontal
+            case .height: .vertical
+            }
+            return tree("resize \(dimension.rawValue) \(delta)") { $0.resize(by: CGFloat(delta), along: axis) }
         case .fullscreen:
             return tree("fullscreen") { $0.toggleFullscreen(); return true }
         case .flattenWorkspaceTree:
@@ -58,8 +63,6 @@ enum Dispatcher {
             guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
             coordinator.reconcile()
             return .ok("retiled")
-        case .resize, .layout:
-            return .error("not yet")
         case .mode(let name):
             guard AppState.shared.config.modes[name] != nil else { return .error("no mode '\(name)' in the config") }
             AppState.shared.hotkeys.setMode(name)
@@ -110,11 +113,10 @@ enum Dispatcher {
         return .ok("workspace \(to + 1)")
     }
 
-    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool) -> Reply {
+    private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window wid: WindowID) -> Reply {
         guard let (display, current) = focusedWorkspace() else { return .error("not on a numbered workspace") }
         let to = index(target, current: current)
         guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
-        let wid = frontWindowID()
         guard wid != 0 else { return .error("no focused window") }
         guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         var ids = [wid]
@@ -124,6 +126,7 @@ enum Dispatcher {
         guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {
             return .error("window \(wid) did not arrive on workspace \(to + 1)")
         }
+        AppState.shared.coordinator?.windowMoved(wid)
         if follow { switchSpace(toSpaceID: space, on: display) }
         return .ok("moved window \(wid) to workspace \(to + 1)")
     }
@@ -133,33 +136,71 @@ enum Dispatcher {
     /// Runs a change on the focused window's tree; `change` returns false when there was nothing to do.
     private static func tree(_ name: String, _ change: (inout Workspace) -> Bool) -> Reply {
         guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
-        return coordinator.command(change) ? .ok(name) : .error("\(name): nothing to do, or the focused window is not tiled")
+        switch coordinator.command(change) {
+        case nil: return .error("\(name): the focused window is not tiled")
+        case false?: return .error("\(name): nothing to do")
+        case true?: return .ok(name)
+        }
+    }
+
+    /// Applies the first layout that does not describe the window now, or the first if all do:
+    /// floating or tiling for the window, tiles or accordion for its container (tiling it first if it floats).
+    private static func layout(_ names: [LayoutName], window: WindowID?) -> Reply {
+        guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
+        let id = window ?? coordinator.focusedWindow
+        guard let floating = coordinator.isFloating(id) else { return .error("layout: no window dinky manages is focused") }
+        let current: [LayoutName] = floating ? [.floating] : [.tiling, coordinator.mode(of: id) == .accordion ? .accordion : .tiles]
+        let name = names.first { !current.contains($0) } ?? names[0]
+        switch name {
+        case .floating, .tiling:
+            coordinator.setFloating(id, name == .floating)
+        case .tiles, .accordion:
+            if floating { coordinator.setFloating(id, false) }
+            coordinator.command(on: id) { $0.setMode(name == .accordion ? .accordion : .tiles) }
+        }
+        return .ok("layout \(name.rawValue)")
     }
 
     // MARK: Windows
 
-    /// Moves the focused window onto the next or previous display's current Space by placing it there with
-    /// AX, at the same offset from the display's corner. Untested with more than one display.
-    private static func moveWindowToDisplay(_ target: DisplayTarget, follow: Bool) -> Reply {
-        let displays = dinky_displays()
-        let wid = frontWindowID()
-        guard wid != 0, let window = windowList().first(where: { $0.id == wid }) else { return .error("no focused window") }
-        guard displays.count > 1 else { return .error("only one display") }
-        let from = displays.firstIndex { CGDisplayBounds($0.displayID).contains(window.frame.origin) } ?? 0
-        let to = (from + (target == .next ? 1 : -1) + displays.count) % displays.count
-        let fromBounds = CGDisplayBounds(displays[from].displayID)
-        let toBounds = CGDisplayBounds(displays[to].displayID)
-        let origin = CGPoint(x: toBounds.minX + max(0, window.frame.minX - fromBounds.minX),
-                             y: toBounds.minY + max(0, window.frame.minY - fromBounds.minY))
-        guard let element = axWindow(pid: window.pid, wid: wid), setPosition(element, origin) else {
-            return .error("could not move window \(wid)")
+    /// Moves a window to the current Space of the next or previous display (wrapping around), into that
+    /// Space's tree. A floating window keeps its offset from the display's corner. Untested with two displays.
+    private static func moveWindowToDisplay(_ target: DisplayTarget, follow: Bool, window wid: WindowID) -> Reply {
+        let model = AppState.shared.displays
+        model.reconcile()
+        guard wid != 0, let pid = windowPID(wid), let from = model.display(ofWindow: wid) else { return .error("no focused window") }
+        let displays = model.displays
+        guard displays.count > 1, let i = displays.firstIndex(of: from) else { return .error("no other display") }
+        let n = (i + (target == .next ? 1 : -1) + displays.count) % displays.count
+        let to = displays[n], space = to.currentSpaceID
+        var ids = [wid]
+        guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
+        guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else { return .error("window \(wid) did not arrive on display \(n + 1)") }
+        if AppState.shared.coordinator?.isFloating(wid) != false {
+            let frame = dinky_window_info(wid).frame
+            let origin = CGPoint(x: to.frame.minX + max(0, frame.minX - from.frame.minX),
+                                 y: to.frame.minY + max(0, frame.minY - from.frame.minY))
+            if let element = axWindow(pid: pid, wid: wid) { setPosition(element, origin) }
         }
-        if follow { focusWindow(window) }
-        return .ok("moved window \(wid) to display \(to + 1)")
+        AppState.shared.coordinator?.windowMoved(wid)
+        if follow { focusWindow(pid: pid, id: wid) }
+        return .ok("moved window \(wid) to display \(n + 1)")
+    }
+
+    /// Focuses the neighbour in the focused window's tree. A floating window, which has no tree, looks for
+    /// the nearest window on screen instead.
+    private static func focus(_ direction: Direction) -> Reply {
+        guard let coordinator = AppState.shared.coordinator,
+              let found = coordinator.command({ $0.focus(direction) ? $0.focused : nil }) else {
+            return focusOnScreen(direction)
+        }
+        guard let id = found, let window = coordinator.model.windows[id] else { return .error("no window \(direction)") }
+        coordinator.focus(id)
+        return .ok("focused window \(id) \(window.appName ?? "")")
     }
 
     /// The nearest window on the current Space whose centre lies in the direction, by distance between centres.
-    private static func focus(_ direction: Direction) -> Reply {
+    private static func focusOnScreen(_ direction: Direction) -> Reply {
         guard let main = mainDisplay() else { return .error("no display") }
         let onSpace = Set(dinky_space_window_ids(main.currentSpaceID, false).map(\.uint32Value))
         let windows = windowList().filter { onSpace.contains($0.id) }
@@ -178,17 +219,11 @@ enum Dispatcher {
                                               < hypot($1.frame.midX - from.x, $1.frame.midY - from.y) }) else {
             return .error("no window \(direction)")
         }
-        focusWindow(next)
+        focusWindow(pid: next.pid, id: next.id)
         return .ok("focused window \(next.id) \(next.app)")
     }
 
-    private static func focusWindow(_ window: WindowInfo) {
-        if let element = axWindow(pid: window.pid, wid: window.id) {
-            AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-        }
-        NSRunningApplication(processIdentifier: window.pid)?.activate()
-    }
-
+    @discardableResult
     private static func setPosition(_ element: AXUIElement, _ origin: CGPoint) -> Bool {
         var origin = origin
         return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!) == .success

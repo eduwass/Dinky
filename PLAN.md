@@ -47,6 +47,9 @@ width = 4
 active-color = '#e1e3e4'
 inactive-color = '#494d64'
 style = 'round'                # round | square
+order = 'below'                # below | above; above draws a click-through ring over the shadow
+exclude-apps = []              # bundle ids that never get a border
+only-apps = []                 # when set, only these bundle ids get borders
 
 [switching]
 follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch

@@ -5,13 +5,14 @@ import DinkyConfig
 // Window classification helpers for the coordinator: the AX window kind and the on-window-detected rules.
 
 extension Config {
-    /// Whether the `on-window-detected` rules that match, in order, run `layout floating`.
-    func floats(_ window: Window, kind: WindowKind, title: String) -> Bool {
+    /// The commands the matching `on-window-detected` rules run, in order. Commands that do not parse are skipped.
+    func commands(for window: Window, kind: WindowKind, title: String) -> [Command] {
+        var commands: [Command] = []
         for rule in onWindowDetected where rule.matcher.matches(window, kind: kind, title: title) {
-            if rule.run.contains(where: { (try? Command.parse($0)) == .layout([.floating]) }) { return true }
+            commands += rule.run.compactMap { try? Command.parse($0) }
             if !rule.checkFurtherCallbacks { break }
         }
-        return false
+        return commands
     }
 }
 

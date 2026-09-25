@@ -42,16 +42,20 @@ public struct Layout: Equatable, Sendable {
 extension Container {
     /// Lay out this container in `rect`: tiles split by ratios with `gap` between siblings,
     /// accordion children overlap with neighbours peeking out by `padding`. `virtual` lays accordions out as tiles.
-    func layout(in rect: CGRect, gap: CGFloat, padding: CGFloat, virtual: Bool = false, into result: inout Layout) {
+    /// `minimums` are sizes windows refused to go below; tiles grow to them when their siblings can give the space.
+    func layout(in rect: CGRect, gap: CGFloat, padding: CGFloat, minimums: [WindowID: CGSize] = [:],
+                virtual: Bool = false, into result: inout Layout) {
         let tiled = mode == .tiles || virtual
-        let rects = tiled ? tileRects(in: rect, gap: gap) : accordionRects(in: rect, padding: padding)
+        let rects = tiled
+            ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(orientation, gap: gap, padding: padding, minimums) })
+            : accordionRects(in: rect, padding: padding)
         for i in stackingOrder {
             switch children[i] {
             case .window(let id):
                 result.frames[id] = rects[i]
                 result.order.append(id)
             case .container(let c):
-                c.layout(in: rects[i], gap: gap, padding: padding, virtual: virtual, into: &result)
+                c.layout(in: rects[i], gap: gap, padding: padding, minimums: minimums, virtual: virtual, into: &result)
             }
         }
     }
@@ -62,14 +66,16 @@ extension Container {
     }
 
     /// Split `rect` along the orientation by ratios, `gap` between children, edges rounded to whole points.
-    func tileRects(in rect: CGRect, gap: CGFloat) -> [CGRect] {
+    /// Children below their `minimums` extent are grown to it, taken from the others, when everyone fits.
+    func tileRects(in rect: CGRect, gap: CGFloat, minimums: [CGFloat] = []) -> [CGRect] {
         let horizontal = orientation == .horizontal
         let origin = horizontal ? rect.minX : rect.minY
         let extent = horizontal ? rect.width : rect.height
         let available = extent - gap * CGFloat(max(children.count - 1, 0))
+        let sizes = fit(ratios.map { available * CGFloat($0) }, minimums: minimums, total: available)
         var start = origin
-        return ratios.map { ratio in
-            let end = start + available * CGFloat(ratio)
+        return sizes.map { size in
+            let end = start + size
             let (a, b) = (start.rounded(), end.rounded())
             start = end + gap
             return horizontal
@@ -103,5 +109,39 @@ extension Container {
         let childRect = mode == .tiles ? tileRects(in: rect, gap: 0)[first] : rect
         guard path.count > 1, case .container(let c) = children[first] else { return childRect }
         return c.rect(at: Array(path.dropFirst()), in: childRect)
+    }
+}
+
+/// `sizes` with every entry raised to its minimum, the difference taken from the others in proportion to
+/// their size. Unchanged when the minimums do not all fit in `total`.
+func fit(_ sizes: [CGFloat], minimums: [CGFloat], total: CGFloat) -> [CGFloat] {
+    guard minimums.count == sizes.count, minimums.reduce(0, +) <= total else { return sizes }
+    var pinned = Set<Int>()
+    var result = sizes
+    while let short = result.indices.first(where: { !pinned.contains($0) && result[$0] < minimums[$0] - 0.5 }) {
+        pinned.insert(short)
+        let free = sizes.indices.filter { !pinned.contains($0) }
+        let left = total - pinned.map { minimums[$0] }.reduce(0, +)
+        let weight = free.map { sizes[$0] }.reduce(0, +)
+        for i in pinned { result[i] = minimums[i] }
+        for i in free { result[i] = weight > 0 ? left * sizes[i] / weight : left / CGFloat(free.count) }
+    }
+    return result
+}
+
+extension Node {
+    /// The smallest extent along `axis` this subtree can take without a window going below its minimum.
+    func minimumExtent(_ axis: Orientation, gap: CGFloat, padding: CGFloat, _ minimums: [WindowID: CGSize]) -> CGFloat {
+        switch self {
+        case .window(let id):
+            guard let size = minimums[id] else { return 0 }
+            return axis == .horizontal ? size.width : size.height
+        case .container(let c):
+            let each = c.children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) }
+            guard c.orientation == axis, !each.isEmpty else { return each.max() ?? 0 }
+            return c.mode == .tiles
+                ? each.reduce(0, +) + gap * CGFloat(each.count - 1)
+                : each.max()! + padding * CGFloat(min(each.count - 1, 2))
+        }
     }
 }

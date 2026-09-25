@@ -23,6 +23,7 @@ case "app": exit(runApp(rest))
 case "spaces": exit(runSpaces(rest))
 case "events": exit(runEvents(rest))
 case "borders": exit(runBorders(rest))
+case "recover": exit(runRecover())
 case "help", "--help", "-h": exit(runHelp())
 default: exit(runCli(args))
 }

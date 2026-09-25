@@ -30,11 +30,13 @@ final class Coordinator {
     private var config: Config
     private let applier = FrameApplier()
     private var borders: BorderManager?
-    private var workspaces: [SpaceKey: Workspace] = [:]
-    private var placements: [WindowID: Placement] = [:]
+    private(set) var workspaces: [SpaceKey: Workspace] = [:]
+    var placements: [WindowID: Placement] = [:]
     private var dirty: Set<SpaceKey> = []
     /// Classification attempts for windows whose AX element has not appeared yet.
     private var attempts: [WindowID: Int] = [:]
+    /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
+    private var focusing: (id: WindowID, until: Date)?
 
     init(displays: DisplayModel, config: Config) {
         self.displays = displays
@@ -95,7 +97,7 @@ final class Coordinator {
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
     /// while it is not minimized.
-    private func track(_ window: Window) {
+    func track(_ window: Window) {
         if placements[window.id] == nil {
             // AX only lists windows on a Space that is on screen; the rest are classified when theirs is.
             guard window.isNormal, isVisible(window.spaceID), let floating = classify(window) else { return }
@@ -116,9 +118,22 @@ final class Coordinator {
         edit(space) { $0.remove(id) }
     }
 
+    /// The front app's frontmost document window on a current Space.
+    var focusedWindow: WindowID { dinky_border_focused_window() }
+
+    /// Focuses a window, raising it and activating its app. For a moment after, focus events that still
+    /// report the previous window are ignored, so they do not pull the trees back to it.
+    func focus(_ id: WindowID) {
+        guard let window = model.windows[id] else { return }
+        focusing = (id, Date() + 0.5)
+        focusWindow(pid: window.pid, id: id)
+    }
+
     /// Follows focus into the trees, so new windows land beside the focused one and accordions show it.
     private func syncFocus() {
-        let id = dinky_border_focused_window()
+        let id = focusedWindow
+        if let focusing, focusing.id != id, Date() < focusing.until { return }
+        focusing = nil
         guard let key = placements[id]?.space, workspaces[key]?.focused != id else { return }
         edit(key) { $0.focus(id) }
     }
@@ -138,7 +153,7 @@ final class Coordinator {
 
     /// Runs `change` on a tree and marks it dirty if its layout changed. Returns what `change` returned.
     @discardableResult
-    private func edit<T>(_ key: SpaceKey, _ change: (inout Workspace) -> T) -> T? {
+    func edit<T>(_ key: SpaceKey, _ change: (inout Workspace) -> T) -> T? {
         guard var workspace = workspaces[key] else { return nil }
         let before = workspace.layout()
         let result = change(&workspace)
@@ -147,23 +162,9 @@ final class Coordinator {
         return result
     }
 
-    // MARK: Commands
-
-    /// Runs a tree command on the focused window's tree and applies it. False if the focused window is
-    /// not tiled or the command did nothing.
-    func command(_ change: (inout Workspace) -> Bool) -> Bool {
-        let id = dinky_border_focused_window()
-        guard let key = placements[id]?.space else { return false }
-        edit(key) { $0.focus(id) }
-        guard edit(key, change) == true else { return false }
-        dirty.insert(key)
-        flush()
-        return true
-    }
-
     // MARK: Applying
 
-    private func flush() {
+    func flush() {
         let keys = dirty
         dirty = []
         guard enabled else { return }
@@ -174,19 +175,32 @@ final class Coordinator {
         displays.displays.contains { $0.currentSpaceID == space }
     }
 
-    /// Writes the tree's frames. Overlapping layouts (accordion, fullscreen) also bring the focused window
-    /// to the front when it is on the focused Space: AX raise alone does not lift it above another app.
+    /// Writes the tree's frames around the minimum sizes windows have shown. Overlapping layouts (accordion,
+    /// fullscreen) also bring the focused window to the front when it is on the focused Space: AX raise alone
+    /// does not lift it above another app. A window that refuses its frame gets the tree laid out again around it.
     private func apply(_ key: SpaceKey) {
-        guard let workspace = workspaces[key] else { return }
+        guard var workspace = workspaces[key] else { return }
+        workspace.minimumSizes = minimumSizes(in: workspace)
+        workspaces[key] = workspace
         let layout = workspace.layout()
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
         let overlaps = !layout.raises(current: []).isEmpty
         let front = overlaps ? workspace.focused.flatMap { model.windows[$0] } : nil
-        let focusedHere = placements[dinky_border_focused_window()]?.space == key
+        let focusedHere = placements[focusedWindow]?.space == key
         applier.apply(layout, pids: pids) { _ in
-            guard let front, focusedHere else { return }
-            DispatchQueue.main.async { bringToFront(front) }
+            DispatchQueue.main.async { [weak self] in
+                guard let self else { return }
+                if let front, focusedHere { focus(front.id) }
+                if minimumSizes(in: workspace) != workspace.minimumSizes {
+                    dirty.insert(key)
+                    flush()
+                }
+            }
         }
+    }
+
+    private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
+        applier.minimumSizes.filter { workspace.contains($0.key) }
     }
 
     // MARK: Classification
@@ -210,15 +224,16 @@ final class Coordinator {
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
-        return kind != .normal || !resizable.boolValue || config.floats(window, kind: kind, title: title)
+        let rules = config.commands(for: window, kind: kind, title: title)
+        // Other rule commands, such as move-window-to-workspace, run for this window once it is placed.
+        for command in rules where command != .layout([.floating]) {
+            DispatchQueue.main.async {
+                let reply = Dispatcher.run(command, window: window.id)
+                if !reply.ok { fputs("on-window-detected: \(reply.text)\n", stderr) }
+            }
+        }
+        return kind != .normal || !resizable.boolValue || rules.contains(.layout([.floating]))
     }
-}
-
-private func bringToFront(_ window: Window) {
-    if let element = axWindow(pid: window.pid, wid: window.id, timeout: FrameApplier.timeout) {
-        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
-    }
-    NSRunningApplication(processIdentifier: window.pid)?.activate()
 }
 
 /// The display's frame minus menu bar and Dock, in CG coordinates (top-left origin at the primary display).

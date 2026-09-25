@@ -10,8 +10,10 @@ public struct Workspace: Equatable, Sendable {
     public internal(set) var root: Container
     /// The focused window, if any.
     public internal(set) var focused: WindowID?
-    /// The window shown fullscreen over the tree, if any.
+    /// The window shown fullscreen over the tree, if any. Focusing another window or any layout command ends it.
     public internal(set) var fullscreen: WindowID?
+    /// Sizes windows refused to go below. Tiles grow to them when their siblings can give the space.
+    public var minimumSizes: [WindowID: CGSize] = [:]
 
     /// An empty workspace whose root uses `mode`.
     public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, mode: LayoutMode = .tiles) {
@@ -64,15 +66,18 @@ public struct Workspace: Equatable, Sendable {
 
     /// Collapse all nesting into the root, keeping window order, with equal ratios.
     public mutating func flatten() {
+        fullscreen = nil
         let windows = windows
         root = Container(root.orientation, root.mode, windows.map(Node.window))
         if let focused { focus(focused) }
     }
 
     /// Focus a window and mark it most recent along its path, so accordions show it on top.
+    /// Ends fullscreen unless it is the fullscreen window.
     public mutating func focus(_ id: WindowID) {
         guard let path = root.path(of: id) else { return }
         focused = id
+        if fullscreen != id { fullscreen = nil }
         for depth in path.indices {
             root.modify(at: Array(path.prefix(depth))) { $0.active = path[depth] }
         }
@@ -86,8 +91,14 @@ public struct Workspace: Equatable, Sendable {
         return true
     }
 
-    /// Set the layout mode of the focused window's parent container.
+    /// The layout mode of the window's parent container, nil if the window is not here.
+    public func mode(of id: WindowID) -> LayoutMode? {
+        root.path(of: id).map { root.container(at: Array($0.dropLast())).mode }
+    }
+
+    /// Set the layout mode of the focused window's parent container. Ratios are kept, so tiles come back as they were.
     public mutating func setMode(_ mode: LayoutMode) {
+        fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return }
         root.modify(at: Array(path.dropLast())) { $0.mode = mode }
         normalize()
@@ -111,7 +122,7 @@ public struct Workspace: Equatable, Sendable {
     /// The layout ignoring fullscreen, used for geometry questions.
     func tiledLayout() -> Layout {
         var result = Layout()
-        root.layout(in: gaps.inset(bounds), gap: gaps.inner, padding: accordionPadding, into: &result)
+        root.layout(in: gaps.inset(bounds), gap: gaps.inner, padding: accordionPadding, minimums: minimumSizes, into: &result)
         return result
     }
 

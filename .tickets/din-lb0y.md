@@ -1,6 +1,6 @@
 ---
 id: din-lb0y
-status: open
+status: closed
 deps: [din-mlu6, din-g6bk]
 links: []
 created: 2026-09-25T09:32:54Z
@@ -18,3 +18,9 @@ Keep the status item with the current Space number of the focused display and th
 
 Every menu action equals its CLI command. A config error is visible without opening a log.
 
+
+## Notes
+
+**2026-09-25T11:12:14Z**
+
+Status item shows the focused display's workspace (DisplayModel.focusedDisplay().currentWorkspace), '!' appended on a config error, greyed when disabled; refreshed on EventHub spaceChange and the 0.5 s timer. Menu: 'Space N of M', config error item, Go to / Move Window to / Move Window and Follow submenus, Re-tile, Reload Config, Enabled checkbox (enable toggle), restore item when a crashed session left windows, Quit. Every item runs a command string (tooltip 'dinky <command>'); 'recover' is the one app-level command, handled next to the Dispatcher for both socket and menu. Verified by screenshot in the VM.

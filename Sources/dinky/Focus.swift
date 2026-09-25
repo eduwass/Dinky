@@ -48,6 +48,19 @@ func frontWindowID() -> UInt32 {
     return axWindowID(window as! AXUIElement)
 }
 
+/// Focuses a window on a Space that is on screen: AX raise, then activate its app. Never switches Spaces:
+/// the activation is dinky's own, so the activation follower is told not to chase the app's frontmost
+/// window, which can still be one on another Space when the activation lands.
+func focusWindow(pid: pid_t, id: UInt32) {
+    if let display = AppState.shared.displays.display(ofWindow: id) {
+        noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
+    }
+    if let element = axWindow(pid: pid, wid: id, timeout: 1) {
+        AXUIElementPerformAction(element, kAXRaiseAction as CFString)
+    }
+    NSRunningApplication(processIdentifier: pid)?.activate()
+}
+
 func runFocus(_ args: [String]) -> Int32 {
     guard let first = args.first, let wid = UInt32(first) else {
         fputs("usage: dinky focus <window-id> [--path ax|private]\n", stderr)

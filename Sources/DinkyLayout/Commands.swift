@@ -43,6 +43,7 @@ extension Workspace {
     /// container along that axis; if the root already runs that way, does nothing.
     @discardableResult
     public mutating func move(_ direction: Direction) -> Bool {
+        fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return false }
         let axis = direction.orientation, step = direction.isForward ? 1 : 0
         let parentPath = Array(path.dropLast()), index = path.last!
@@ -80,6 +81,7 @@ extension Workspace {
     /// across the axis, else into a new container wrapping the neighbour. Adapted from AeroSpace's join-with.
     @discardableResult
     public mutating func join(_ direction: Direction) -> Bool {
+        fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return false }
         let offset = direction.isForward ? 1 : -1
         guard let depth = path.indices.last(where: { depth in
@@ -101,23 +103,31 @@ extension Workspace {
         return true
     }
 
-    /// Grow (positive) or shrink the focused window by `delta` points along its nearest tiles container's axis.
-    /// Siblings give or take space proportionally; no share drops below `minimumRatio`.
+    /// Grow (positive) or shrink the focused window by `delta` points along its nearest tiles container's axis,
+    /// or the nearest one running along `axis` if given. Siblings give or take space proportionally; no share
+    /// drops below `minimumRatio` and the window does not shrink below its minimum size. False when nothing
+    /// visibly changed.
     @discardableResult
-    public mutating func resize(by delta: CGFloat) -> Bool {
+    public mutating func resize(by delta: CGFloat, along axis: Orientation? = nil) -> Bool {
+        fullscreen = nil
         guard let focused, var path = root.path(of: focused) else { return false }
         while let index = path.popLast() {
             let parent = root.container(at: path)
-            guard parent.mode == .tiles, parent.children.count > 1 else { continue }
+            guard parent.mode == .tiles, parent.children.count > 1, axis ?? parent.orientation == parent.orientation else { continue }
             let rect = root.rect(at: path, in: gaps.inset(bounds))
             let extent = parent.orientation == .horizontal ? rect.width : rect.height
+            let smallest = parent.children[index].minimumExtent(parent.orientation, gap: gaps.inner, padding: accordionPadding, minimumSizes)
             let old = parent.ratios[index]
             let smallestOther = parent.ratios.enumerated().filter { $0.offset != index }.map(\.element).min()!
+            let lower = max(Self.minimumRatio, min(Double(smallest / extent), old))
             let upper = 1 - Self.minimumRatio * (1 - old) / smallestOther
-            let new = min(max(old + Double(delta / extent), Self.minimumRatio), upper)
+            let new = min(max(old + Double(delta / extent), lower), upper)
             guard abs(new - old) > 1e-9 else { return false }
+            let before = (root, tiledLayout().frames[focused])
             let scale = (1 - new) / (1 - old)
             root.modify(at: path) { c in c.setRatios(c.ratios.enumerated().map { $0.offset == index ? new : $0.element * scale }) }
+            // A step the minimum sizes swallow whole is undone, so the ratios do not drift out of sight.
+            if tiledLayout().frames[focused] == before.1 { root = before.0; return false }
             return true
         }
         return false
