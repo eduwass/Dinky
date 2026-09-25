@@ -44,17 +44,6 @@ func installActivationFollower() {
     }
 }
 
-// App.swift's status item and the dispatcher's `focus` still read the main display through these two.
-// Remove them once those callers use DisplayModel.
-func mainDisplay() -> DinkyDisplay? {
-    let displays = dinky_displays()
-    return displays.first { $0.displayID == CGMainDisplayID() } ?? displays.first
-}
-
-func currentSpaceIndex(_ main: DinkyDisplay) -> Int? {
-    main.spaces.firstIndex { $0.spaceID == main.currentSpaceID }
-}
-
 /// Swipes the display to one of its Spaces, full-screen ones included. False if it is already there.
 /// Returns once the swipe is posted; `SpaceSwitcher` confirms it and coalesces rapid requests.
 @discardableResult

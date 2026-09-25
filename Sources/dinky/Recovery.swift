@@ -167,7 +167,7 @@ final class Recovery {
     /// Writes the entries' frames, in the current stacking order so nothing is raised. Waits for the results.
     private func writeFrames(_ entries: [Entry]) -> [UInt32: FrameResult] {
         guard !entries.isEmpty else { return [:] }
-        let stacking = onScreenOrder()
+        let stacking = Dictionary(onScreenOrder().enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
         let layout = Layout(frames: Dictionary(uniqueKeysWithValues: entries.map { ($0.id, $0.frame) }),
                             order: entries.map(\.id).sorted { (stacking[$0] ?? .max) < (stacking[$1] ?? .max) })
         let done = DispatchSemaphore(value: 0)
@@ -201,13 +201,6 @@ final class Recovery {
         for id in targets.keys where !done.contains(id) { problems[id] = "did not arrive on its Space" }
         return done
     }
-}
-
-/// On-screen windows, front to back, as positions by window id.
-private func onScreenOrder() -> [UInt32: Int] {
-    let info = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
-    let ids = info.compactMap { $0[kCGWindowNumber as String] as? UInt32 }
-    return Dictionary(ids.enumerated().map { ($1, $0) }, uniquingKeysWith: { first, _ in first })
 }
 
 /// `dinky recover`: asks the running app to restore the windows a crashed session left tiled.

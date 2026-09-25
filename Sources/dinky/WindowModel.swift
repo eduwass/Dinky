@@ -46,13 +46,11 @@ final class WindowModel {
     var onChange: ((WindowEvent) -> Void)?
 
     private let ownPID = getpid()
-    private var started = false
 
     /// Subscribes to the shared WindowServer stream and seeds the table. False if WindowServer refused.
+    /// Call once.
     func start() -> Bool {
-        guard !started else { return true }
-        started = EventHub.shared.subscribe { [weak self] event in self?.handle(event) }
-        guard started else { return false }
+        guard EventHub.shared.subscribe({ [weak self] event in self?.handle(event) }) else { return false }
         seed()
         return true
     }

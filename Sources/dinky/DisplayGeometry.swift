@@ -5,7 +5,7 @@ import DinkyLayout
 // What the layout needs from a display: its NSScreen, name and visible area, and the config's gaps
 // resolved for it.
 extension Display {
-    var screen: NSScreen? {
+    private var screen: NSScreen? {
         let number = NSDeviceDescriptionKey("NSScreenNumber")
         return NSScreen.screens.first { ($0.deviceDescription[number] as? NSNumber)?.uint32Value == id }
     }

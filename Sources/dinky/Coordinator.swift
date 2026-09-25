@@ -87,18 +87,17 @@ final class Coordinator {
         borders?.handle(event)
         if let window = event.window {
             event.change == .removed ? forget(window.id) : track(window)
+            if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
         if [.frontApp, .windowReorder, .windowCreate].contains(event.kind) { syncFocus() }
-        if let window = event.window, [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         flush()
     }
 
     /// Re-reads every window and display, moves windows to the trees of the Spaces they are on now
-    /// (so a window dragged to another Space stays there), and re-applies every tree on screen.
+    /// (so a window dragged to another Space stays there), and re-applies every tree on screen. The model
+    /// publishes every window it re-reads, so `handle` tracks and forgets them.
     func reconcile() {
         model.reconcile()
-        for window in model.windows.values.sorted(by: { $0.id < $1.id }) { track(window) }
-        for id in placements.keys where model.windows[id] == nil { forget(id) }
         fitToDisplays()
         syncFocus()
         dirty.formUnion(workspaces.keys)
@@ -108,12 +107,16 @@ final class Coordinator {
     /// Bounds and gaps of every tree from its display, which can have moved, resized or become main.
     private func fitToDisplays() {
         for display in displays.displays {
-            let gaps = DinkyLayout.Gaps(config.gaps, on: displays.monitor(display))
+            let gaps = gaps(on: display)
             for key in workspaces.keys where key.display == display.uuid {
                 workspaces[key]!.bounds = display.visibleArea
                 workspaces[key]!.gaps = gaps
             }
         }
+    }
+
+    private func gaps(on display: Display) -> DinkyLayout.Gaps {
+        DinkyLayout.Gaps(config.gaps, on: displays.monitor(display))
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
@@ -129,11 +132,13 @@ final class Coordinator {
         let new = window.isMinimized ? nil : key(of: window)
         guard old != new else { return }
         if let old { edit(old) { $0.remove(window.id) } }
-        if let new, let tab = tab(replacedBy: window, in: new) {
-            edit(new) { $0.replace(tab, with: window.id) }
-            placements[tab]!.space = nil
-        } else if let new {
-            edit(new) { $0.insert(window.id) }
+        if let new {
+            if let tab = tab(replacedBy: window, in: new) {
+                edit(new) { $0.replace(tab, with: window.id) }
+                placements[tab]!.space = nil
+            } else {
+                edit(new) { $0.insert(window.id) }
+            }
         }
         placements[window.id]!.space = new
     }
@@ -184,7 +189,7 @@ final class Coordinator {
               display.workspaces.contains(window.spaceID) else { return nil }
         let key = SpaceKey(display: display.uuid, space: window.spaceID)
         if workspaces[key] == nil {
-            workspaces[key] = Workspace(bounds: display.visibleArea, gaps: DinkyLayout.Gaps(config.gaps, on: displays.monitor(display)),
+            workspaces[key] = Workspace(bounds: display.visibleArea, gaps: gaps(on: display),
                                         accordionPadding: CGFloat(config.layout.accordionPadding),
                                         mode: config.layout.default == .accordion ? .accordion : .tiles)
         }

@@ -2,7 +2,7 @@ import AppKit
 import DinkyPrivate
 
 @_silgen_name("_AXUIElementGetWindow")
-func _AXUIElementGetWindow(_ element: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError
+private func _AXUIElementGetWindow(_ element: AXUIElement, _ wid: UnsafeMutablePointer<CGWindowID>) -> AXError
 
 func windowPID(_ wid: UInt32) -> pid_t? {
     let info = CGWindowListCopyWindowInfo(.optionIncludingWindow, wid) as? [[String: Any]] ?? []
@@ -21,7 +21,7 @@ func axWindow(pid: pid_t, wid: UInt32, timeout: Float = 0) -> AXUIElement? {
     return window
 }
 
-func axWindowID(_ element: AXUIElement) -> UInt32 {
+private func axWindowID(_ element: AXUIElement) -> UInt32 {
     var wid: CGWindowID = 0
     return _AXUIElementGetWindow(element, &wid) == .success ? wid : 0
 }
@@ -42,7 +42,7 @@ func focusWindow(pid: pid_t, id: UInt32) {
     if let display = AppState.shared.displays.display(ofWindow: id) {
         noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
     }
-    if let element = axWindow(pid: pid, wid: id, timeout: 1) {
+    if let element = axWindow(pid: pid, wid: id, timeout: FrameApplier.timeout) {
         // Raise alone makes the window main; the app's key window can stay one on another Space, and the
         // next command would then act on that one. Make this window main and key explicitly.
         AXUIElementSetAttributeValue(element, kAXMainAttribute as CFString, kCFBooleanTrue)

@@ -43,16 +43,14 @@ struct Display: Equatable {
 final class DisplayModel {
     private(set) var displays: [Display] = []
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
-    private(set) var previousSpaceIDs: [String: UInt64] = [:]
+    private var previousSpaceIDs: [String: UInt64] = [:]
     private var observers: [(DisplayModel) -> Void] = []
     /// The UUID of a display `focus-monitor` focused without a window to focus there. It stands in for the
     /// focused window's display until focus next changes.
     var focusOverride: String?
-    private var started = false
 
+    /// Reads the displays and follows their changes from then on. Call once.
     func start() {
-        guard !started else { return }
-        started = true
         reconcile()
         EventHub.shared.subscribe { [weak self] event in
             switch event.kind {

@@ -82,7 +82,9 @@ extension Dispatcher {
 
     /// The nearest window on the current Space whose centre lies in the direction, by distance between centres.
     private static func focusOnScreen(_ direction: Direction) -> Reply {
-        guard let main = mainDisplay() else { return .error("no display") }
+        let model = AppState.shared.displays
+        model.reconcile()
+        guard let main = model.displays.first(where: \.isMain) ?? model.displays.first else { return .error("no display") }
         let onSpace = Set(dinky_space_window_ids(main.currentSpaceID, false).map(\.uint32Value))
         let windows = windowList().filter { onSpace.contains($0.id) }
         guard let front = windows.first(where: { $0.id == frontWindowID() }) else { return .error("no focused window") }
@@ -103,5 +105,4 @@ extension Dispatcher {
         focusWindow(pid: next.pid, id: next.id)
         return .ok("focused window \(next.id) \(next.app)")
     }
-
 }

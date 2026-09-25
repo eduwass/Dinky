@@ -12,17 +12,16 @@ final class FrameApplier {
     private var elements: [WindowID: AXUIElement] = [:]
     private let raiseQueue = DispatchQueue(label: "dinky.frames.raise")
 
-    init(settle: TimeInterval = 0.1) {
+    init() {
         scheduler = FrameScheduler(
-            settle: settle,
             prepare: { pid in
                 // Enhanced UI (set by VoiceOver and some utilities) makes apps animate and fight frame writes.
                 let app = AXUIElementCreateApplication(pid)
                 AXUIElementSetMessagingTimeout(app, Self.timeout)
                 AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
             },
-            read: { [unowned self] job in element(job).flatMap(frame) },
-            write: { [unowned self] job in element(job).map { write(job.frame, to: $0) } }
+            read: { [unowned self] job in element(pid: job.pid, id: job.id).flatMap(frame) },
+            write: { [unowned self] job in element(pid: job.pid, id: job.id).map { write(job.frame, to: $0) } }
         )
     }
 
@@ -49,15 +48,15 @@ final class FrameApplier {
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.
     private func raise(_ ids: [WindowID], pids: [WindowID: pid_t]) {
         for id in ids {
-            guard let pid = pids[id], let element = element(FrameJob(pid: pid, id: id, frame: .zero)) else { continue }
+            guard let pid = pids[id], let element = element(pid: pid, id: id) else { continue }
             AXUIElementPerformAction(element, kAXRaiseAction as CFString)
         }
     }
 
-    private func element(_ job: FrameJob) -> AXUIElement? {
-        if let cached = lock.withLock({ elements[job.id] }) { return cached }
-        guard let element = axWindow(pid: job.pid, wid: job.id, timeout: Self.timeout) else { return nil }
-        lock.withLock { elements[job.id] = element }
+    private func element(pid: pid_t, id: WindowID) -> AXUIElement? {
+        if let cached = lock.withLock({ elements[id] }) { return cached }
+        guard let element = axWindow(pid: pid, wid: id, timeout: Self.timeout) else { return nil }
+        lock.withLock { elements[id] = element }
         return element
     }
 
@@ -83,7 +82,7 @@ final class FrameApplier {
 }
 
 /// On-screen windows, front to back.
-private func onScreenOrder() -> [WindowID] {
+func onScreenOrder() -> [WindowID] {
     let info = CGWindowListCopyWindowInfo(.optionOnScreenOnly, kCGNullWindowID) as? [[String: Any]] ?? []
     return info.compactMap { $0[kCGWindowNumber as String] as? WindowID }
 }

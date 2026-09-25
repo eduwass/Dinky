@@ -49,7 +49,7 @@ extension Config {
 }
 
 /// The on-window-detected kind for an AX subrole. Anything that is not a standard window, dialog or sheet is a panel.
-func windowKind(subrole: String?) -> WindowKind {
+private func windowKind(subrole: String?) -> WindowKind {
     switch subrole {
     case kAXStandardWindowSubrole: .normal
     case kAXDialogSubrole, kAXSystemDialogSubrole: .dialog
@@ -69,7 +69,7 @@ private extension WindowMatcher {
     }
 }
 
-func axString(_ element: AXUIElement, _ attribute: String) -> String? {
+private func axString(_ element: AXUIElement, _ attribute: String) -> String? {
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success else { return nil }
     return value as? String
