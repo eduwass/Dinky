@@ -15,6 +15,7 @@ switch command {
 case "app": exit(runApp(rest))
 case "recover": exit(runRecover())
 case "debug": exit(runDebug(rest))
+case "doctor": exit(runDoctor(rest))
 case "help", "--help", "-h": exit(runHelp())
 default: exit(runCli(args))
 }

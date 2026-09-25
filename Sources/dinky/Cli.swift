@@ -28,5 +28,6 @@ func runHelp() -> Int32 {
     print("  app\n      Run the app in the foreground, logging to the terminal.")
     print("  recover\n      Ask the running app to restore windows a crashed session left tiled.")
     print("  debug events|windows\n      Print the live window event stream, or the current windows, for bug reports.")
+    print("  doctor [--config <path>]\n      Check the config and the macOS settings dinky depends on. Exit 1 on errors.")
     return 0
 }

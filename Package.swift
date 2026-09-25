@@ -30,7 +30,7 @@ let package = Package(
         // The command vocabulary shared by bindings, CLI and menu: parsing and reference. Unit tested.
         .target(
             name: "DinkyCommands",
-            dependencies: ["DinkyLayout"],
+            dependencies: ["DinkyLayout", "DinkyConfig"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
