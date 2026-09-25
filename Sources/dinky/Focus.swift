@@ -9,12 +9,16 @@ func windowPID(_ wid: UInt32) -> pid_t? {
     return info.first?[kCGWindowOwnerPID as String] as? pid_t
 }
 
-func axWindow(pid: pid_t, wid: UInt32) -> AXUIElement? {
+// A non-zero `timeout` (seconds) bounds how long AX calls on the app and the window may block.
+func axWindow(pid: pid_t, wid: UInt32, timeout: Float = 0) -> AXUIElement? {
     let app = AXUIElementCreateApplication(pid)
+    if timeout > 0 { AXUIElementSetMessagingTimeout(app, timeout) }
     var value: CFTypeRef?
     guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-          let windows = value as? [AXUIElement] else { return nil }
-    return windows.first { axWindowID($0) == wid }
+          let windows = value as? [AXUIElement],
+          let window = windows.first(where: { axWindowID($0) == wid }) else { return nil }
+    if timeout > 0 { AXUIElementSetMessagingTimeout(window, timeout) }
+    return window
 }
 
 func axWindowID(_ element: AXUIElement) -> UInt32 {

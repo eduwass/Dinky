@@ -1,6 +1,10 @@
 import AppKit
+import DinkyConfig
+import DinkyLayout
 import DinkyPrivate
 
+// `dinky tile [--gap N] [--accordion]`: tile the normal windows on the main display's current Space
+// through the layout engine and the frame applier, then print the readback.
 func runTile(_ args: [String]) -> Int32 {
     let displays = dinky_displays()
     guard let main = displays.first(where: { $0.displayID == CGMainDisplayID() }) ?? displays.first,
@@ -8,77 +12,60 @@ func runTile(_ args: [String]) -> Int32 {
         fputs("tile: no main display\n", stderr)
         return 1
     }
-
-    let candidates = Set(dinky_space_window_ids(main.currentSpaceID, false).map { $0.uint32Value })
-    let info = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
-    var windows: [(wid: UInt32, pid: pid_t, owner: String)] = []
-    for w in info {
-        let wid = w[kCGWindowNumber as String] as? UInt32 ?? 0
-        let layer = w[kCGWindowLayer as String] as? Int ?? -1
-        let alpha = w[kCGWindowAlpha as String] as? Double ?? 0
-        let owner = w[kCGWindowOwnerName as String] as? String ?? ""
-        let pid = w[kCGWindowOwnerPID as String] as? pid_t ?? 0
-        guard candidates.contains(wid), layer == 0, alpha > 0, owner != "Dock", owner != "WindowServer" else { continue }
-        windows.append((wid, pid, owner))
-    }
-    windows.sort { $0.wid < $1.wid }
+    let windows = tileableWindows(onSpace: main.currentSpaceID)
     guard !windows.isEmpty else {
         fputs("tile: no windows on current space\n", stderr)
         return 1
     }
 
-    let visible = screen.visibleFrame
-    let area = CGRect(x: visible.minX, y: screen.frame.height - (visible.minY + visible.height),
-                      width: visible.width, height: visible.height)
-    let frames = split(area, windows.count)
-
-    var elements: [AXUIElement?] = []
-    for (w, frame) in zip(windows, frames) {
-        guard let element = axWindow(pid: w.pid, wid: w.wid) else {
-            fputs("tile: \(w.wid) \(w.owner) no AX window\n", stderr)
-            elements.append(nil)
-            continue
-        }
-        elements.append(element)
-        AXUIElementSetAttributeValue(AXUIElementCreateApplication(w.pid), "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
-        var size = frame.size
-        var origin = frame.origin
-        let sizeValue = AXValueCreate(.cgSize, &size)!
-        let originValue = AXValueCreate(.cgPoint, &origin)!
-        for (attr, value) in [(kAXSizeAttribute, sizeValue), (kAXPositionAttribute, originValue), (kAXSizeAttribute, sizeValue)] {
-            let err = AXUIElementSetAttributeValue(element, attr as CFString, value)
-            if err != .success { fputs("tile: \(w.wid) \(w.owner) set \(attr) error \(err.rawValue)\n", stderr) }
-        }
+    let config = Config.default
+    var gaps = DinkyLayout.Gaps(inner: CGFloat(config.gaps.inner),
+                                top: CGFloat(config.gaps.outer.top), bottom: CGFloat(config.gaps.outer.bottom),
+                                left: CGFloat(config.gaps.outer.left), right: CGFloat(config.gaps.outer.right))
+    if let i = args.firstIndex(of: "--gap"), i + 1 < args.count, let gap = Double(args[i + 1]) {
+        gaps = DinkyLayout.Gaps(all: CGFloat(gap))
     }
+    let visible = screen.visibleFrame
+    let area = CGRect(x: visible.minX, y: screen.frame.height - visible.maxY, width: visible.width, height: visible.height)
+    var workspace = Workspace(bounds: area, gaps: gaps, accordionPadding: CGFloat(config.layout.accordionPadding),
+                              mode: args.contains("--accordion") ? .accordion : .tiles)
+    for window in windows { workspace.insert(window.id) }
 
-    usleep(200_000)
-    for ((w, wanted), element) in zip(zip(windows, frames), elements) {
-        guard let element else { continue }
-        var origin = CGPoint.zero
-        var size = CGSize.zero
-        var value: CFTypeRef?
-        if AXUIElementCopyAttributeValue(element, kAXPositionAttribute as CFString, &value) == .success {
-            AXValueGetValue(value as! AXValue, .cgPoint, &origin)
-        }
-        if AXUIElementCopyAttributeValue(element, kAXSizeAttribute as CFString, &value) == .success {
-            AXValueGetValue(value as! AXValue, .cgSize, &size)
-        }
-        let got = CGRect(origin: origin, size: size)
-        let ok = abs(got.minX - wanted.minX) <= 2 && abs(got.minY - wanted.minY) <= 2 &&
-                 abs(got.maxX - wanted.maxX) <= 2 && abs(got.maxY - wanted.maxY) <= 2
-        print("\(w.wid) \(w.owner) want=\(fmt(wanted)) got=\(fmt(got)) \(ok ? "OK" : "DIFF")")
+    let applier = FrameApplier()
+    let done = DispatchSemaphore(value: 0)
+    var results: [FrameResult] = []
+    applier.apply(workspace.layout(), pids: Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0.pid) })) {
+        results = $0
+        done.signal()
+    }
+    done.wait()
+
+    let owners = Dictionary(uniqueKeysWithValues: windows.map { ($0.id, $0.owner) })
+    for result in results.sorted(by: { $0.job.id < $1.job.id }) {
+        let id = result.job.id
+        let got = result.got.map(fmt) ?? "unreadable"
+        let notes = (result.written ? "" : " in-place") + (result.retried ? " retried" : "")
+        print("\(id) \(owners[id]!) want=\(fmt(result.job.frame)) got=\(got) \(result.matched ? "OK" : "DIFF")\(notes)")
+    }
+    for (id, size) in applier.minimumSizes.sorted(by: { $0.key < $1.key }) {
+        print("\(id) \(owners[id]!) minimum=\(Int(size.width))x\(Int(size.height))")
     }
     return 0
 }
 
-// Split along the longer side; first count/2 (at least one) windows go to the first half.
-private func split(_ rect: CGRect, _ count: Int) -> [CGRect] {
-    if count <= 1 { return [rect] }
-    let first = max(count / 2, 1)
-    let (a, b) = rect.width >= rect.height
-        ? rect.divided(atDistance: rect.width / 2, from: .minXEdge)
-        : rect.divided(atDistance: rect.height / 2, from: .minYEdge)
-    return split(a, first) + split(b, count - first)
+// Normal windows on the Space, by window id so insertion order is stable.
+private func tileableWindows(onSpace spaceID: UInt64) -> [(id: WindowID, pid: pid_t, owner: String)] {
+    let candidates = Set(dinky_space_window_ids(spaceID, false).map { $0.uint32Value })
+    let info = CGWindowListCopyWindowInfo(.optionAll, kCGNullWindowID) as? [[String: Any]] ?? []
+    return info.compactMap { w -> (WindowID, pid_t, String)? in
+        let id = w[kCGWindowNumber as String] as? WindowID ?? 0
+        let layer = w[kCGWindowLayer as String] as? Int ?? -1
+        let alpha = w[kCGWindowAlpha as String] as? Double ?? 0
+        let owner = w[kCGWindowOwnerName as String] as? String ?? ""
+        let pid = w[kCGWindowOwnerPID as String] as? pid_t ?? 0
+        guard candidates.contains(id), layer == 0, alpha > 0, owner != "Dock", owner != "WindowServer" else { return nil }
+        return (id, pid, owner)
+    }.sorted { $0.0 < $1.0 }
 }
 
 private func fmt(_ r: CGRect) -> String {

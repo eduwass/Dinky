@@ -2,7 +2,7 @@ import DinkyConfig
 import Foundation
 
 // State that outlives a single command: the current config, the hotkey engine, whether dinky is
-// enabled, and the workspace history for back-and-forth. Main thread only.
+// enabled, and the display model. Main thread only.
 final class AppState {
     static let shared = AppState()
 
@@ -20,9 +20,12 @@ final class AppState {
     /// The last load error, shown first in the status item's menu. Nil once a load succeeds.
     private(set) var configError: ConfigError?
     private(set) var enabled = true
-    /// 0-based Space indexes on the main display.
-    private(set) var previousWorkspace: Int?
-    private var currentWorkspace: Int?
+    /// Displays and their Spaces, started on first use.
+    private(set) lazy var displays: DisplayModel = {
+        let model = DisplayModel()
+        model.start()
+        return model
+    }()
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -46,12 +49,8 @@ final class AppState {
         applyConfig()
     }
 
-    /// Records the Space now current, so back-and-forth knows where it came from.
-    func noteWorkspace(_ index: Int) {
-        guard index != currentWorkspace else { return }
-        previousWorkspace = currentWorkspace
-        currentWorkspace = index
-    }
+    /// Superseded by the display model's per-display history; App.swift still calls it.
+    func noteWorkspace(_ index: Int) {}
 
     private func apply(_ result: Result<Config, ConfigError>) {
         switch result {

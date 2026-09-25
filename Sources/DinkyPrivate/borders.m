@@ -1,0 +1,169 @@
+#import "borders.h"
+#import "events.h"
+#import "query.h"
+#import "skylight.h"
+
+// Window creation, shape and drawing, as JankyBorders src/misc/extern.h declares them.
+extern CGError CGSNewRegionWithRect(CGRect *rect, CFTypeRef *region);
+extern CGError SLSNewWindow(int cid, int type, float x, float y, CFTypeRef region, uint32_t *wid);
+extern CGError SLSReleaseWindow(int cid, uint32_t wid);
+extern CGError SLSSetWindowTags(int cid, uint32_t wid, uint64_t *tags, int tagSize);
+extern CGError SLSSetWindowShape(int cid, uint32_t wid, float x, float y, CFTypeRef shape);
+extern CGError SLSSetWindowResolution(int cid, uint32_t wid, double resolution);
+extern CGError SLSSetWindowOpacity(int cid, uint32_t wid, bool isOpaque);
+extern CGError SLSWindowSetShadowProperties(uint32_t wid, CFDictionaryRef properties);
+extern CGError SLSGetWindowLevel(int cid, uint32_t wid, int64_t *level);
+extern CGContextRef SLWindowContextCreate(int cid, uint32_t wid, CFDictionaryRef options);
+extern CGError SLSFlushWindowContentRegion(int cid, uint32_t wid, void *dirty);
+extern CGError SLSDisableUpdate(int cid);
+extern CGError SLSReenableUpdate(int cid);
+extern CGError SLSGetConnectionIDForPSN(int cid, ProcessSerialNumber *psn, int *psnCID);
+
+extern CFTypeRef SLSTransactionCreate(int cid);
+extern CGError SLSTransactionMoveWindowWithGroup(CFTypeRef transaction, uint32_t wid, CGPoint point);
+extern CGError SLSTransactionSetWindowLevel(CFTypeRef transaction, uint32_t wid, int level);
+extern CGError SLSTransactionOrderWindow(CFTypeRef transaction, uint32_t wid, int order, uint32_t relativeTo);
+extern CGError SLSTransactionCommit(CFTypeRef transaction, int synchronous);
+
+// SLSTransactionOrderWindow orders, as CGSOrderingMode.
+enum { OrderOut = 0, OrderBelow = -1 };
+
+// JankyBorders window_create: floating (bit 1) and click-through (bit 9).
+static const uint64_t border_tags = (1ULL << 1) | (1ULL << 9);
+
+uint32_t dinky_border_create(double scale)
+{
+    int cid = dinky_connection();
+    CGRect frame = CGRectMake(0, 0, 1, 1);
+    CFTypeRef region = NULL;
+    CGSNewRegionWithRect(&frame, &region);
+    if (!region) return 0;
+
+    uint32_t wid = 0;
+    SLSNewWindow(cid, kCGBackingStoreBuffered, -9999, -9999, region, &wid);
+    CFRelease(region);
+    if (!wid) return 0;
+
+    uint64_t tags = border_tags;
+    SLSSetWindowResolution(cid, wid, scale);
+    SLSSetWindowTags(cid, wid, &tags, 64);
+    SLSSetWindowOpacity(cid, wid, false);
+    SLSWindowSetShadowProperties(wid, (__bridge CFDictionaryRef)@{@"com.apple.WindowShadowDensity": @0});
+    return wid;
+}
+
+// The border window covers the target frame plus `width` on every side.
+static CGRect outer_frame(CGRect frame, double width)
+{
+    return CGRectInset(frame, -width, -width);
+}
+
+// Moves, copies the level and orders below the target, in one transaction.
+static void place(uint32_t border, uint32_t target, CGPoint origin)
+{
+    int cid = dinky_connection();
+    int64_t level = 0;
+    SLSGetWindowLevel(cid, target, &level);
+
+    CFTypeRef transaction = SLSTransactionCreate(cid);
+    if (!transaction) return;
+    SLSTransactionMoveWindowWithGroup(transaction, border, origin);
+    SLSTransactionSetWindowLevel(transaction, border, (int)level);
+    SLSTransactionOrderWindow(transaction, border, OrderBelow, target);
+    SLSTransactionCommit(transaction, 0);
+    CFRelease(transaction);
+}
+
+// A stroke whose inner edge is the target's frame: the path runs width/2 outside it, with
+// the corner radius grown by the same amount so the inner edge follows the window's corners.
+static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColor color,
+                 double width, DinkyBorderStyle style)
+{
+    int cid = dinky_connection();
+    CGContextRef context = SLWindowContextCreate(cid, border, NULL);
+    if (!context) return;
+
+    CGRect bounds = { CGPointZero, size };
+    CGRect path = CGRectInset(bounds, width / 2, width / 2);
+    double radius = style == DinkyBorderStyleRound ? cornerRadius + width / 2 : 0;
+    radius = MIN(radius, MIN(path.size.width, path.size.height) / 2);
+
+    CGContextClearRect(context, bounds);
+    CGContextSetRGBStrokeColor(context, color.red, color.green, color.blue, color.alpha);
+    CGContextSetLineWidth(context, width);
+    CGPathRef stroke = CGPathCreateWithRoundedRect(path, radius, radius, NULL);
+    CGContextAddPath(context, stroke);
+    CGContextStrokePath(context);
+    CGPathRelease(stroke);
+
+    CGContextFlush(context);
+    CGContextRelease(context);
+    SLSFlushWindowContentRegion(cid, border, NULL);
+}
+
+void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cornerRadius,
+                         DinkyBorderColor color, double width, DinkyBorderStyle style)
+{
+    int cid = dinky_connection();
+    CGRect outer = outer_frame(frame, width);
+    CGRect shape = { CGPointZero, outer.size };
+    CFTypeRef region = NULL;
+    CGSNewRegionWithRect(&shape, &region);
+    if (!region) return;
+
+    // Hold screen updates so the reshaped, redrawn and moved border appears at once.
+    SLSDisableUpdate(cid);
+    SLSSetWindowShape(cid, border, 0, 0, region);
+    draw(border, outer.size, cornerRadius, color, width, style);
+    place(border, target, outer.origin);
+    SLSReenableUpdate(cid);
+    CFRelease(region);
+}
+
+void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width)
+{
+    place(border, target, outer_frame(frame, width).origin);
+}
+
+void dinky_border_move_to_space(uint32_t border, uint64_t spaceID)
+{
+    SLSMoveWindowsToManagedSpace(dinky_connection(), (__bridge CFArrayRef)@[@(border)], spaceID);
+}
+
+static void order(uint32_t border, int mode, uint32_t target)
+{
+    CFTypeRef transaction = SLSTransactionCreate(dinky_connection());
+    if (!transaction) return;
+    SLSTransactionOrderWindow(transaction, border, mode, target);
+    SLSTransactionCommit(transaction, 0);
+    CFRelease(transaction);
+}
+
+void dinky_border_hide(uint32_t border) { order(border, OrderOut, 0); }
+void dinky_border_show(uint32_t border, uint32_t target) { order(border, OrderBelow, target); }
+
+void dinky_border_destroy(uint32_t border)
+{
+    SLSReleaseWindow(dinky_connection(), border);
+}
+
+uint32_t dinky_border_focused_window(void)
+{
+    int cid = dinky_connection();
+    ProcessSerialNumber psn = {0};
+    int owner = 0;
+    if (_SLPSGetFrontProcess(&psn) != noErr) return 0;
+    if (SLSGetConnectionIDForPSN(cid, &psn, &owner) != kCGErrorSuccess) return 0;
+
+    NSMutableArray *spaces = [NSMutableArray array];
+    for (DinkyDisplay *display in dinky_displays()) [spaces addObject:@(display.currentSpaceID)];
+
+    // Document-tagged windows of the front app, front to back.
+    uint64_t set_tags = 1;
+    uint64_t clear_tags = 0;
+    NSArray *windows = CFBridgingRelease(SLSCopyWindowsWithOptionsAndTags(cid, owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags));
+    for (NSNumber *wid in windows) {
+        if (dinky_window_info(wid.unsignedIntValue).isDocument) return wid.unsignedIntValue;
+    }
+    return 0;
+}

@@ -32,50 +32,54 @@ func windowList() -> [WindowInfo] {
 }
 
 /// `<id> | <app> | <title> | <x>,<y> <w>x<h> | <workspace> | <display>`, workspace and display 1-based,
-/// `-` for windows on no Space (such as minimized ones). Sorted by display, workspace, then id.
+/// `-` for windows on no workspace (minimized ones, full-screen Spaces). Sorted by display, workspace, then id.
 func listWindows() -> String {
-    let displays = dinky_displays()
+    let displays = freshDisplays()
     let windows = windowList()
     let spaceIDs = dinky_space_ids_for_windows(windows.map { NSNumber(value: $0.id) }).map(\.uint64Value)
     var rows: [(display: Int, workspace: Int, id: UInt32, line: String)] = []
     for (window, sid) in zip(windows, spaceIDs) {
         guard sid != 0 || !window.title.isEmpty else { continue }
-        let place = workspace(of: sid, in: displays)
+        let d = displays.firstIndex { $0.spaces.contains(sid) }
+        let w = d.flatMap { displays[$0].workspaces.firstIndex(of: sid) }
         let f = window.frame
         let line = ["\(window.id)", window.app, window.title, "\(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))",
-                    place.map { "\($0.workspace + 1)" } ?? "-", place.map { "\($0.display + 1)" } ?? "-"]
+                    w.map { "\($0 + 1)" } ?? "-", d.map { "\($0 + 1)" } ?? "-"]
             .joined(separator: " | ")
-        rows.append((place?.display ?? Int.max, place?.workspace ?? Int.max, window.id, line))
+        rows.append((d ?? Int.max, w ?? Int.max, window.id, line))
     }
     rows.sort { ($0.display, $0.workspace, $0.id) < ($1.display, $1.workspace, $1.id) }
     return rows.map(\.line).joined(separator: "\n")
 }
 
-/// `<display> | <workspace> | <space-id> | <kind>[ | current]`, one line per Space.
+/// `<display> | <workspace> | <space-id> | <kind>[ | *]`, one line per Space in Mission Control order.
+/// Full-screen Spaces have no workspace number (`-`); `*` marks each display's current Space.
 func listWorkspaces() -> String {
     var lines: [String] = []
-    for (d, display) in dinky_displays().enumerated() {
-        for (i, space) in display.spaces.enumerated() {
-            let kind = space.isFullscreen ? "fullscreen" : space.isUser ? "user" : "type \(space.type.rawValue)"
-            let current = space.spaceID == display.currentSpaceID ? " | current" : ""
-            lines.append("\(d + 1) | \(i + 1) | \(space.spaceID) | \(kind)\(current)")
+    for (d, display) in freshDisplays().enumerated() {
+        for sid in display.spaces {
+            let workspace = display.workspaces.firstIndex(of: sid)
+            let current = sid == display.currentSpaceID ? " | *" : ""
+            lines.append("\(d + 1) | \(workspace.map { "\($0 + 1)" } ?? "-") | \(sid) | \(workspace == nil ? "fullscreen" : "user")\(current)")
         }
     }
     return lines.joined(separator: "\n")
 }
 
-/// `<display> | <display-id> | <uuid> | <x>,<y> <w>x<h>[ | main]`
+/// `<display> | <display-id> | <uuid> | <x>,<y> <w>x<h>[ | main][ | focused]`, frames in global CG coordinates.
 func listDisplays() -> String {
-    dinky_displays().enumerated().map { d, display in
-        let f = CGDisplayBounds(display.displayID)
-        let main = display.displayID == CGMainDisplayID() ? " | main" : ""
-        return "\(d + 1) | \(display.displayID) | \(display.uuid) | \(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))\(main)"
+    let displays = freshDisplays()
+    let focused = AppState.shared.displays.focusedDisplay()?.uuid
+    return displays.enumerated().map { d, display in
+        let f = display.frame
+        let main = display.isMain ? " | main" : ""
+        let focus = display.uuid == focused ? " | focused" : ""
+        return "\(d + 1) | \(display.id) | \(display.uuid) | \(Int(f.minX)),\(Int(f.minY)) \(Int(f.width))x\(Int(f.height))\(main)\(focus)"
     }.joined(separator: "\n")
 }
 
-private func workspace(of sid: UInt64, in displays: [DinkyDisplay]) -> (display: Int, workspace: Int)? {
-    for (d, display) in displays.enumerated() {
-        if let i = display.spaces.firstIndex(where: { $0.spaceID == sid }) { return (d, i) }
-    }
-    return nil
+private func freshDisplays() -> [Display] {
+    let model = AppState.shared.displays
+    model.reconcile()
+    return model.displays
 }

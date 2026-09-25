@@ -14,7 +14,7 @@ struct Reply {
 }
 
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
-// Workspaces are on the main display until the display model lands (din-mlu6).
+// Workspace commands act on the focused display.
 enum Dispatcher {
     static func run(_ line: String) -> Reply {
         do {
@@ -29,7 +29,10 @@ enum Dispatcher {
         case .workspace(let target):
             return switchWorkspace(target)
         case .workspaceBackAndForth:
-            guard let previous = AppState.shared.previousWorkspace else { return .error("no previous workspace") }
+            let model = AppState.shared.displays
+            guard let display = model.focusedDisplay(), let previous = model.previousWorkspace(on: display) else {
+                return .error("no previous workspace")
+            }
             return switchWorkspace(.number(previous + 1))
         case .moveWindowToWorkspace(let target, let follow):
             return moveWindowToWorkspace(target, follow: follow)
@@ -73,26 +76,32 @@ enum Dispatcher {
         }
     }
 
+    /// The focused display, freshly read, and its current 0-based workspace. Nil on a full-screen Space.
+    private static func focusedWorkspace() -> (Display, Int)? {
+        let model = AppState.shared.displays
+        model.reconcile()
+        guard let display = model.focusedDisplay(), let current = display.currentWorkspace else { return nil }
+        return (display, current)
+    }
+
     private static func switchWorkspace(_ target: WorkspaceTarget) -> Reply {
-        guard let main = mainDisplay(), let current = currentSpaceIndex(main) else { return .error("no display") }
+        guard let (display, current) = focusedWorkspace() else { return .error("not on a numbered workspace") }
         let to = index(target, current: current)
-        guard main.spaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(main.spaces.count)") }
+        guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
         guard to != current else { return .ok("already on workspace \(to + 1)") }
-        guard switchSpace(to: to) else { return .error("switch to workspace \(to + 1) failed") }
-        AppState.shared.noteWorkspace(current)
-        AppState.shared.noteWorkspace(to)
+        guard switchSpace(to: to, on: display) else { return .error("switch to workspace \(to + 1) failed") }
         return .ok("workspace \(to + 1)")
     }
 
     private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool) -> Reply {
-        guard let main = mainDisplay(), let current = currentSpaceIndex(main) else { return .error("no display") }
+        guard let (display, current) = focusedWorkspace() else { return .error("not on a numbered workspace") }
         let to = index(target, current: current)
-        guard main.spaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(main.spaces.count)") }
+        guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
         let wid = frontWindowID()
         guard wid != 0 else { return .error("no focused window") }
         guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         var ids = [wid]
-        guard dinky_move_windows_to_space(&ids, 1, main.spaces[to].spaceID) else { return .error("move failed") }
+        guard dinky_move_windows_to_space(&ids, 1, display.workspaces[to]) else { return .error("move failed") }
         if follow { _ = switchWorkspace(.number(to + 1)) }
         return .ok("moved window \(wid) to workspace \(to + 1)")
     }

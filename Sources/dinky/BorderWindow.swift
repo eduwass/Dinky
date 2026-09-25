@@ -1,0 +1,77 @@
+import AppKit
+import DinkyConfig
+import DinkyPrivate
+
+// The border of one window: a dinky-owned SkyLight window kept directly below its target.
+// Redraws only when the look or size changes; a plain move just re-places it.
+final class BorderWindow {
+    struct Look: Equatable {
+        var size: CGSize
+        var cornerRadius: Int
+        var color: DinkyConfig.Color
+        var width: Double
+        var style: BorderStyle
+    }
+
+    let target: UInt32
+    private var id: UInt32 = 0
+    private var scale = 0.0
+    private var spaceID: UInt64 = 0
+    private var drawn: Look?
+    private var isShown = false
+
+    init(target: UInt32) {
+        self.target = target
+    }
+
+    deinit {
+        if id != 0 { dinky_border_destroy(id) }
+    }
+
+    func update(_ window: Window, color: DinkyConfig.Color, config: Borders) {
+        let look = Look(size: window.frame.size, cornerRadius: window.cornerRadius,
+                        color: color, width: config.width, style: config.style)
+        let scale = backingScale(of: window.frame)
+        if scale != self.scale { recreate(scale: scale) }
+        guard id != 0 else { return }
+
+        if spaceID != window.spaceID, window.spaceID != 0 {
+            dinky_border_move_to_space(id, window.spaceID)
+            spaceID = window.spaceID
+        }
+        if look == drawn {
+            dinky_border_move(id, target, window.frame, config.width)
+        } else {
+            let rgba = DinkyBorderColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
+            let style: DinkyBorderStyle = config.style == .round ? .round : .square
+            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, style)
+            drawn = look
+        }
+        isShown = true
+    }
+
+    func hide() {
+        guard isShown else { return }
+        dinky_border_hide(id)
+        isShown = false
+    }
+
+    // JankyBorders sets the resolution once, at creation; a display change gets a new window.
+    private func recreate(scale: Double) {
+        if id != 0 { dinky_border_destroy(id) }
+        id = dinky_border_create(scale)
+        self.scale = scale
+        spaceID = 0
+        drawn = nil
+    }
+}
+
+// The backing scale of the screen under the frame's centre. Frames are top-left global,
+// NSScreen frames bottom-left, flipped around the primary screen.
+private func backingScale(of frame: CGRect) -> Double {
+    let screens = NSScreen.screens
+    guard let primary = screens.first else { return 2 }
+    let center = CGPoint(x: frame.midX, y: primary.frame.maxY - frame.midY)
+    let screen = screens.first { $0.frame.contains(center) } ?? primary
+    return screen.backingScaleFactor
+}

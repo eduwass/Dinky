@@ -18,3 +18,9 @@ On window create: classify (normal, transient, floating rule), insert normal win
 
 Opening three windows tiles them as they appear. Closing one re-tiles. A Save sheet never becomes a tile. Moving a window with the native drag between Spaces is reconciled without dragging it back.
 
+
+## Notes
+
+**2026-09-25T10:49:05Z**
+
+This is the integration ticket: wire WindowModel (via EventHub.shared.subscribe), DisplayModel, BorderManager and FrameApplier into the app through AppState, then the automatic tiling loop on top. Feed FrameApplier.minimumSizes back where cheap. Accordion/fullscreen stacking of the focused child must use activate plus raise (see din-yq3m note).
