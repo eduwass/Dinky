@@ -16,6 +16,7 @@ public struct Config: Equatable {
     public var gaps = Gaps()
     public var borders = Borders()
     public var switching = Switching()
+    public var focusFollowsMouse = FocusFollowsMouse()
     public var onWindowDetected: [WindowRule] = []
     /// Keyed by mode name, e.g. `main`, `service`.
     public var modes: [String: Mode] = [:]
@@ -80,6 +81,7 @@ public struct Config: Equatable {
         gaps = try t.table("gaps").map(Gaps.init) ?? gaps
         borders = try t.table("borders").map(Borders.init) ?? borders
         switching = try t.table("switching").map(Switching.init) ?? switching
+        focusFollowsMouse = try t.table("focus-follows-mouse").map(FocusFollowsMouse.init) ?? focusFollowsMouse
         onWindowDetected = try t.tables("on-window-detected")?.map(WindowRule.init) ?? []
         execOnWorkspaceChange = try t.strings("exec-on-workspace-change") ?? []
         onFocusChanged = try t.strings("on-focus-changed") ?? []
@@ -213,6 +215,24 @@ public struct Switching: Equatable {
 
     init(_ t: Table) throws {
         followAppActivation = try t.bool("follow-app-activation") ?? followAppActivation
+        try t.done()
+    }
+}
+
+public struct FocusFollowsMouse: Equatable {
+    public var enabled = false
+    /// How long the pointer must rest on a window before it takes focus.
+    public var delayMs = 100
+    /// Whether hovering the peeking edge of an accordion child focuses it. Off, only the front child does.
+    public var accordion = true
+
+    public init() {}
+
+    init(_ t: Table) throws {
+        enabled = try t.bool("enabled") ?? enabled
+        delayMs = try t.int("delay-ms") ?? delayMs
+        guard delayMs >= 0 else { throw ConfigError(path: t.path("delay-ms"), "must be 0 or more") }
+        accordion = try t.bool("accordion") ?? accordion
         try t.done()
     }
 }

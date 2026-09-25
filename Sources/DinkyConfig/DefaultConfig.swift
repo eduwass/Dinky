@@ -28,6 +28,11 @@ extension Config {
     [switching]
     follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch
 
+    [focus-follows-mouse]
+    enabled = false                # focus the window under the pointer once it rests there
+    delay-ms = 100
+    accordion = true               # false: hovering a peeking accordion edge does not focus it
+
     [[on-window-detected]]
     if.app-id = 'com.apple.systempreferences'
     run = 'layout floating'

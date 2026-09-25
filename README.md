@@ -103,6 +103,14 @@ Every gap value can instead be a per-display list, as in AeroSpace: `outer.top =
 |---|---|---|
 | `follow-app-activation` | `true` | When Cmd-Tab or a Dock click activates an app on another Space, switch there with the fast switch. Works when the macOS "switch to a Space with open windows" setting is off. |
 
+### `[focus-follows-mouse]`
+
+| Key | Default | Meaning |
+|---|---|---|
+| `enabled` | `false` | Focus the window under the pointer once the pointer rests on it. Only windows dinky manages take focus; panels, menus, the menu bar, the Dock and the desktop never do. Nothing happens while a mouse button is down, while a menu is open, or for 300 ms after a Space change or a config reload, and windows that move under a still pointer never take focus. |
+| `delay-ms` | `100` | How long the pointer must rest on a window before it takes focus. `0` focuses as soon as the pointer stops. |
+| `accordion` | `true` | Whether resting on the peeking edge of an accordion child focuses it. With `false`, only an accordion's front window takes focus from hover. |
+
 ### `[[on-window-detected]]`
 
 Rules for new windows, one table per rule. When a new window matches every condition under `if`, dinky runs the rule's commands. Rules are checked in order, and the first match ends the search unless it sets `check-further-callbacks`.
@@ -177,6 +185,11 @@ style = 'round'                # round | square
 
 [switching]
 follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch
+
+[focus-follows-mouse]
+enabled = false                # focus the window under the pointer once it rests there
+delay-ms = 100
+accordion = true               # false: hovering a peeking accordion edge does not focus it
 
 [[on-window-detected]]
 if.app-id = 'com.apple.systempreferences'
@@ -258,6 +271,7 @@ Bindings, the command line and the menu bar share one set of commands. `dinky he
 | `list-workspaces [flags]` | Print workspace numbers. See [Scripting and SketchyBar](#scripting-and-sketchybar). |
 | `list-windows [flags]` | Print windows as `id \| app \| title`. See below. |
 | `list-monitors [flags]` | Print displays as `number \| name`. `list-displays` is the same. |
+| `debug-state` | Print the tiling state as JSON: displays, each workspace's tree and expected frames, placements and windows. For tests and bug reports. |
 | `exec-and-forget <shell command>` | Run the rest of the line with `/bin/sh -c` without waiting. Its output goes to dinky's log. |
 
 Workspaces are counted per display, and workspace commands act on the display that has focus. A full-screen app's Space is not a numbered workspace; workspace commands there answer "not on a numbered workspace".
@@ -278,7 +292,7 @@ The CLI talks to the app over a unix socket at `$TMPDIR/dinky.sock` (your per-us
 printf 'workspace 2\n' | nc -U "$TMPDIR/dinky.sock"
 ```
 
-A few subcommands are for the command line only: `dinky app` (above), `dinky recover` restores the windows a crashed session left tiled, and `dinky debug events` or `dinky debug windows` print the live window event stream or the current windows without the app, which is useful in a bug report.
+A few subcommands are for the command line only: `dinky app` (above), `dinky recover` restores the windows a crashed session left tiled, and `dinky debug events` or `dinky debug windows` print the live window event stream or the current windows without the app, which is useful in a bug report. `dinky debug-state` asks the app for its tiling state as JSON (displays, each workspace's tree with the frames it expects, placements and windows). For testing, `dinky debug ax-close|ax-minimize|ax-unminimize <window id>`, `dinky debug ax-frame <window id> <x> <y> <w> <h>` and `dinky debug hide-app|unhide-app <pid>` act on windows and apps through Accessibility; `just fuzz <seed> <steps>` uses them to fuzz the app in the test VM (`scripts/fuzz.py`).
 
 ## Scripting and SketchyBar
 

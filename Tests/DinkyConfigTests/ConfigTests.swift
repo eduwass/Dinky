@@ -173,6 +173,25 @@ final class ConfigTests: XCTestCase {
         assertError("on-mode-changed = [1]\n", path: "on-mode-changed", line: 1, contains: "list of strings")
     }
 
+    func testFocusFollowsMouse() throws {
+        let defaults = Config.default.focusFollowsMouse
+        XCTAssertEqual(defaults, FocusFollowsMouse())
+        XCTAssertFalse(defaults.enabled)
+        XCTAssertEqual(defaults.delayMs, 100)
+        XCTAssertTrue(defaults.accordion)
+        let ffm = try Config.parse("""
+        [focus-follows-mouse]
+        enabled = true
+        delay-ms = 0
+        accordion = false
+        """).focusFollowsMouse
+        XCTAssertTrue(ffm.enabled)
+        XCTAssertEqual(ffm.delayMs, 0)
+        XCTAssertFalse(ffm.accordion)
+        assertError("[focus-follows-mouse]\ndelay-ms = -1\n", path: "focus-follows-mouse.delay-ms", line: 2, contains: "0 or more")
+        assertError("[focus-follows-mouse]\ndelay = 5\n", path: "focus-follows-mouse.delay", line: 2, contains: "unknown key")
+    }
+
     func testLoadFromMissingFileFails() {
         XCTAssertThrowsError(try Config.load(from: URL(fileURLWithPath: "/nonexistent/dinky.toml"))) { error in
             XCTAssertTrue("\(error)".contains("/nonexistent/dinky.toml"))

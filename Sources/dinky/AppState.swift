@@ -31,6 +31,7 @@ final class AppState {
     /// The journal of original frames that disable, quit and `dinky recover` restore.
     let recovery = Recovery()
     private let callbacks = Callbacks()
+    private let hoverFocus = HoverFocus()
     private var watcher: ConfigWatcher?
 
     private init() {
@@ -56,6 +57,7 @@ final class AppState {
         coordinator.start()
         callbacks.start()
         recovery.start(model: coordinator.model)
+        hoverFocus.update(config: config.focusFollowsMouse)
     }
 
     /// Off stops tiling and puts every window back where it was before dinky touched it.
@@ -91,6 +93,7 @@ final class AppState {
             // At launch the app creates the Spaces itself, before the coordinator starts.
             if coordinator != nil { ensureWorkspaceCount() }
             coordinator?.update(config: config)
+            if coordinator != nil { hoverFocus.update(config: config.focusFollowsMouse) }
         case .failure(let error):
             configError = error
             fputs("config: \(error), keeping the previous config\n", stderr)
