@@ -8,7 +8,6 @@ typedef void (*NotifyProc)(uint32_t type, void *data, size_t length, void *conte
 extern CGError SLSRegisterNotifyProc(NotifyProc handler, uint32_t type, void *context);
 extern CGError SLSRemoveNotifyProc(NotifyProc handler, uint32_t type, void *context);
 extern CGError SLSRequestNotificationsForWindows(int cid, const uint32_t *windowIDs, int count);
-extern CGError SLSGetConnectionIDForPSN(int cid, ProcessSerialNumber *psn, int *psnCID);
 extern CGError SLSGetWindowBounds(int cid, uint32_t wid, CGRect *frame);
 extern CGError SLSWindowIsOrderedIn(int cid, uint32_t wid, uint8_t *orderedIn);
 // macOS 26 and later. JankyBorders dlsyms it; weak import does the same.
@@ -40,16 +39,6 @@ static pid_t window_pid(uint32_t wid)
     return connection_pid(owner);
 }
 
-// JankyBorders get_front_window: front PSN -> connection -> pid. 1508 carries no payload on 27.0.
-static pid_t front_pid(void)
-{
-    ProcessSerialNumber psn = {0};
-    int cid = 0;
-    if (_SLPSGetFrontProcess(&psn) != noErr) return 0;
-    if (SLSGetConnectionIDForPSN(dinky_connection(), &psn, &cid) != kCGErrorSuccess) return 0;
-    return connection_pid(cid);
-}
-
 static void handler(uint32_t type, void *data, size_t length, void *context)
 {
     DinkyEvent event = { .kind = type };
@@ -73,7 +62,8 @@ static void handler(uint32_t type, void *data, size_t length, void *context)
         // JankyBorders space_handler ignores the payload; so do we.
         break;
     case DinkyEventFrontApp:
-        event.pid = front_pid();
+        // 1508 carries no payload on 27.0; ask for the front app instead.
+        event.pid = connection_pid(dinky_front_connection());
         break;
     default:
         // JankyBorders window_modify_handler and yabai 804/808: uint32 wid at 0.
@@ -86,6 +76,13 @@ static void handler(uint32_t type, void *data, size_t length, void *context)
     if (event_callback) event_callback(event, event_context);
 }
 
+static void stop(void)
+{
+    for (int i = 0; i < kind_count; ++i) SLSRemoveNotifyProc(handler, kinds[i], NULL);
+    event_callback = NULL;
+    event_context = NULL;
+}
+
 bool dinky_events_start(DinkyEventCallback callback, void *context)
 {
     event_callback = callback;
@@ -93,18 +90,11 @@ bool dinky_events_start(DinkyEventCallback callback, void *context)
     for (int i = 0; i < kind_count; ++i) {
         if (SLSRegisterNotifyProc(handler, kinds[i], NULL) != kCGErrorSuccess) {
             fprintf(stderr, "events: SLSRegisterNotifyProc(%u) failed\n", kinds[i]);
-            dinky_events_stop();
+            stop();
             return false;
         }
     }
     return true;
-}
-
-void dinky_events_stop(void)
-{
-    for (int i = 0; i < kind_count; ++i) SLSRemoveNotifyProc(handler, kinds[i], NULL);
-    event_callback = NULL;
-    event_context = NULL;
 }
 
 void dinky_events_watch_windows(const uint32_t *windowIDs, int count)
@@ -148,17 +138,13 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
     SLSGetWindowBounds(cid, windowID, &info.frame);
     info.pid = window_pid(windowID);
 
-    // Tag bits from JankyBorders misc/window.h window_suitable.
+    // JankyBorders misc/window.h window_suitable: not attached (bit 7), not ignoring the cycle (bit 18).
     uint64_t tags = info.tags;
-    bool visible = (info.attributes & 0x2) || (tags & 0x400000000000000);
-    bool document = (tags & (1ULL << 0)) || ((tags & (1ULL << 1)) && (tags & (1ULL << 31)));
     bool attached = tags & (1ULL << 7);
     bool ignoresCycle = tags & (1ULL << 18);
-    info.isDocument = info.parentID == 0 && visible && document && !attached && !ignoresCycle;
-
-    // yabai space_window_list: minimized windows carry these tags instead of the visible ones.
-    info.isMinimized = (info.attributes == 0x0 || info.attributes == 0x1) &&
-                       ((tags & 0x1000000000000000) || (tags & 0x300000000000000));
+    info.isDocument = info.parentID == 0 && dinky_is_visible(info.attributes, tags) && dinky_has_document_tags(tags)
+                      && !attached && !ignoresCycle;
+    info.isMinimized = dinky_is_minimized(info.attributes, tags);
     return info;
 }
 

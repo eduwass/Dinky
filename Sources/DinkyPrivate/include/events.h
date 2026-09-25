@@ -38,7 +38,6 @@ typedef void (*DinkyEventCallback)(DinkyEvent event, void *_Nullable context);
 // drains the connection's event port, which [NSApp run] does. Without a running
 // NSApplication nothing is delivered. Returns false if registration failed.
 bool dinky_events_start(DinkyEventCallback callback, void *_Nullable context);
-void dinky_events_stop(void);
 
 // The per-window events (close, move, resize, reorder, level, hide, unhide) only arrive
 // for windows named here. Each call replaces the previous list.

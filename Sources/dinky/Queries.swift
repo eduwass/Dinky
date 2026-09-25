@@ -1,5 +1,6 @@
 import AppKit
 import DinkyCommands
+import DinkyLayout
 import DinkyPrivate
 
 // The list-* queries, and the window list they and the dispatcher share. Flags and output follow
@@ -33,6 +34,13 @@ func windowList() -> [WindowInfo] {
     }
 }
 
+/// The window a command acts on: the coordinator's focused window (the front app's frontmost document window
+/// on a visible Space), falling back to the front app's AX key window, which can still be one on another Space.
+func focusedWindowID() -> WindowID {
+    if let id = AppState.shared.coordinator?.focusedWindow, id != 0 { return id }
+    return frontWindowID()
+}
+
 func listWorkspaces(_ query: WorkspaceQuery) -> String {
     let now = QueryState()
     let occupied = Set(now.windows.map(\.space))
@@ -52,11 +60,7 @@ func listWorkspaces(_ query: WorkspaceQuery) -> String {
 func listWindows(_ query: WindowQuery) -> Reply {
     let now = QueryState()
     let coordinator = AppState.shared.coordinator
-    var focused: UInt32?
-    if query.focused {
-        let id = coordinator?.focusedWindow ?? 0
-        focused = id != 0 ? id : frontWindowID()
-    }
+    let focused = query.focused ? focusedWindowID() : nil
     var rows: [(display: Int, workspace: Int, id: UInt32, values: [String: String])] = []
     for (window, sid) in now.windows {
         guard let i = now.displays.firstIndex(where: { $0.spaces.contains(sid) }) else { continue }
@@ -108,8 +112,7 @@ private struct QueryState {
         model.reconcile()
         displays = model.displays
         focused = model.focusedDisplay()
-        let list = windowList()
-        windows = Array(zip(list, dinky_space_ids_for_windows(list.map { NSNumber(value: $0.id) }).map(\.uint64Value)))
+        windows = windowList().map { ($0, dinky_window_space_id($0.id)) }
     }
 
     func matches(_ monitors: [MonitorSpec], _ index: Int) -> Bool {

@@ -78,15 +78,6 @@ uint64_t dinky_window_space_id(uint32_t windowID)
     return spaces.count ? number_u64((__bridge CFNumberRef)spaces[0]) : 0;
 }
 
-NSArray<NSNumber *> *dinky_space_ids_for_windows(NSArray<NSNumber *> *windowIDs)
-{
-    NSMutableArray *result = [NSMutableArray arrayWithCapacity:windowIDs.count];
-    for (NSNumber *wid in windowIDs) {
-        [result addObject:@(dinky_window_space_id(wid.unsignedIntValue))];
-    }
-    return result;
-}
-
 // yabai space_window_list_for_connection with owner 0. yabai also keeps any window its
 // window manager already tracks; we have no such table, so only the tag filter applies.
 NSArray<NSNumber *> *dinky_space_window_ids(uint64_t spaceID, bool includeMinimized)
@@ -116,13 +107,8 @@ NSArray<NSNumber *> *dinky_space_window_ids(uint64_t spaceID, bool includeMinimi
             if (parent != 0) continue;
             if (!(level == 0 || level == 3 || level == 8)) continue;
 
-            bool visible_tags = (tags & 0x1) || ((tags & 0x2) && (tags & 0x80000000));
-            if (((attributes & 0x2) || (tags & 0x400000000000000)) && visible_tags) {
-                [result addObject:@(wid)];
-            } else if (includeMinimized && (attributes == 0x0 || attributes == 0x1) &&
-                       ((tags & 0x1000000000000000) || (tags & 0x300000000000000)) && visible_tags) {
-                [result addObject:@(wid)];
-            }
+            bool shown = dinky_is_visible(attributes, tags) || (includeMinimized && dinky_is_minimized(attributes, tags));
+            if (shown && dinky_has_document_tags(tags)) [result addObject:@(wid)];
         }
 
         CFRelease(query);

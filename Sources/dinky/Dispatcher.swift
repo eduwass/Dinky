@@ -126,14 +126,9 @@ enum Dispatcher {
         guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
         guard wid != 0 else { return .error("no focused window") }
         guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
-        var ids = [wid]
         let space = display.workspaces[to]
         guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(to + 1)") }
-        guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
-        // The bridged move is asynchronous; follow only once the window is really there.
-        guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {
-            return .error("window \(wid) did not arrive on workspace \(to + 1)")
-        }
+        if let error = move(wid, to: space, arriving: "workspace \(to + 1)") { return error }
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { switchSpace(toSpaceID: space, on: display) }
         return .ok("moved window \(wid) to workspace \(to + 1)")
@@ -180,31 +175,28 @@ enum Dispatcher {
         let displays = model.displays
         guard displays.count > 1, let i = displays.firstIndex(of: from) else { return .error("no other display") }
         let n = (i + (target == .next ? 1 : -1) + displays.count) % displays.count
-        let to = displays[n], space = to.currentSpaceID
-        var ids = [wid]
-        guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
-        guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else { return .error("window \(wid) did not arrive on display \(n + 1)") }
-        if AppState.shared.coordinator?.isFloating(wid) != false {
+        let to = displays[n]
+        if let error = move(wid, to: to.currentSpaceID, arriving: "display \(n + 1)") { return error }
+        if AppState.shared.coordinator?.isFloating(wid) != false, let element = axWindow(pid: pid, wid: wid) {
             let frame = dinky_window_info(wid).frame
-            let origin = CGPoint(x: to.frame.minX + max(0, frame.minX - from.frame.minX),
+            var origin = CGPoint(x: to.frame.minX + max(0, frame.minX - from.frame.minX),
                                  y: to.frame.minY + max(0, frame.minY - from.frame.minY))
-            if let element = axWindow(pid: pid, wid: wid) { setPosition(element, origin) }
+            AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
         }
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { focusWindow(pid: pid, id: wid) }
         return .ok("moved window \(wid) to display \(n + 1)")
     }
 
-    @discardableResult
-    private static func setPosition(_ element: AXUIElement, _ origin: CGPoint) -> Bool {
-        var origin = origin
-        return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!) == .success
+    /// Moves a window to a Space and waits for it to arrive: the bridged move is asynchronous, and callers
+    /// act on the window's new place. Nil on success, else the error to answer.
+    private static func move(_ wid: WindowID, to space: UInt64, arriving destination: String) -> Reply? {
+        var ids = [wid]
+        guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
+        guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {
+            return .error("window \(wid) did not arrive on \(destination)")
+        }
+        return nil
     }
 }
 
-/// The window a command acts on: the coordinator's focused window (the front app's frontmost document window
-/// on a visible Space), falling back to the front app's AX key window, which can still be one on another Space.
-private func focusedWindowID() -> WindowID {
-    if let id = AppState.shared.coordinator?.focusedWindow, id != 0 { return id }
-    return frontWindowID()
-}

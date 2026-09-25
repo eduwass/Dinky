@@ -18,7 +18,6 @@ extern CGContextRef SLWindowContextCreate(int cid, uint32_t wid, CFDictionaryRef
 extern CGError SLSFlushWindowContentRegion(int cid, uint32_t wid, void *dirty);
 extern CGError SLSDisableUpdate(int cid);
 extern CGError SLSReenableUpdate(int cid);
-extern CGError SLSGetConnectionIDForPSN(int cid, ProcessSerialNumber *psn, int *psnCID);
 
 extern CFTypeRef SLSTransactionCreate(int cid);
 extern CGError SLSTransactionMoveWindowWithGroup(CFTypeRef transaction, uint32_t wid, CGPoint point);
@@ -161,11 +160,8 @@ void dinky_border_destroy(uint32_t border)
 
 uint32_t dinky_border_focused_window(void)
 {
-    int cid = dinky_connection();
-    ProcessSerialNumber psn = {0};
-    int owner = 0;
-    if (_SLPSGetFrontProcess(&psn) != noErr) return 0;
-    if (SLSGetConnectionIDForPSN(cid, &psn, &owner) != kCGErrorSuccess) return 0;
+    int owner = dinky_front_connection();
+    if (!owner) return 0;
 
     NSMutableArray *spaces = [NSMutableArray array];
     for (DinkyDisplay *display in dinky_displays()) [spaces addObject:@(display.currentSpaceID)];
@@ -173,7 +169,7 @@ uint32_t dinky_border_focused_window(void)
     // Document-tagged windows of the front app, front to back.
     uint64_t set_tags = 1;
     uint64_t clear_tags = 0;
-    NSArray *windows = CFBridgingRelease(SLSCopyWindowsWithOptionsAndTags(cid, owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags));
+    NSArray *windows = CFBridgingRelease(SLSCopyWindowsWithOptionsAndTags(dinky_connection(), owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags));
     for (NSNumber *wid in windows) {
         if (dinky_window_info(wid.unsignedIntValue).isDocument) return wid.unsignedIntValue;
     }
