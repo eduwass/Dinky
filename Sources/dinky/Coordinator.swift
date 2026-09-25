@@ -31,13 +31,18 @@ final class Coordinator {
 
     private let displays: DisplayModel
     private(set) var config: Config
-    private let applier = FrameApplier()
+    let applier = FrameApplier()
     private var borders: BorderManager?
     private(set) var workspaces: [SpaceKey: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
     var dirty: Set<SpaceKey> = []
     /// Classification attempts for windows whose AX element has not appeared yet.
     var attempts: [WindowID: Int] = [:]
+    /// Newly shown windows at the exact frame of a tile of their app, held out of the trees for a moment in case
+    /// they are a tab switch: by newcomer, the tile's window. See `tab(replacedBy:in:)`.
+    private var heldTabs: [WindowID: WindowID] = [:]
+    /// Newcomers held once and not confirmed as tabs. They are tiled like any window from then on.
+    private var notTabs: Set<WindowID> = []
     /// The tiled window being dragged with the mouse, until the button is released. See Drag.swift.
     var dragging: WindowID?
     /// Called when the focused window changes.
@@ -129,22 +134,28 @@ final class Coordinator {
         }
         guard !placements[window.id]!.floating else { return }
         let old = placements[window.id]!.space
-        let new = window.isMinimized ? nil : key(of: window)
-        guard old != new else { return }
-        if let old { edit(old) { $0.remove(window.id) } }
-        if let new {
-            if let tab = tab(replacedBy: window, in: new) {
-                edit(new) { $0.replace(tab, with: window.id) }
-                placements[tab]!.space = nil
-            } else {
-                edit(new) { $0.insert(window.id) }
-            }
+        if let old, window.isMinimized || !window.isOrderedIn, takeOverTile(of: window.id, in: old) {
+            placements[window.id]!.space = nil
+            return
         }
+        let new = window.isMinimized ? nil : key(of: window)
+        guard old != new, heldTabs[window.id] == nil else { return }
+        if let old { edit(old) { $0.remove(window.id) } }
+        // A window coming from another Space's tree is moving, not switching tabs: tabs share a Space.
+        if let new, old == nil, !notTabs.contains(window.id), let tab = tab(replacedBy: window, in: new) {
+            heldTabs[window.id] = tab
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.settleTab(window.id) }
+            return
+        }
+        if let new { edit(new) { $0.insert(window.id) } }
         placements[window.id]!.space = new
     }
 
-    /// The tile a window takes over as the newly shown tab of a native tab group: AppKit gives it the group's
-    /// frame and orders it in, then orders the previous tab out. Only another tab shares a tile's exact frame.
+    /// A tile a newly shown window may be taking over as the next tab of a native tab group: a window of the same
+    /// app at exactly the tile's frame. AppKit shows a new tab by giving it the group's frame and ordering it in,
+    /// then orders the previous tab out. But some apps (Ghostty, for one) open every new window at the previous
+    /// window's frame, so the newcomer is held out of the tree until the tile's window is ordered out or
+    /// `settleTab` gives up on it.
     private func tab(replacedBy window: Window, in key: SpaceKey) -> WindowID? {
         workspaces[key]?.windows.first { id in
             guard id != window.id, let other = model.windows[id] else { return false }
@@ -152,9 +163,30 @@ final class Coordinator {
         }
     }
 
+    /// When a tile's window is ordered out or closed just after a window of its app came in at its frame, that was
+    /// a tab switch: the held new tab takes over the tile. False if no newcomer is held for this tile.
+    private func takeOverTile(of id: WindowID, in key: SpaceKey) -> Bool {
+        guard let newcomer = heldTabs.first(where: { $0.value == id })?.key else { return false }
+        heldTabs[newcomer] = nil
+        edit(key) { $0.replace(id, with: newcomer) }
+        placements[newcomer]!.space = key
+        return true
+    }
+
+    /// The tile's window stayed: the held newcomer was a window of its own, so it is tiled like any other.
+    private func settleTab(_ id: WindowID) {
+        guard heldTabs.removeValue(forKey: id) != nil, let window = model.windows[id] else { return }
+        notTabs.insert(id)
+        track(window)
+        flush()
+    }
+
     private func forget(_ id: WindowID) {
         attempts[id] = nil
-        guard let placement = placements.removeValue(forKey: id), let space = placement.space else { return }
+        heldTabs[id] = nil
+        notTabs.remove(id)
+        guard let placement = placements.removeValue(forKey: id), let space = placement.space,
+              !takeOverTile(of: id, in: space) else { return }
         edit(space) { $0.remove(id) }
     }
 
