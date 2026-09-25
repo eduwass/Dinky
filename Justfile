@@ -23,3 +23,7 @@ install: bundle
     mkdir -p ~/.local/bin
     ln -sf "$PWD/build/dinky.app/Contents/MacOS/dinky" ~/.local/bin/dinky
     ls -l ~/.local/bin/dinky
+
+# Fuzz the debug build in the Tart VM: random actions, layout invariants checked after each. See scripts/fuzz.py.
+fuzz seed="1" steps="150": build
+    scripts/vm-fuzz.sh {{seed}} {{steps}}

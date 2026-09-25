@@ -4,6 +4,11 @@ import XCTest
 private func parse(_ s: String) throws -> Command { try Command.parse(s) }
 
 final class QueryParseTests: XCTestCase {
+    func testDebugState() throws {
+        XCTAssertEqual(try parse("debug-state"), .debugState)
+        XCTAssertThrowsError(try parse("debug-state --all"))
+    }
+
     func testListWorkspaces() throws {
         XCTAssertEqual(try parse("list-workspaces"), .listWorkspaces(WorkspaceQuery()))
         var all = WorkspaceQuery()

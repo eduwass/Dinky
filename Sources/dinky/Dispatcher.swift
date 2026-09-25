@@ -84,6 +84,9 @@ enum Dispatcher {
             return .ok(listWorkspaces(query))
         case .listMonitors(let query):
             return .ok(listMonitors(query))
+        case .debugState:
+            guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
+            return .ok(coordinator.debugState())
         case .execAndForget(let shell):
             exec(["/bin/sh", "-c", shell])
             return .ok("")

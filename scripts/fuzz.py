@@ -1,0 +1,348 @@
+#!/usr/bin/env python3
+"""Fuzzes a running dinky app with random window, app and workspace actions and checks layout invariants.
+
+Runs inside the VM guest (see `just fuzz`), next to a running `dinky app`. Each step runs one random action, waits
+0.8 s and reads `dinky debug-state`, waits 1.5 s more and reads it again. Invariants are checked on the second
+state (what was only late is noted as "settled late"), and anything that moved between the two, with nothing
+happening, is a "spontaneous shift". Violations are printed as they are found and the run goes on.
+
+    python3 fuzz.py --seed 1 --steps 150 --dinky ~/dinky-fuzz
+"""
+import argparse, json, os, random, subprocess, sys, time
+
+APPS = {"com.apple.TextEdit", "com.apple.finder", "com.apple.Safari"}
+MIN_WINDOWS, MAX_WINDOWS = 3, 8
+DOCS = "/tmp/dinky-fuzz"
+KEYS = os.path.expanduser("~/dinky-fuzz-keys")
+# Control-Arrow with the secondary-fn flag, as Mission Control expects, <count> times. The fuzzer posts it in
+# dinky's `service` mode, which does not bind ctrl-left/right, so the switch is the native one.
+KEYS_SOURCE = """
+import CoreGraphics
+import Foundation
+let key: CGKeyCode = CommandLine.arguments[1] == "left" ? 123 : 124
+for _ in 0..<(Int(CommandLine.arguments[2]) ?? 1) {
+    for down in [true, false] {
+        let event = CGEvent(keyboardEventSource: nil, virtualKey: key, keyDown: down)!
+        event.flags = [.maskControl, .maskSecondaryFn]
+        event.post(tap: .cghidEventTap)
+        usleep(50_000)
+    }
+}
+"""
+
+
+class Fuzzer:
+    def __init__(self, seed, dinky):
+        self.rng, self.seed, self.dinky = random.Random(seed), seed, dinky
+        self.history, self.hidden, self.docs = [], set(), 0
+        self.seen, self.found = set(), {}  # violations reported last step; count per class
+        self.landing, self.landings = None, []  # a step's trip to an empty workspace; all of them
+
+    def run(self, *cmd):
+        self.history.append(" ".join(str(c) for c in cmd))
+        return subprocess.run([str(c) for c in cmd], capture_output=True, text=True, timeout=20).returncode == 0
+
+    def cli(self, *args):
+        return self.run(self.dinky, *args)
+
+    def state(self):
+        out = subprocess.run([self.dinky, "debug-state"], capture_output=True, text=True, timeout=10)
+        return json.loads(out.stdout) if out.returncode == 0 else None
+
+    def windows(self, s, where=lambda w: True):
+        return [w for w in s["windows"] if w["bundle-id"] in APPS and where(w)]
+
+    def count(self, s):
+        return len(self.windows(s, lambda w: w["normal"] or w["minimized"] or w["pid"] in self.hidden))
+
+    def visible(self, s):
+        return self.windows(s, lambda w: w["normal"] and w["live-space"] == s["displays"][0]["current-space"])
+
+    # Actions. Each returns False when it does not apply now, and another is drawn.
+
+    def open_doc(self, s):
+        if self.count(s) >= MAX_WINDOWS: return False
+        self.docs += 1
+        with open(f"{DOCS}/doc-{self.docs}.txt", "w") as f: f.write(f"document {self.docs}\n")
+        return self.run("open", "-a", "TextEdit", f"{DOCS}/doc-{self.docs}.txt")
+
+    def reopen_doc(self, s):  # brings an open document forward, or opens a closed one again
+        if not self.docs or self.count(s) >= MAX_WINDOWS: return False
+        return self.run("open", "-a", "TextEdit", f"{DOCS}/doc-{self.rng.randint(1, self.docs)}.txt")
+
+    def open_finder(self, s):
+        if self.count(s) >= MAX_WINDOWS: return False
+        return self.run("open", os.path.expanduser(self.rng.choice(["~", "~/Documents", "~/Downloads", "/Applications"])))
+
+    def open_safari(self, s):
+        return self.count(s) < MAX_WINDOWS and self.run("open", "-a", "Safari")
+
+    def close(self, s):
+        ws = self.visible(s)
+        return self.count(s) > MIN_WINDOWS and bool(ws) and self.cli("debug", "ax-close", self.rng.choice(ws)["id"])
+
+    def quit(self, s):  # TextEdit or Safari, as Cmd-Q would
+        apps = sorted({w["app"] for w in self.windows(s) if w["app"] != "Finder"})
+        return bool(apps) and self.run("pkill", "-x", self.rng.choice(apps))
+
+    def minimize(self, s):
+        ws = self.visible(s)
+        return bool(ws) and self.cli("debug", "ax-minimize", self.rng.choice(ws)["id"])
+
+    def unminimize(self, s):
+        ws = self.windows(s, lambda w: w["minimized"])
+        return bool(ws) and self.cli("debug", "ax-unminimize", self.rng.choice(ws)["id"])
+
+    def hide(self, s):
+        pids = sorted({w["pid"] for w in self.visible(s)} - self.hidden)
+        if not pids: return False
+        pid = self.rng.choice(pids)
+        self.hidden.add(pid)
+        return self.cli("debug", "hide-app", pid)
+
+    def unhide(self, s):
+        if not self.hidden: return False
+        pid = self.rng.choice(sorted(self.hidden))
+        self.hidden.discard(pid)
+        return self.cli("debug", "unhide-app", pid)
+
+    def activate(self, s):  # the Cmd-Tab path: activate an app that has windows somewhere
+        apps = sorted({w["app"] for w in self.windows(s, lambda w: w["normal"] or w["pid"] in self.hidden)})
+        if not apps: return False
+        app = self.rng.choice(apps)
+        self.hidden -= {w["pid"] for w in s["windows"] if w["app"] == app}
+        return self.run("open", "-a", app)
+
+    def workspace(self, s):
+        n = len(s["displays"][0]["workspaces"])
+        return self.cli(*self.rng.choice([["workspace", self.rng.randint(1, n)], ["workspace", "next"],
+                                          ["workspace", "prev"], ["workspace-back-and-forth"]]))
+
+    def move_to_workspace(self, s):
+        n = len(s["displays"][0]["workspaces"])
+        return self.cli("move-window-to-workspace", self.rng.randint(1, n), *(["--follow"] if self.rng.random() < 0.4 else []))
+
+    def native_switch(self, s, direction=None, times=1):
+        if not os.path.exists(KEYS) or open(KEYS + ".swift").read() != KEYS_SOURCE:
+            with open(KEYS + ".swift", "w") as f: f.write(KEYS_SOURCE)
+            subprocess.run(["swiftc", "-O", KEYS + ".swift", "-o", KEYS], check=True)
+        self.cli("mode", "service")
+        ok = self.run(KEYS, direction or self.rng.choice(["left", "right"]), times)
+        time.sleep(0.6 * times)  # each keystroke plays the slide
+        self.cli("mode", "main")
+        return ok
+
+    def go_empty(self, s):
+        """To an empty workspace, by dinky or by the native keystroke, sometimes then activating an app from there."""
+        d = s["displays"][0]
+        occupied = {w["live-space"] for w in s["windows"] if w["normal"] and not w["minimized"]}
+        empty = [i for i, sp in enumerate(d["workspaces"]) if sp not in occupied and sp != d["current-space"]]
+        if not empty or d["current-space"] not in d["workspaces"]: return False
+        i, here = self.rng.choice(empty), d["workspaces"].index(d["current-space"])
+        how = self.rng.choice(["dinky", "native"])
+        if how == "dinky": self.cli("workspace", i + 1)
+        else: self.native_switch(s, "right" if i > here else "left", abs(i - here))
+        if self.rng.random() < 0.4:  # activations within 1 s of a Space change are not followed, by design
+            delay = self.rng.choice([0.5, 1.5])
+            time.sleep(delay)
+            how += f" + activate after {delay} s"
+            self.activate(s)
+        self.landing = (how, i + 1, d["workspaces"][i])
+        return True
+
+    def twin(self, s):
+        """A window shown at exactly the frame of another tile of its app, as Ghostty opens every new window."""
+        pairs = [(a, b) for a in self.visible(s) for b in self.visible(s) if a["id"] != b["id"] and a["pid"] == b["pid"]]
+        if not pairs: return False
+        tile, twin = self.rng.choice(pairs)
+        self.cli("debug", "ax-minimize", twin["id"])
+        time.sleep(1)
+        frame = next((w["live-frame"] for w in self.state()["windows"] if w["id"] == tile["id"]), None)
+        if frame: self.cli("debug", "ax-frame", twin["id"], *[int(v) for v in frame])
+        return self.cli("debug", "ax-unminimize", twin["id"])
+
+    def command(self, s):
+        d = self.rng.choice(["left", "right", "up", "down"])
+        return self.cli(*self.rng.choice([
+            ["focus", d], ["focus", d, "--wrap-around"], ["move", d], ["join-with", d], ["layout", "accordion"],
+            ["layout", "tiles"], ["layout", "floating", "tiling"], ["fullscreen"], ["balance-sizes"],
+            ["resize", "smart", self.rng.choice(["+50", "-50", "+120", "-120"])], ["flatten-workspace-tree"], ["retile"],
+        ]))
+
+    def idle(self, s):
+        self.history.append("idle 2s")
+        time.sleep(2)
+        return True
+
+    ACTIONS = [  # (weight, action); TextEdit documents and moves dominate, so one app often spans two Spaces
+        (6, open_doc), (4, reopen_doc), (2, open_finder), (1, open_safari), (4, close), (1, quit), (2, minimize),
+        (2, unminimize), (1, hide), (2, unhide), (4, activate), (5, workspace), (7, move_to_workspace),
+        (2, native_switch), (5, go_empty), (3, twin), (10, command), (2, idle),
+    ]
+    # Actions after which the display should still be on the same Space.
+    STAYS = {close, quit, minimize, unminimize, hide, twin, command, idle}
+
+    # Invariants
+
+    def check(self, s):
+        """Violations in one state, as {(class, subject): message}. Frames are checked for the fuzzed apps only:
+        Terminal, left open in the VM, snaps to its character grid below the requested size."""
+        v, owner = {}, {}
+        current = {d["current-space"] for d in s["displays"]}
+        numbered = {sp for d in s["displays"] for sp in d["workspaces"]}
+        windows = {w["id"]: w for w in s["windows"]}
+        placements = {p["id"]: p for p in s["placements"]}
+        minimums = {int(k) for k in s["minimum-sizes"]}
+        for t in s["trees"]:
+            for id in t["windows"]:
+                if id in owner: v[("c-two-trees", id)] = f"window {id} is in the trees of Spaces {owner[id]} and {t['space']}"
+                owner[id], w, expected = t["space"], windows.get(id), t["expected"][str(id)]
+                if not w or not w["live-frame"]:
+                    v[("c-gone", id)] = f"window {id} is in the tree of Space {t['space']} but does not exist"
+                elif w["live-space"] != t["space"]:
+                    v[("c-wrong-space", id)] = f"window {id} ({w['app']}) is in the tree of Space {t['space']} but on {w['live-space']}"
+                elif t["space"] in current and id not in minimums and w["bundle-id"] in APPS and not close(w["live-frame"], expected):
+                    v[("a-frame", id)] = f"window {id} ({w['app']}) is at {w['live-frame']}, expected {expected}"
+            if t["space"] not in current: continue
+            ids = [i for i in t["windows"] if windows.get(i, {}).get("live-frame") and i not in minimums]
+            for i, a in enumerate(ids):
+                for b in ids[i + 1:]:
+                    if not overlap(t["expected"][str(a)], t["expected"][str(b)]) and overlap(windows[a]["live-frame"], windows[b]["live-frame"]):
+                        v[("b-overlap", (a, b))] = f"tiles {a} and {b} overlap on Space {t['space']}"
+        for w in s["windows"]:
+            p = placements.get(w["id"])
+            if w["normal"] and not w["minimized"] and w["live-space"] in current & numbered and \
+                    (not p or not p["floating"] and p["space"] != w["live-space"]):
+                v[("d-untracked", w["id"])] = f"window {w['id']} ({w['app']}) is shown on Space {w['live-space']} but placed {p}"
+        p = placements.get(s["focused"])
+        if p and not p["floating"] and p["space"] and p["space"] not in current:
+            v[("e-focus-hidden", s["focused"])] = f"focused window {s['focused']} is tiled on hidden Space {p['space']}"
+        out = subprocess.run([self.dinky, "list-workspaces", "--focused"], capture_output=True, text=True).stdout.strip()
+        d = s["displays"][0]
+        if out.isdigit() and d["workspaces"][int(out) - 1] != d["current-space"]:
+            v[("f-focused-workspace", 0)] = f"list-workspaces --focused says {out}, the display is on Space {d['current-space']}"
+        return v
+
+    def shifts(self, a, b):
+        """What changed between two states with nothing happening in between. A window shown or hidden late explains
+        any change, and a tile still settling towards its expected frame is not a shift."""
+        shown = lambda s: {w["id"] for w in s["windows"] if w["normal"] and not w["minimized"]}
+        if shown(a) != shown(b): return {}
+        v, sa, sb = {}, summary(a), summary(b)
+        if sa["current"] != sb["current"]:
+            v[("shift-space", 0)] = f"the current Space changed while idle: {sa['current']} -> {sb['current']}"
+        if sa["trees"] != sb["trees"]:
+            v[("shift-tree", 0)] = "a tree changed while idle"
+        for id in sa["frames"].keys() & sb["frames"].keys():
+            if close(sa["frames"][id], sa["expected"][id]) and not close(sa["frames"][id], sb["frames"][id]):
+                v[("shift-frame", id)] = f"tiled window {id} moved while idle: {sa['frames'][id]} -> {sb['frames'][id]}"
+        return v
+
+    # The run
+
+    def report(self, step, violations, before, after):
+        new = {k: m for k, m in violations.items() if k not in self.seen}
+        self.seen = set(violations)
+        for kind, _ in new: self.found[kind] = self.found.get(kind, 0) + 1
+        if not new: return
+        print(f"\n=== VIOLATION seed {self.seed} step {step}")
+        for message in new.values(): print("  " + message)
+        print("  last actions:\n    " + "\n    ".join(self.history[-10:]))
+        print("  diff:\n    " + "\n    ".join(diff(before, after) or ["(none)"]))
+
+    def setup(self):
+        """No TextEdit windows (nothing restored), no Finder or Safari windows on any workspace, on workspace 1."""
+        subprocess.run(["pkill", "-x", "TextEdit"])
+        subprocess.run(["defaults", "write", "com.apple.TextEdit", "NSQuitAlwaysKeepsWindows", "-bool", "false"])
+        subprocess.run(["defaults", "write", "com.apple.TextEdit", "ApplePersistenceIgnoreState", "-bool", "true"])
+        subprocess.run(["rm", "-rf", DOCS])
+        os.makedirs(DOCS)
+        for n in range(1, len(self.state()["displays"][0]["workspaces"]) + 1):
+            self.cli("workspace", n)
+            time.sleep(0.5)
+            for w in self.visible(self.state()): self.cli("debug", "ax-close", w["id"])
+        self.cli("workspace", 1)
+        time.sleep(1)
+        for _ in range(MIN_WINDOWS): self.open_doc(self.state()); time.sleep(1.5)
+        time.sleep(1)
+
+    def fuzz(self, steps):
+        self.setup()
+        s = self.state()
+        weights, actions = zip(*self.ACTIONS)
+        for step in range(1, steps + 1):
+            start = len(self.history)
+            action = self.rng.choices(actions, weights)[0]
+            while not action(self, s):
+                start, action = len(self.history), self.rng.choices(actions, weights)[0]
+            print(f"{step:4} " + "; ".join(self.history[start:]), flush=True)
+            time.sleep(0.8)
+            after = self.state()
+            time.sleep(1.5)
+            idle = self.state()
+            if after is None or idle is None:
+                self.found["app-died"] = 1
+                print(f"\n=== VIOLATION seed {self.seed} step {step}: the app is gone (no socket)")
+                print("  last actions:\n    " + "\n    ".join(self.history[-10:]))
+                break
+            checked = self.check(idle)
+            late = self.check(after).keys() - checked.keys()
+            if late: print("       settled late: " + ", ".join(f"{k} {i}" for k, i in sorted(late, key=str)))
+            checked.update(self.shifts(after, idle))
+            if action in self.STAYS and after["displays"][0]["current-space"] != s["displays"][0]["current-space"]:
+                checked[("g-bounce", action.__name__)] = f"{action.__name__} moved the display to Space {after['displays'][0]['current-space']}"
+            if self.landing: self.note_landing(idle)
+            self.report(step, checked, s, idle)
+            s = idle
+        for how in sorted({l[0] for l in self.landings}):
+            ls = [l for l in self.landings if l[0] == how]
+            print(f"empty workspace by {how}: {len(ls)}, stayed {sum(w == f'workspace {n}' for _, n, w in ls)}")
+        print(f"\nseed {self.seed}: {step} steps, " + (", ".join(f"{k} x{n}" for k, n in sorted(self.found.items())) or "no violations"))
+        return 1 if self.found else 0
+
+    def note_landing(self, s):
+        how, n, space = self.landing
+        d, self.landing = s["displays"][0], None
+        where = f"workspace {d['workspaces'].index(d['current-space']) + 1}" if d["current-space"] in d["workspaces"] else "a full-screen Space"
+        self.landings.append((how, n, where))
+        print(f"       empty workspace {n} by {how}: " + ("stayed" if d["current-space"] == space else f"now on {where}"))
+
+
+def close(a, b, within=2):
+    return all(abs(x - y) <= within for x, y in zip([a[0], a[1], a[0] + a[2], a[1] + a[3]], [b[0], b[1], b[0] + b[2], b[1] + b[3]]))
+
+
+def overlap(a, b, by=2):
+    return min(a[0] + a[2], b[0] + b[2]) - max(a[0], b[0]) > by and min(a[1] + a[3], b[1] + b[3]) - max(a[1], b[1]) > by
+
+
+def summary(s):
+    """The current Spaces, focus, trees by Space, and the live and expected frames of tiled windows on screen."""
+    current = {d["current-space"] for d in s["displays"]}
+    live = {w["id"]: w["live-frame"] for w in s["windows"]}
+    shown = [t for t in s["trees"] if t["space"] in current]
+    return {"current": [d["current-space"] for d in s["displays"]], "focused": s["focused"],
+            "trees": {t["space"]: (t["mode"], t["windows"], t["fullscreen"]) for t in s["trees"] if t["windows"]},
+            "frames": {i: live[i] for t in shown for i in t["windows"] if live.get(i)},
+            "expected": {i: t["expected"][str(i)] for t in shown for i in t["windows"]}}
+
+
+def diff(a, b):
+    sa, sb = summary(a), summary(b)
+    lines = [f"{k}: {sa[k]} -> {sb[k]}" for k in ("current", "focused") if sa[k] != sb[k]]
+    for space in sorted(sa["trees"].keys() | sb["trees"].keys()):
+        if sa["trees"].get(space) != sb["trees"].get(space):
+            lines.append(f"tree {space}: {sa['trees'].get(space)} -> {sb['trees'].get(space)}")
+    for id in sorted(sa["frames"].keys() | sb["frames"].keys()):
+        fa, fb = sa["frames"].get(id), sb["frames"].get(id)
+        if fa is None or fb is None or not close(fa, fb): lines.append(f"frame {id}: {fa} -> {fb}")
+    return lines
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--seed", type=int, default=1)
+    parser.add_argument("--steps", type=int, default=150)
+    parser.add_argument("--dinky", default=os.path.expanduser("~/dinky-fuzz"))
+    args = parser.parse_args()
+    sys.exit(Fuzzer(args.seed, args.dinky).fuzz(args.steps))

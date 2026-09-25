@@ -64,6 +64,9 @@ extension Command {
             description: "Print displays as 'number | name'. Format variables: " + vars(MonitorQuery.variables) + "."),
         Doc(syntax: "list-displays [--focused [no]] [--format <format>]",
             description: "The same as list-monitors."),
+        Doc(syntax: "debug-state",
+            description: "Print the tiling state as JSON: displays, each workspace's tree and expected frames, "
+                + "placements and windows. For tests and bug reports."),
         Doc(syntax: "exec-and-forget <shell command>",
             description: "Run the rest of the line with /bin/sh -c without waiting. Its output goes to dinky's log."),
     ]

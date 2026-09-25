@@ -89,6 +89,8 @@ extension Command {
             return .listWorkspaces(try WorkspaceQuery(parsing: args))
         case "list-monitors", "list-displays":
             return .listMonitors(try MonitorQuery(parsing: args))
+        case "debug-state":
+            return none ? .debugState : nil
         default:
             return nil
         }
