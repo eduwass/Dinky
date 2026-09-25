@@ -9,7 +9,7 @@ extension Workspace {
     /// so stacked accordion children still have a left and right. Ties go to the most recently focused window.
     public func neighbor(of id: WindowID, _ direction: Direction) -> WindowID? {
         var layout = Layout()
-        root.layout(in: bounds, gap: 0, padding: 0, virtual: true, into: &layout)
+        root.layout(in: bounds, gaps: .zero, padding: 0, virtual: true, into: &layout)
         guard let from = layout.frames[id] else { return nil }
         let candidates = layout.order.compactMap { other -> (id: WindowID, distance: CGFloat)? in
             guard other != id, let to = layout.frames[other] else { return nil }
@@ -116,7 +116,7 @@ extension Workspace {
             guard parent.mode == .tiles, parent.children.count > 1, axis ?? parent.orientation == parent.orientation else { continue }
             let rect = root.rect(at: path, in: gaps.inset(bounds))
             let extent = parent.orientation == .horizontal ? rect.width : rect.height
-            let smallest = parent.children[index].minimumExtent(parent.orientation, gap: gaps.inner, padding: accordionPadding, minimumSizes)
+            let smallest = parent.children[index].minimumExtent(parent.orientation, gap: gaps.inner(parent.orientation), padding: accordionPadding, minimumSizes)
             let old = parent.ratios[index]
             let smallestOther = parent.ratios.enumerated().filter { $0.offset != index }.map(\.element).min()!
             let lower = max(Self.minimumRatio, min(Double(smallest / extent), old))

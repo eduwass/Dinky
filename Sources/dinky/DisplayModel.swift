@@ -45,6 +45,9 @@ final class DisplayModel {
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
     private(set) var previousSpaceIDs: [String: UInt64] = [:]
     private var observers: [(DisplayModel) -> Void] = []
+    /// The UUID of a display `focus-monitor` focused without a window to focus there. It stands in for the
+    /// focused window's display until focus next changes.
+    var focusOverride: String?
     private var started = false
 
     func start() {
@@ -87,8 +90,10 @@ final class DisplayModel {
         observers.append(handler)
     }
 
-    /// The display of the focused window, else the one under the cursor, else the main display.
+    /// The display chosen by `focus-monitor`, else that of the focused window, else the one under the cursor,
+    /// else the main display.
     func focusedDisplay() -> Display? {
+        if let chosen = displays.first(where: { $0.uuid == focusOverride }) { return chosen }
         let wid = frontWindowID()
         if wid != 0, let display = display(ofWindow: wid) { return display }
         if let cursor = CGEvent(source: nil)?.location, let display = displays.first(where: { $0.frame.contains(cursor) }) {

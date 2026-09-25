@@ -1,8 +1,10 @@
 import CoreGraphics
 
-/// Gaps in points: `inner` between siblings, the rest at the workspace edge.
+/// Gaps in points: `horizontal` between side-by-side siblings, `vertical` between stacked ones,
+/// the rest at the workspace edge.
 public struct Gaps: Equatable, Sendable {
-    public var inner: CGFloat
+    public var horizontal: CGFloat
+    public var vertical: CGFloat
     public var top: CGFloat
     public var bottom: CGFloat
     public var left: CGFloat
@@ -11,18 +13,27 @@ public struct Gaps: Equatable, Sendable {
     /// No gaps at all.
     public static let zero = Gaps(inner: 0, top: 0, bottom: 0, left: 0, right: 0)
 
-    public init(inner: CGFloat, top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) {
-        self.inner = inner
+    public init(horizontal: CGFloat, vertical: CGFloat, top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) {
+        self.horizontal = horizontal
+        self.vertical = vertical
         self.top = top
         self.bottom = bottom
         self.left = left
         self.right = right
     }
 
+    /// The same inner gap along both axes.
+    public init(inner: CGFloat, top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) {
+        self.init(horizontal: inner, vertical: inner, top: top, bottom: bottom, left: left, right: right)
+    }
+
     /// The same gap everywhere.
     public init(all: CGFloat) {
         self.init(inner: all, top: all, bottom: all, left: all, right: all)
     }
+
+    /// The gap between siblings of a container running along `axis`.
+    public func inner(_ axis: Orientation) -> CGFloat { axis == .horizontal ? horizontal : vertical }
 
     /// `rect` shrunk by the outer gaps. Rects are top-left origin, as AX uses.
     public func inset(_ rect: CGRect) -> CGRect {
@@ -45,12 +56,12 @@ public struct Layout: Equatable, Sendable {
 }
 
 extension Container {
-    /// Lay out this container in `rect`: tiles split by ratios with `gap` between siblings,
+    /// Lay out this container in `rect`: tiles split by ratios with the inner gap for its axis between siblings,
     /// accordion children overlap with neighbours peeking out by `padding`. `virtual` lays accordions out as tiles.
     /// `minimums` are sizes windows refused to go below; tiles grow to them when their siblings can give the space.
-    func layout(in rect: CGRect, gap: CGFloat, padding: CGFloat, minimums: [WindowID: CGSize] = [:],
+    func layout(in rect: CGRect, gaps: Gaps, padding: CGFloat, minimums: [WindowID: CGSize] = [:],
                 virtual: Bool = false, into result: inout Layout) {
-        let tiled = mode == .tiles || virtual
+        let tiled = mode == .tiles || virtual, gap = gaps.inner(orientation)
         let rects = tiled
             ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(orientation, gap: gap, padding: padding, minimums) })
             : accordionRects(in: rect, padding: padding)
@@ -60,7 +71,7 @@ extension Container {
                 result.frames[id] = rects[i]
                 result.order.append(id)
             case .container(let c):
-                c.layout(in: rects[i], gap: gap, padding: padding, minimums: minimums, virtual: virtual, into: &result)
+                c.layout(in: rects[i], gaps: gaps, padding: padding, minimums: minimums, virtual: virtual, into: &result)
             }
         }
     }

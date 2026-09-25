@@ -82,8 +82,10 @@ The config lives at `~/.config/dinky/dinky.toml`. It is TOML, with key names tak
 
 | Key | Default | Meaning |
 |---|---|---|
-| `inner` | `8` | Points between tiled windows. |
-| `outer` | `8` on every side | Points between tiled windows and the screen edge. Either one number, `outer = 8`, or a table `outer = { top = 8, bottom = 8, left = 8, right = 8 }`; sides left out of the table are 0. |
+| `inner` | `8` | Points between tiled windows. One value for both axes, or AeroSpace's `inner.horizontal` (between side-by-side windows) and `inner.vertical` (between stacked ones); an axis left out is 0. |
+| `outer` | `8` on every side | Points between tiled windows and the screen edge. One value, `outer = 8`, or per side, `outer = { top = 8, bottom = 8, left = 8, right = 8 }` or `outer.top = 8`; sides left out are 0. |
+
+Every gap value can instead be a per-display list, as in AeroSpace: `outer.top = [{ monitor."built-in" = 12 }, { monitor.main = 44 }, 8]`. Entries are tried in order and the first that matches the display wins; a bare number matches every display, so put it last as the fallback. With no match the gap is 0. Patterns are `main` (the main display in System Settings), `secondary` (the other one, when there are exactly two), or a case-insensitive substring of the display's name as `dinky list-monitors` prints it, such as `built-in` or `dell`. AeroSpace treats that last kind as a regex and also takes display numbers; dinky matches plain substrings only.
 
 ### `[borders]`
 
@@ -240,13 +242,15 @@ Bindings, the command line and the menu bar share one set of commands. `dinky he
 | `workspace-back-and-forth` | Switch to the workspace that was focused before the current one. |
 | `move-window-to-workspace <number\|prev\|next> [--follow]` | Move the focused window to a workspace. With `--follow`, switch there too. |
 | `move-window-to-display <next\|prev> [--follow]` | Move the focused window to the next or previous display. With `--follow`, focus it there. |
-| `focus <left\|down\|up\|right>` | Focus the nearest window in a direction. |
+| `focus <left\|down\|up\|right> [--boundaries <b>] [--boundaries-action <a>]` | Focus the nearest window in a direction. `--boundaries` is `workspace` (the default) or `all-monitors-outer-frame`, which at the workspace edge goes on to the display in that direction and focuses its window nearest that edge. `--boundaries-action` says what happens at the last edge: `stop` (the default), `fail`, `wrap-around-the-workspace`, or, with `all-monitors-outer-frame`, `wrap-around-all-monitors`. `--wrap-around` is short for `--boundaries-action wrap-around-the-workspace`. |
+| `focus-monitor <left\|down\|up\|right\|next\|prev>` | Focus a display: its most recently focused window, or, when its workspace is empty, the display itself, so workspace commands act on it until focus next changes. |
 | `move <left\|down\|up\|right>` | Move the focused window in a direction within the layout tree. |
 | `join-with <left\|down\|up\|right>` | Put the focused window and its neighbour in a new container. |
 | `resize <smart\|width\|height> <+N\|-N>` | Grow or shrink the focused window by N points. |
 | `layout <tiles\|accordion\|floating\|tiling>...` | Set the layout of the focused window's container, or float or tile the window. With several, apply the first that is not current, so `layout floating tiling` toggles. |
 | `fullscreen` | Toggle the focused window filling the workspace. The tree is kept. This is not macOS full screen. |
 | `flatten-workspace-tree` | Put every window on the workspace back into one flat container. |
+| `balance-sizes` | Give every window on the focused workspace an equal share of its container. |
 | `retile` | Re-read every window and re-apply the layout of every workspace on screen. |
 | `mode <name>` | Switch to a binding mode from the config, such as `main` or `service`. |
 | `reload-config` | Reload `~/.config/dinky/dinky.toml`. On an error the previous config stays. |
@@ -306,9 +310,11 @@ exec-on-workspace-change = ['/bin/bash', '-c',
 # dinky commands, run when the focused window changes (debounced by 50 ms) and when the binding mode changes.
 on-focus-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
 on-mode-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
+# dinky commands, run once when dinky starts, after it has read the windows and displays.
+after-startup-command = ['exec-and-forget brew services restart sketchybar']
 ```
 
-`exec-on-workspace-change` gets `DINKY_FOCUSED_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_MONITOR_ID` (the display that switched), and the first two again as `AEROSPACE_FOCUSED_WORKSPACE` and `AEROSPACE_PREV_WORKSPACE` so AeroSpace scripts keep working. Programs started by callbacks and `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Nothing fires while dinky starts up.
+`exec-on-workspace-change` gets `DINKY_FOCUSED_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_MONITOR_ID` (the display that switched), and the first two again as `AEROSPACE_FOCUSED_WORKSPACE` and `AEROSPACE_PREV_WORKSPACE` so AeroSpace scripts keep working. Programs started by callbacks and `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Apart from `after-startup-command`, nothing fires while dinky starts up.
 
 ## Status
 

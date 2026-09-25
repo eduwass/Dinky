@@ -19,8 +19,16 @@ extension Command {
             description: "Move the focused window to a workspace. With --follow, switch there too."),
         Doc(syntax: "move-window-to-display <next|prev> [--follow]",
             description: "Move the focused window to the next or previous display's current workspace. With --follow, focus it there."),
-        Doc(syntax: "focus <left|down|up|right>",
-            description: "Focus the neighbouring window in a direction in the layout tree. Never switches workspace."),
+        Doc(syntax: "focus <left|down|up|right> [--boundaries workspace|all-monitors-outer-frame] "
+                + "[--boundaries-action stop|fail|wrap-around-the-workspace|wrap-around-all-monitors]",
+            description: "Focus the neighbouring window in a direction in the layout tree. At the workspace edge, "
+                + "--boundaries all-monitors-outer-frame goes on to the display in that direction and focuses the window "
+                + "at its near edge. At the last edge, --boundaries-action stops (the default), fails, wraps to the far "
+                + "side of the workspace, or, with all-monitors-outer-frame, to the display at the far side. "
+                + "--wrap-around is short for --boundaries-action wrap-around-the-workspace. Never switches workspace."),
+        Doc(syntax: "focus-monitor <left|down|up|right|next|prev>",
+            description: "Focus the display in a direction, or the next or previous one: its most recently focused window, "
+                + "or the display itself when its workspace is empty, so workspace commands act on it."),
         Doc(syntax: "move <left|down|up|right>",
             description: "Move the focused window in a direction within the layout tree."),
         Doc(syntax: "join-with <left|down|up|right>",
@@ -34,6 +42,8 @@ extension Command {
             description: "Toggle the focused window filling the workspace. The tree is kept."),
         Doc(syntax: "flatten-workspace-tree",
             description: "Put every window on the workspace back into one flat container."),
+        Doc(syntax: "balance-sizes",
+            description: "Give every window on the focused workspace an equal share of its container."),
         Doc(syntax: "retile",
             description: "Re-read every window and re-apply the layout of every workspace on screen."),
         Doc(syntax: "mode <name>",

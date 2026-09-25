@@ -24,6 +24,15 @@ public enum Direction: Equatable, Sendable, CaseIterable {
     public var orientation: Orientation { self == .left || self == .right ? .horizontal : .vertical }
     /// True for right and down, the directions of increasing child index.
     public var isForward: Bool { self == .right || self == .down }
+    /// The direction pointing the other way.
+    public var opposite: Direction {
+        switch self {
+        case .left: .right
+        case .right: .left
+        case .up: .down
+        case .down: .up
+        }
+    }
 }
 
 /// A node in the tree: a window leaf or a container.
@@ -92,6 +101,17 @@ public struct Container: Equatable, Sendable {
     mutating func setRatios(_ new: [Double]) {
         precondition(new.count == children.count)
         ratios = new
+    }
+
+    /// Equal ratios here and in every container below.
+    mutating func balance() {
+        ratios = children.map { _ in 1 / Double(children.count) }
+        for i in children.indices {
+            if case .container(var c) = children[i] {
+                c.balance()
+                children[i] = .container(c)
+            }
+        }
     }
 
     /// Path (child indices from this container) to a window, if present.

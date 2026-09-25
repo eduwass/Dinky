@@ -8,7 +8,9 @@ public enum Command: Equatable, Sendable {
     case workspaceBackAndForth
     case moveWindowToWorkspace(WorkspaceTarget, follow: Bool)
     case moveWindowToDisplay(DisplayTarget, follow: Bool)
-    case focus(Direction)
+    /// Focus the neighbour in a direction. `boundaries` says where the search stops, `action` what happens there.
+    case focus(Direction, boundaries: FocusBoundaries = .workspace, action: BoundariesAction = .stop)
+    case focusMonitor(MonitorTarget)
     case move(Direction)
     case joinWith(Direction)
     case resize(ResizeDimension, by: Int)
@@ -17,6 +19,7 @@ public enum Command: Equatable, Sendable {
     case layout([LayoutName])
     case fullscreen
     case flattenWorkspaceTree
+    case balanceSizes
     case retile
     case mode(String)
     case reloadConfig
@@ -36,6 +39,28 @@ public enum WorkspaceTarget: Equatable, Sendable {
 
 public enum DisplayTarget: String, Equatable, Sendable {
     case prev, next
+}
+
+/// Where `focus` looks: the focused workspace's tree, or on across displays up to their outer frame.
+public enum FocusBoundaries: String, Equatable, Sendable {
+    case workspace
+    case allMonitorsOuterFrame = "all-monitors-outer-frame"
+}
+
+/// What `focus` does at its boundary: nothing and succeed, fail, or wrap to the far side of the
+/// workspace or of all the displays.
+public enum BoundariesAction: String, Equatable, Sendable {
+    case stop, fail
+    case wrapAroundTheWorkspace = "wrap-around-the-workspace"
+    case wrapAroundAllMonitors = "wrap-around-all-monitors"
+}
+
+/// A display relative to the focused one: in a direction by frame, or next and previous in display order.
+public enum MonitorTarget: String, Equatable, Sendable {
+    case left, right, up, down, next, prev
+
+    /// The direction for left, right, up and down; nil for next and prev.
+    public var direction: Direction? { Direction(rawValue) }
 }
 
 public enum ResizeDimension: String, Equatable, Sendable {

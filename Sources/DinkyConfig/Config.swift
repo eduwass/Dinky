@@ -25,6 +25,8 @@ public struct Config: Equatable {
     public var onFocusChanged: [String] = []
     /// Commands run when the binding mode changes.
     public var onModeChanged: [String] = []
+    /// Commands run once, after dinky has first read the windows and displays.
+    public var afterStartupCommand: [String] = []
 
     public init() {}
 
@@ -82,6 +84,7 @@ public struct Config: Equatable {
         execOnWorkspaceChange = try t.strings("exec-on-workspace-change") ?? []
         onFocusChanged = try t.strings("on-focus-changed") ?? []
         onModeChanged = try t.strings("on-mode-changed") ?? []
+        afterStartupCommand = try t.strings("after-startup-command") ?? []
         if let modeTable = try t.table("mode") {
             for name in modeTable.keys {
                 modes[name] = try Mode(modeTable.table(name)!)
@@ -108,36 +111,56 @@ public struct Layout: Equatable {
     }
 }
 
+/// Gaps in points. Each value is a number or a per-display list, see `PerMonitor`.
 public struct Gaps: Equatable {
-    public var inner = 8
+    public var inner = Inner(8)
     public var outer = Sides(8)
 
     public init() {}
 
     init(_ t: Table) throws {
-        inner = try t.int("inner") ?? inner
-        // `outer = 8` or `outer = { top = 8, bottom = 8, left = 8, right = 8 }`.
-        if let all = try? t.int("outer") {
-            outer = Sides(all)
-        } else if let sides = try t.table("outer") {
-            outer = try Sides(sides)
+        // `inner = 8`, or AeroSpace's `inner.horizontal = 8` and `inner.vertical = 8`.
+        if t.isTable("inner") {
+            inner = try Inner(t.table("inner")!)
+        } else {
+            inner = try t.perMonitor("inner").map(Inner.init) ?? inner
         }
+        // `outer = 8`, or per side: `outer = { top = 8, ... }`, `outer.top = 8`.
+        if t.isTable("outer") {
+            outer = try Sides(t.table("outer")!)
+        } else {
+            outer = try t.perMonitor("outer").map(Sides.init) ?? outer
+        }
+        try t.done()
+    }
+}
+
+/// The gap between side-by-side windows (`horizontal`) and between stacked ones (`vertical`).
+public struct Inner: Equatable {
+    public var horizontal, vertical: PerMonitor
+
+    public init(_ both: PerMonitor) { (horizontal, vertical) = (both, both) }
+
+    init(_ t: Table) throws {
+        self.init(0)
+        horizontal = try t.perMonitor("horizontal") ?? 0
+        vertical = try t.perMonitor("vertical") ?? 0
         try t.done()
     }
 }
 
 /// Per-side gaps. Sides left out of a table are 0.
 public struct Sides: Equatable {
-    public var top, bottom, left, right: Int
+    public var top, bottom, left, right: PerMonitor
 
-    public init(_ all: Int) { (top, bottom, left, right) = (all, all, all, all) }
+    public init(_ all: PerMonitor) { (top, bottom, left, right) = (all, all, all, all) }
 
     init(_ t: Table) throws {
         self.init(0)
-        top = try t.int("top") ?? 0
-        bottom = try t.int("bottom") ?? 0
-        left = try t.int("left") ?? 0
-        right = try t.int("right") ?? 0
+        top = try t.perMonitor("top") ?? 0
+        bottom = try t.perMonitor("bottom") ?? 0
+        left = try t.perMonitor("left") ?? 0
+        right = try t.perMonitor("right") ?? 0
         try t.done()
     }
 }

@@ -7,6 +7,11 @@ extension Coordinator {
     /// Whether dinky floats the window; nil for a window it has not classified.
     func isFloating(_ id: WindowID) -> Bool? { placements[id]?.floating }
 
+    /// The tree of the display's current Space, if dinky has one.
+    func workspace(on display: Display) -> Workspace? {
+        workspaces[SpaceKey(display: display.uuid, space: display.currentSpaceID)]
+    }
+
     /// The container holding a tiled window.
     func container(of id: WindowID) -> Container? {
         placements[id]?.space.flatMap { workspaces[$0]?.container(of: id) }

@@ -102,6 +102,18 @@ final class Table {
         return commands
     }
 
+    /// Whether `key` is present, marking it read.
+    func contains(_ key: String) -> Bool { use(key) }
+
+    /// The raw array at `key`, nil if absent or not an array. Marks it read.
+    func array(_ key: String) throws -> TOMLArray? {
+        guard use(key) else { return nil }
+        return try? table.array(forKey: key)
+    }
+
+    /// Whether the value at `key` is a table.
+    func isTable(_ key: String) -> Bool { (try? table.table(forKey: key)) != nil }
+
     func done() throws {
         if let unknown = keys.first(where: { !used.contains($0) }) {
             throw ConfigError(path: path(unknown), "unknown key")

@@ -2,8 +2,9 @@ import Foundation
 
 // The config's callbacks, named as in AeroSpace: `exec-on-workspace-change` when any display's current
 // workspace changes (dinky's switches and native ones alike), `on-focus-changed` when the focused window
-// changes, debounced, and `on-mode-changed` when the binding mode changes. Started once the coordinator
-// has read the windows and displays, so startup fires nothing. Main thread only.
+// changes, debounced, `on-mode-changed` when the binding mode changes, and `after-startup-command` once.
+// Started once the coordinator has read the windows and displays, so startup fires nothing but
+// `after-startup-command`. Main thread only.
 final class Callbacks {
     /// The workspace number each display was last seen on, by UUID; "" off the numbered workspaces.
     private var workspaces: [String: String] = [:]
@@ -15,6 +16,7 @@ final class Callbacks {
         state.displays.observe { [weak self] in self?.displaysChanged($0) }
         state.coordinator?.onFocusChange = { [weak self] in self?.focusChanged() }
         state.hotkeys.onModeChange = { _ in run(AppState.shared.config.onModeChanged) }
+        run(state.config.afterStartupCommand)
     }
 
     private func displaysChanged(_ model: DisplayModel) {

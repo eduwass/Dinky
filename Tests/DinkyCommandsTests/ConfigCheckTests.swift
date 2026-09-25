@@ -53,4 +53,12 @@ final class ConfigCheckTests: XCTestCase {
         XCTAssertEqual(findings.count, 1)
         XCTAssertTrue(findings[0].message.hasPrefix("on-focus-changed:"))
     }
+
+    func testAfterStartupAndNewCommandsAreChecked() throws {
+        let findings = try check("""
+        after-startup-command = ['exec-and-forget true', 'balance-sizes', 'focus-monitor next', 'focus left --boundaries nowhere']
+        """)
+        XCTAssertEqual(findings.map(\.level), [.warning, .error])
+        XCTAssertTrue(findings[1].message.hasPrefix("after-startup-command:"), findings[1].message)
+    }
 }

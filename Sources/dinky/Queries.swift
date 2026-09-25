@@ -124,9 +124,7 @@ private struct QueryState {
 
     func monitorValues(_ index: Int) -> [String: String] {
         let display = displays[index]
-        let number = NSDeviceDescriptionKey("NSScreenNumber")
-        let screen = NSScreen.screens.first { ($0.deviceDescription[number] as? NSNumber)?.uint32Value == display.id }
-        return ["monitor-id": "\(index + 1)", "monitor-name": screen?.localizedName ?? "", "monitor-is-main": "\(display.isMain)"]
+        return ["monitor-id": "\(index + 1)", "monitor-name": display.name, "monitor-is-main": "\(display.isMain)"]
     }
 
     /// Values for the 0-based workspace `n` of a display.

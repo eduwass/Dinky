@@ -42,6 +42,7 @@ public func checkConfig(_ config: Config, keyIsKnown: (String) -> Bool) -> [Conf
     }
     check(config.onFocusChanged, at: "on-focus-changed")
     check(config.onModeChanged, at: "on-mode-changed")
+    check(config.afterStartupCommand, at: "after-startup-command")
     if let program = config.execOnWorkspaceChange.first, program.isEmpty {
         findings.append(.init(level: .error, message: "exec-on-workspace-change: the first element must be the program"))
     }

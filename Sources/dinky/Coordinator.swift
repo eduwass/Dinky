@@ -73,10 +73,8 @@ final class Coordinator {
         } else {
             borders = nil
         }
-        for key in workspaces.keys {
-            workspaces[key]!.gaps = DinkyLayout.Gaps(config.gaps)
-            workspaces[key]!.accordionPadding = CGFloat(config.layout.accordionPadding)
-        }
+        for key in workspaces.keys { workspaces[key]!.accordionPadding = CGFloat(config.layout.accordionPadding) }
+        fitToDisplays()
         dirty.formUnion(workspaces.keys)
         flush()
     }
@@ -98,12 +96,21 @@ final class Coordinator {
         model.reconcile()
         for window in model.windows.values.sorted(by: { $0.id < $1.id }) { track(window) }
         for id in placements.keys where model.windows[id] == nil { forget(id) }
-        for display in displays.displays {
-            for key in workspaces.keys where key.display == display.uuid { workspaces[key]!.bounds = area(of: display) }
-        }
+        fitToDisplays()
         syncFocus()
         dirty.formUnion(workspaces.keys)
         flush()
+    }
+
+    /// Bounds and gaps of every tree from its display, which can have moved, resized or become main.
+    private func fitToDisplays() {
+        for display in displays.displays {
+            let gaps = DinkyLayout.Gaps(config.gaps, on: displays.monitor(display))
+            for key in workspaces.keys where key.display == display.uuid {
+                workspaces[key]!.bounds = display.visibleArea
+                workspaces[key]!.gaps = gaps
+            }
+        }
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
@@ -159,6 +166,7 @@ final class Coordinator {
         let id = focusedWindow
         if id != lastFocused {
             lastFocused = id
+            displays.focusOverride = nil
             onFocusChange?()
         }
         if let focusing, focusing.id != id, Date() < focusing.until { return }
@@ -173,7 +181,7 @@ final class Coordinator {
               display.workspaces.contains(window.spaceID) else { return nil }
         let key = SpaceKey(display: display.uuid, space: window.spaceID)
         if workspaces[key] == nil {
-            workspaces[key] = Workspace(bounds: area(of: display), gaps: DinkyLayout.Gaps(config.gaps),
+            workspaces[key] = Workspace(bounds: display.visibleArea, gaps: DinkyLayout.Gaps(config.gaps, on: displays.monitor(display)),
                                         accordionPadding: CGFloat(config.layout.accordionPadding),
                                         mode: config.layout.default == .accordion ? .accordion : .tiles)
         }
@@ -230,22 +238,5 @@ final class Coordinator {
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
         applier.minimumSizes.filter { workspace.contains($0.key) }
-    }
-}
-
-/// The display's frame minus menu bar and Dock, in CG coordinates (top-left origin at the primary display).
-private func area(of display: Display) -> CGRect {
-    let number = NSDeviceDescriptionKey("NSScreenNumber")
-    guard let primary = NSScreen.screens.first,
-          let screen = NSScreen.screens.first(where: { ($0.deviceDescription[number] as? NSNumber)?.uint32Value == display.id })
-    else { return display.frame }
-    let visible = screen.visibleFrame
-    return CGRect(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
-}
-
-extension DinkyLayout.Gaps {
-    init(_ gaps: DinkyConfig.Gaps) {
-        self.init(inner: CGFloat(gaps.inner), top: CGFloat(gaps.outer.top), bottom: CGFloat(gaps.outer.bottom),
-                  left: CGFloat(gaps.outer.left), right: CGFloat(gaps.outer.right))
     }
 }

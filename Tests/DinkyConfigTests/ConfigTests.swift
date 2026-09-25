@@ -10,7 +10,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.workspaces, 5)
         XCTAssertEqual(config.layout.default, .tiles)
         XCTAssertEqual(config.layout.accordionPadding, 30)
-        XCTAssertEqual(config.gaps.inner, 8)
+        XCTAssertEqual(config.gaps.inner, Inner(8))
         XCTAssertEqual(config.gaps.outer, Sides(8))
         XCTAssertTrue(config.borders.enabled)
         XCTAssertEqual(config.borders.width, 4)
@@ -54,7 +54,7 @@ final class ConfigTests: XCTestCase {
     }
 
     func testBadTypeFails() {
-        assertError("[gaps]\ninner = 'wide'\n", path: "gaps.inner", line: 2, contains: "expected an integer")
+        assertError("[gaps]\ninner = 'wide'\n", path: "gaps.inner", line: 2, contains: "expected a number or a list")
         assertError("workspaces = true\n", path: "workspaces", line: 1, contains: "expected an integer")
         assertError("gaps = 8\n", path: "gaps", line: 1, contains: "expected a table")
         assertError("[layout]\ndefault = 'stack'\n", path: "layout.default", line: 2, contains: "'tiles', 'accordion'")

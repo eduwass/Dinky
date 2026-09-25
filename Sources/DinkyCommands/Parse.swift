@@ -54,7 +54,9 @@ extension Command {
             guard rest.count == 1, let target = DisplayTarget(rawValue: rest[0]) else { return nil }
             return .moveWindowToDisplay(target, follow: follow)
         case "focus":
-            return one.flatMap(Direction.init).map { .focus($0) }
+            return try focus(args)
+        case "focus-monitor":
+            return one.flatMap(MonitorTarget.init(rawValue:)).map { .focusMonitor($0) }
         case "move":
             return one.flatMap(Direction.init).map { .move($0) }
         case "join-with":
@@ -71,6 +73,8 @@ extension Command {
             return none ? .fullscreen : nil
         case "flatten-workspace-tree":
             return none ? .flattenWorkspaceTree : nil
+        case "balance-sizes":
+            return none ? .balanceSizes : nil
         case "retile":
             return none ? .retile : nil
         case "mode":
@@ -131,6 +135,32 @@ extension Command {
             guard let n = Int(word), n >= 1 else { return nil }
             return .number(n)
         }
+    }
+
+    /// `focus <direction>` with AeroSpace's `--boundaries`, `--boundaries-action` and `--wrap-around`, in any order.
+    private static func focus(_ args: [String]) throws(CommandError) -> Command? {
+        var rest = args[...], direction: Direction?
+        var boundaries = FocusBoundaries.workspace, action = BoundariesAction.stop
+        while let word = rest.popFirst() {
+            switch word {
+            case "--boundaries":
+                guard let value = rest.popFirst().flatMap(FocusBoundaries.init(rawValue:)) else { return nil }
+                boundaries = value
+            case "--boundaries-action":
+                guard let value = rest.popFirst().flatMap(BoundariesAction.init(rawValue:)) else { return nil }
+                action = value
+            case "--wrap-around":
+                action = .wrapAroundTheWorkspace
+            default:
+                guard direction == nil, let value = Direction(word) else { return nil }
+                direction = value
+            }
+        }
+        guard let direction else { return nil }
+        if boundaries == .workspace, action == .wrapAroundAllMonitors {
+            throw CommandError(input: "", message: "wrap-around-all-monitors needs --boundaries all-monitors-outer-frame")
+        }
+        return .focus(direction, boundaries: boundaries, action: action)
     }
 
     private static func followFlag(_ args: [String]) -> (rest: [String], follow: Bool) {

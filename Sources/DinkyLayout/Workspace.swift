@@ -93,12 +93,36 @@ public struct Workspace: Equatable, Sendable {
         }
     }
 
-    /// Focus the neighbour in `direction`. Returns false when there is none.
+    /// Focus the neighbour in `direction`. At the edge, `wrapping` focuses the window at the opposite edge
+    /// instead. Returns false when there is nothing to focus.
     @discardableResult
-    public mutating func focus(_ direction: Direction) -> Bool {
-        guard let focused, let target = neighbor(of: focused, direction) else { return false }
+    public mutating func focus(_ direction: Direction, wrapping: Bool = false) -> Bool {
+        guard let focused else { return false }
+        let wrapped = wrapping ? edgeWindow(direction.opposite) : nil
+        guard let target = neighbor(of: focused, direction) ?? wrapped, target != focused else { return false }
         focus(target)
         return true
+    }
+
+    /// The window snapped to the `side` edge: containers along that axis give their first or last child,
+    /// the others their most recently focused one. Adapted from AeroSpace's findLeafWindowRecursive(snappedTo:).
+    public func edgeWindow(_ side: Direction) -> WindowID? {
+        var container = root
+        while !container.children.isEmpty {
+            let index = container.orientation != side.orientation ? container.activeIndex
+                : side.isForward ? container.children.count - 1 : 0
+            switch container.children[index] {
+            case .window(let id): return id
+            case .container(let c): container = c
+            }
+        }
+        return nil
+    }
+
+    /// Give every container in the tree equal ratios.
+    public mutating func balanceSizes() {
+        fullscreen = nil
+        root.balance()
     }
 
     /// The window's parent container, nil if the window is not here.
@@ -132,7 +156,7 @@ public struct Workspace: Equatable, Sendable {
     /// The layout ignoring fullscreen, used for geometry questions.
     func tiledLayout() -> Layout {
         var result = Layout()
-        root.layout(in: gaps.inset(bounds), gap: gaps.inner, padding: accordionPadding, minimums: minimumSizes, into: &result)
+        root.layout(in: gaps.inset(bounds), gaps: gaps, padding: accordionPadding, minimums: minimumSizes, into: &result)
         return result
     }
 

@@ -40,8 +40,10 @@ enum Dispatcher {
             return moveWindowToWorkspace(target, follow: follow, window: window ?? focusedWindowID())
         case .moveWindowToDisplay(let target, let follow):
             return moveWindowToDisplay(target, follow: follow, window: window ?? focusedWindowID())
-        case .focus(let direction):
-            return focus(direction)
+        case .focus(let direction, let boundaries, let action):
+            return focus(direction, boundaries: boundaries, action: action)
+        case .focusMonitor(let target):
+            return focusMonitor(target)
         case .layout(let names):
             return layout(names, window: window)
         case .move(let direction):
@@ -59,6 +61,8 @@ enum Dispatcher {
             return tree("fullscreen") { $0.toggleFullscreen(); return true }
         case .flattenWorkspaceTree:
             return tree("flatten-workspace-tree") { $0.flatten(); return true }
+        case .balanceSizes:
+            return tree("balance-sizes") { $0.balanceSizes(); return true }
         case .retile:
             guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
             coordinator.reconcile()
@@ -189,42 +193,6 @@ enum Dispatcher {
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { focusWindow(pid: pid, id: wid) }
         return .ok("moved window \(wid) to display \(n + 1)")
-    }
-
-    /// Focuses the neighbour in the focused window's tree. A floating window, which has no tree, looks for
-    /// the nearest window on screen instead.
-    private static func focus(_ direction: Direction) -> Reply {
-        guard let coordinator = AppState.shared.coordinator,
-              let found = coordinator.command({ $0.focus(direction) ? $0.focused : nil }) else {
-            return focusOnScreen(direction)
-        }
-        guard let id = found, let window = coordinator.model.windows[id] else { return .error("no window \(direction)") }
-        coordinator.focus(id)
-        return .ok("focused window \(id) \(window.appName ?? "")")
-    }
-
-    /// The nearest window on the current Space whose centre lies in the direction, by distance between centres.
-    private static func focusOnScreen(_ direction: Direction) -> Reply {
-        guard let main = mainDisplay() else { return .error("no display") }
-        let onSpace = Set(dinky_space_window_ids(main.currentSpaceID, false).map(\.uint32Value))
-        let windows = windowList().filter { onSpace.contains($0.id) }
-        guard let front = windows.first(where: { $0.id == frontWindowID() }) else { return .error("no focused window") }
-        let from = CGPoint(x: front.frame.midX, y: front.frame.midY)
-        let candidates = windows.filter { w in
-            let dx = w.frame.midX - from.x, dy = w.frame.midY - from.y
-            switch direction {
-            case .left: return dx < 0 && abs(dx) >= abs(dy)
-            case .right: return dx > 0 && abs(dx) >= abs(dy)
-            case .up: return dy < 0 && abs(dy) >= abs(dx)
-            case .down: return dy > 0 && abs(dy) >= abs(dx)
-            }
-        }
-        guard let next = candidates.min(by: { hypot($0.frame.midX - from.x, $0.frame.midY - from.y)
-                                              < hypot($1.frame.midX - from.x, $1.frame.midY - from.y) }) else {
-            return .error("no window \(direction)")
-        }
-        focusWindow(pid: next.pid, id: next.id)
-        return .ok("focused window \(next.id) \(next.app)")
     }
 
     @discardableResult
