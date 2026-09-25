@@ -11,7 +11,7 @@ public struct Gaps: Equatable, Sendable {
     public var right: CGFloat
 
     /// No gaps at all.
-    public static let zero = Gaps(inner: 0, top: 0, bottom: 0, left: 0, right: 0)
+    public static let zero = Gaps(all: 0)
 
     public init(horizontal: CGFloat, vertical: CGFloat, top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) {
         self.horizontal = horizontal
@@ -22,14 +22,9 @@ public struct Gaps: Equatable, Sendable {
         self.right = right
     }
 
-    /// The same inner gap along both axes.
-    public init(inner: CGFloat, top: CGFloat, bottom: CGFloat, left: CGFloat, right: CGFloat) {
-        self.init(horizontal: inner, vertical: inner, top: top, bottom: bottom, left: left, right: right)
-    }
-
     /// The same gap everywhere.
     public init(all: CGFloat) {
-        self.init(inner: all, top: all, bottom: all, left: all, right: all)
+        self.init(horizontal: all, vertical: all, top: all, bottom: all, left: all, right: all)
     }
 
     /// The gap between siblings of a container running along `axis`.

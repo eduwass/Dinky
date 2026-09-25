@@ -34,7 +34,7 @@ final class TilesTests: XCTestCase {
     }
 
     func testUnevenOuterGaps() {
-        let gaps = Gaps(inner: 0, top: 30, bottom: 10, left: 5, right: 15)
+        let gaps = Gaps(horizontal: 0, vertical: 0, top: 30, bottom: 10, left: 5, right: 15)
         XCTAssertEqual(workspace(1, gaps: gaps).layout().frames[1], rect(5, 30, 980, 560))
     }
 

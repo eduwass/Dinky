@@ -17,7 +17,7 @@ public enum LayoutMode: Equatable, Sendable {
 }
 
 /// A direction for focus, swap, move and join-with.
-public enum Direction: Equatable, Sendable, CaseIterable {
+public enum Direction: Equatable, Sendable {
     case left, right, up, down
 
     /// The axis this direction moves along.
@@ -58,27 +58,22 @@ public struct Container: Equatable, Sendable {
     /// Index of the most recently focused child. Drives accordion stacking.
     public internal(set) var active = 0
 
-    /// An empty container.
-    public init(_ orientation: Orientation, _ mode: LayoutMode = .tiles) {
+    /// A container with the given children, if any, and equal ratios.
+    public init(_ orientation: Orientation, _ mode: LayoutMode = .tiles, _ children: [Node] = []) {
         self.orientation = orientation
         self.mode = mode
-    }
-
-    /// A container with the given children and equal ratios.
-    public init(_ orientation: Orientation, _ mode: LayoutMode = .tiles, _ children: [Node]) {
-        self.init(orientation, mode)
         self.children = children
-        self.ratios = Array(repeating: 1 / Double(children.count), count: children.count)
+        self.ratios = children.map { _ in 1 / Double(children.count) }
     }
 
-    /// The active child index, clamped to the children.
-    var activeIndex: Int { min(max(active, 0), max(children.count - 1, 0)) }
+    /// The active child index, clamped to the children (removing the last child can leave `active` past the end).
+    var activeIndex: Int { min(active, max(children.count - 1, 0)) }
 
     /// Insert a child at `index`; it gets 1/(n+1) and the others shrink proportionally.
     mutating func insert(_ node: Node, at index: Int) {
         let n = Double(children.count)
         ratios = ratios.map { $0 * n / (n + 1) }
-        ratios.insert(children.isEmpty ? 1 : 1 / (n + 1), at: index)
+        ratios.insert(1 / (n + 1), at: index)
         children.insert(node, at: index)
         if index <= active && children.count > 1 { active += 1 }
     }
@@ -124,6 +119,15 @@ public struct Container: Equatable, Sendable {
             }
         }
         return nil
+    }
+
+    /// The window reached by following active children down, nil if there are no windows.
+    var mostRecentWindow: WindowID? {
+        guard !children.isEmpty else { return nil }
+        switch children[activeIndex] {
+        case .window(let id): return id
+        case .container(let c): return c.mostRecentWindow
+        }
     }
 
     /// The node at a non-empty path.

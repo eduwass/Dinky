@@ -3,7 +3,7 @@ import CoreGraphics
 /// Directional commands and resize. Each returns false when there was nothing to do.
 extension Workspace {
     /// Smallest share a window can be resized down to.
-    public static let minimumRatio = 0.1
+    static let minimumRatio = 0.1
 
     /// The window in `direction` from `id`. Uses a virtual layout where accordions are split like tiles,
     /// so stacked accordion children still have a left and right. Ties go to the most recently focused window.
@@ -27,13 +27,6 @@ extension Workspace {
         return candidates.min { $0.distance < $1.distance }?.id
     }
 
-    /// Swap the focused window with its neighbour in `direction`. Focus stays with the moved window.
-    @discardableResult
-    public mutating func swap(_ direction: Direction) -> Bool {
-        guard let focused, let other = neighbor(of: focused, direction) else { return false }
-        return swap(focused, other)
-    }
-
     /// Swap two windows' places in the tree, keeping both tiles' sizes. Focus stays where it was.
     @discardableResult
     public mutating func swap(_ first: WindowID, _ second: WindowID) -> Bool {
@@ -51,30 +44,30 @@ extension Workspace {
     public mutating func move(_ direction: Direction) -> Bool {
         fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return false }
-        let axis = direction.orientation, step = direction.isForward ? 1 : 0
+        let axis = direction.orientation, forward = direction.isForward
         let parentPath = Array(path.dropLast()), index = path.last!
         let parent = root.container(at: parentPath)
-        let sibling = index + (direction.isForward ? 1 : -1)
+        let sibling = index + (forward ? 1 : -1)
         if parent.orientation == axis, parent.children.indices.contains(sibling) {
-            guard case .container = parent.children[sibling] else { return swap(direction) }
+            if case .window(let other) = parent.children[sibling] { return swap(focused, other) }
             var destination = parentPath + [sibling]
             while case .container(let c) = root.node(at: destination), c.orientation != axis {
                 destination.append(c.activeIndex)
             }
-            detach(focused, adjusting: &destination)
+            detach(path, adjusting: &destination)
             if case .container(let c) = root.node(at: destination) {
-                root.modify(at: destination) { $0.insert(.window(focused), at: step == 1 ? 0 : c.children.count) }
+                root.modify(at: destination) { $0.insert(.window(focused), at: forward ? 0 : c.children.count) }
             } else {
                 root.modify(at: Array(destination.dropLast())) { $0.insert(.window(focused), at: destination.last! + 1) }
             }
         } else if let depth = path.indices.dropLast().last(where: { root.container(at: Array(path.prefix($0))).orientation == axis }) {
             var outer = Array(path.prefix(depth + 1))
-            detach(focused, adjusting: &outer)
-            root.modify(at: Array(outer.dropLast())) { $0.insert(.window(focused), at: outer.last! + step) }
+            detach(path, adjusting: &outer)
+            root.modify(at: Array(outer.dropLast())) { $0.insert(.window(focused), at: outer.last! + (forward ? 1 : 0)) }
         } else if root.orientation != axis {
             root.modify(at: parentPath) { $0.remove(at: index) }
             root = Container(axis, .tiles, [.container(root)])
-            root.insert(.window(focused), at: step == 1 ? 1 : 0)
+            root.insert(.window(focused), at: forward ? 1 : 0)
         } else {
             return false
         }
@@ -89,19 +82,19 @@ extension Workspace {
     public mutating func join(_ direction: Direction) -> Bool {
         fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return false }
-        let offset = direction.isForward ? 1 : -1
+        let forward = direction.isForward, offset = forward ? 1 : -1
         guard let depth = path.indices.last(where: { depth in
             let c = root.container(at: Array(path.prefix(depth)))
             return c.orientation == direction.orientation && c.children.indices.contains(path[depth] + offset)
         }) else { return false }
         var target = Array(path.prefix(depth)) + [path[depth] + offset]
-        detach(focused, adjusting: &target)
+        detach(path, adjusting: &target)
         let across = direction.orientation.opposite
         switch root.node(at: target) {
         case .container(let c) where c.orientation == across:
-            root.modify(at: target) { $0.insert(.window(focused), at: offset == 1 ? 0 : c.children.count) }
+            root.modify(at: target) { $0.insert(.window(focused), at: forward ? 0 : c.children.count) }
         case let node:
-            let pair: [Node] = offset == 1 ? [.window(focused), node] : [node, .window(focused)]
+            let pair: [Node] = forward ? [.window(focused), node] : [node, .window(focused)]
             root.modify(at: Array(target.dropLast())) { $0.replace(at: target.last!, with: .container(Container(across, .tiles, pair))) }
         }
         normalize()
@@ -129,19 +122,18 @@ extension Workspace {
             let upper = 1 - Self.minimumRatio * (1 - old) / smallestOther
             let new = min(max(old + Double(delta / extent), lower), upper)
             guard abs(new - old) > 1e-9 else { return false }
-            let before = (root, tiledLayout().frames[focused])
+            let (oldRoot, oldFrame) = (root, tiledLayout().frames[focused])
             let scale = (1 - new) / (1 - old)
             root.modify(at: path) { c in c.setRatios(c.ratios.enumerated().map { $0.offset == index ? new : $0.element * scale }) }
             // A step the minimum sizes swallow whole is undone, so the ratios do not drift out of sight.
-            if tiledLayout().frames[focused] == before.1 { root = before.0; return false }
+            if tiledLayout().frames[focused] == oldFrame { root = oldRoot; return false }
             return true
         }
         return false
     }
 
-    /// Remove a window's leaf without normalizing, shifting `path` if it pointed past the removed sibling.
-    private mutating func detach(_ id: WindowID, adjusting other: inout [Int]) {
-        let path = root.path(of: id)!
+    /// Remove the leaf at `path` without normalizing, shifting `other` if it pointed past the removed sibling.
+    private mutating func detach(_ path: [Int], adjusting other: inout [Int]) {
         let level = path.count - 1
         root.modify(at: Array(path.prefix(level))) { $0.remove(at: path[level]) }
         if other.count > level, Array(other.prefix(level)) == Array(path.prefix(level)), other[level] > path[level] {

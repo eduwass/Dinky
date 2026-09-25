@@ -49,13 +49,6 @@ final class NeighborTests: XCTestCase {
 }
 
 final class SwapAndMoveTests: XCTestCase {
-    func testSwapExchangesPositionsAndKeepsFocus() {
-        var ws = three()
-        XCTAssertTrue(ws.swap(.left))
-        XCTAssertEqual(shape(ws.root), "h[3 v[2 1]]")
-        XCTAssertEqual(ws.focused, 3)
-    }
-
     func testMoveSwapsWithSiblingWindow() {
         var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
         ws.focus(1)

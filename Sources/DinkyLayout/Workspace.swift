@@ -60,7 +60,7 @@ public struct Workspace: Equatable, Sendable {
         if fullscreen == id { fullscreen = nil }
         if focused == id {
             focused = nil
-            if let next = mostRecentWindow(in: root) { focus(next) }
+            if let next = root.mostRecentWindow { focus(next) }
         }
     }
 
@@ -97,9 +97,9 @@ public struct Workspace: Equatable, Sendable {
     /// instead. Returns false when there is nothing to focus.
     @discardableResult
     public mutating func focus(_ direction: Direction, wrapping: Bool = false) -> Bool {
-        guard let focused else { return false }
-        let wrapped = wrapping ? edgeWindow(direction.opposite) : nil
-        guard let target = neighbor(of: focused, direction) ?? wrapped, target != focused else { return false }
+        guard let focused,
+              let target = neighbor(of: focused, direction) ?? (wrapping ? edgeWindow(direction.opposite) : nil),
+              target != focused else { return false }
         focus(target)
         return true
     }
@@ -146,7 +146,7 @@ public struct Workspace: Equatable, Sendable {
     /// Frames and stacking for every window. A fullscreen window covers the bounds minus outer gaps and comes first.
     public func layout() -> Layout {
         var result = tiledLayout()
-        if let fullscreen, contains(fullscreen) {
+        if let fullscreen {
             result.frames[fullscreen] = gaps.inset(bounds)
             result.order = [fullscreen] + result.order.filter { $0 != fullscreen }
         }
@@ -164,14 +164,5 @@ public struct Workspace: Equatable, Sendable {
     mutating func normalize() {
         root.normalize()
         if root.children.count == 1, case .container(let only) = root.children[0] { root = only }
-    }
-
-    /// The window reached by following active children down from `container`.
-    func mostRecentWindow(in container: Container) -> WindowID? {
-        guard !container.children.isEmpty else { return nil }
-        switch container.children[container.activeIndex] {
-        case .window(let id): return id
-        case .container(let c): return mostRecentWindow(in: c)
-        }
     }
 }
