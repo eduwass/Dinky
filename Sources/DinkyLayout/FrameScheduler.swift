@@ -100,10 +100,11 @@ public final class FrameScheduler: @unchecked Sendable {
     }
 
     /// Write, settle, read back; write the misses once more, settle, read back again. Writes only while `live`.
+    /// A window already where its recorded minimum size lets it be is neither written nor retried.
     private func run(_ jobs: [FrameJob], live: () -> Bool) -> [FrameResult] {
         var results = jobs.map { job in
             let current = read(job)
-            let write = live() && !(current?.isClose(to: job.frame, within: 1) ?? false)
+            let write = live() && !(current?.isClose(to: reachable(job), within: 1) ?? false)
             if write { self.write(job) }
             return FrameResult(job: job, got: current, written: write)
         }
@@ -113,7 +114,7 @@ public final class FrameScheduler: @unchecked Sendable {
         for i in written { results[i].got = read(results[i].job) }
 
         // Only windows that answered and landed elsewhere; an unreadable (possibly hung) one is not worth a second try.
-        let misses = written.filter { results[$0].got != nil && !results[$0].matched }
+        let misses = written.filter { i in results[i].got.map { !$0.isClose(to: reachable(results[i].job), within: 2) } ?? false }
         guard !misses.isEmpty, live() else { return results }
         for i in misses {
             write(results[i].job)
@@ -127,6 +128,12 @@ public final class FrameScheduler: @unchecked Sendable {
         return results
     }
 
+    /// The job's frame grown to the window's recorded minimum size: as close as the window will come.
+    private func reachable(_ job: FrameJob) -> CGRect {
+        guard let minimum = minimumSizes[job.id] else { return job.frame }
+        return CGRect(origin: job.frame.origin, size: job.frame.size.grown(to: minimum))
+    }
+
     private func wait() {
         if settle > 0 { Thread.sleep(forTimeInterval: settle) }
     }
@@ -138,7 +145,7 @@ public final class FrameScheduler: @unchecked Sendable {
         let minimum = CGSize(width: got.width > wanted.width + 2 ? got.width : 0,
                              height: got.height > wanted.height + 2 ? got.height : 0)
         guard minimum != .zero else { return }
-        lock.withLock { minimums[result.job.id] = minimum }
+        lock.withLock { minimums[result.job.id] = minimums[result.job.id]?.grown(to: minimum) ?? minimum }
     }
 
     /// One process's queue and what is waiting on it. Guarded by the scheduler's lock.
@@ -176,6 +183,13 @@ public final class FrameScheduler: @unchecked Sendable {
             }
             if let done { completion?(done) }
         }
+    }
+}
+
+extension CGSize {
+    /// The larger of the two sizes in each dimension.
+    public func grown(to other: CGSize) -> CGSize {
+        CGSize(width: max(width, other.width), height: max(height, other.height))
     }
 }
 

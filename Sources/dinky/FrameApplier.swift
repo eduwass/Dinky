@@ -10,6 +10,8 @@ final class FrameApplier {
     private var scheduler: FrameScheduler!
     private let lock = NSLock()
     private var elements: [WindowID: AXUIElement] = [:]
+    /// The largest minimum size any window of an app has shown this session, by bundle id.
+    private var appMinimums: [String: CGSize] = [:]
     private let raiseQueue = DispatchQueue(label: "dinky.frames.raise")
 
     init() {
@@ -28,6 +30,12 @@ final class FrameApplier {
     /// Sizes windows refused to shrink below, from readback.
     var minimumSizes: [WindowID: CGSize] { scheduler.minimumSizes }
 
+    /// The size a window refused to shrink below or, if it has refused nothing yet, the largest any window of its
+    /// app has refused, so a new window of a known app is laid out right the first time.
+    func minimumSize(of id: WindowID, app: String?) -> CGSize? {
+        scheduler.minimumSizes[id] ?? app.flatMap { app in lock.withLock { appMinimums[app] } }
+    }
+
     /// Drops every frame not written yet.
     func cancel() { scheduler.cancel() }
 
@@ -38,10 +46,21 @@ final class FrameApplier {
             pids[id].map { FrameJob(pid: $0, id: id, frame: layout.frames[id]!) }
         }
         scheduler.submit(jobs) { [unowned self] results in
+            rememberAppMinimums(results)
             raiseQueue.async {
                 self.raise(layout.raises(current: onScreenOrder()), pids: pids)
                 completion(results)
             }
+        }
+    }
+
+    /// Minimums are recorded after a retry; note each new one under its app.
+    private func rememberAppMinimums(_ results: [FrameResult]) {
+        let minimums = scheduler.minimumSizes
+        for result in results where result.retried {
+            guard let minimum = minimums[result.job.id],
+                  let app = NSRunningApplication(processIdentifier: result.job.pid)?.bundleIdentifier else { continue }
+            lock.withLock { appMinimums[app] = appMinimums[app]?.grown(to: minimum) ?? minimum }
         }
     }
 

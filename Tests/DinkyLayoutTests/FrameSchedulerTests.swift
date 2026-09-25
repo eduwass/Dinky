@@ -157,12 +157,49 @@ final class FrameSchedulerTests: XCTestCase {
         XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 0)])
     }
 
-    func testRefusalDoesNotLoopAcrossSubmits() {
+    func testTwoRefusalsInOnePassCompleteOnceWithBothMinimums() {
+        let fake = FakeWindows(minWidths: [10: 574, 20: 115])
+        let scheduler = fake.scheduler()
+        var completions = 0
+        var minimums: [WindowID: CGSize] = [:]
+        let done = XCTestExpectation(description: "results")
+        scheduler.submit([job(1, 10, 0), job(2, 20, 100), job(2, 21, 200)]) { _ in
+            completions += 1
+            minimums = scheduler.minimumSizes
+            done.fulfill()
+        }
+        wait(for: [done], timeout: 2)
+        Thread.sleep(forTimeInterval: 0.05)
+        XCTAssertEqual(completions, 1)
+        XCTAssertEqual(minimums, [10: CGSize(width: 574, height: 0), 20: CGSize(width: 115, height: 0)])
+    }
+
+    func testRecordedMinimumIsNotWrittenAgain() {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        let again = submitAndWait(scheduler, [job(1, 10, 0)])
+        XCTAssertEqual(fake.writes(to: 10).count, 2)
+        XCTAssertEqual(again.map(\.written), [false])
+    }
+
+    func testMoveOfAWindowAtItsMinimumIsWrittenOnceWithoutRetry() {
+        let fake = FakeWindows(minWidths: [10: 574])
+        let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(fake.writes(to: 10).count, 4)
+        let moved = submitAndWait(scheduler, [job(1, 10, 50)])
+        XCTAssertEqual(fake.writes(to: 10).count, 3)
+        XCTAssertEqual(moved.map(\.retried), [false])
+    }
+
+    func testMinimumsFoundInEachDimensionAreKept() {
+        var frame = CGRect.zero
+        let scheduler = FrameScheduler(settle: 0, read: { _ in frame }, write: { job in
+            frame = CGRect(origin: job.frame.origin, size: job.frame.size.grown(to: CGSize(width: 574, height: 300)))
+        })
+        _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 100, height: 400))])
+        _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 600, height: 100))])
+        XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 300)])
     }
 
     func testUnreadableWindowIsWrittenOnceAndReportedUnmatched() {

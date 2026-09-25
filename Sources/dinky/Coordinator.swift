@@ -254,7 +254,8 @@ final class Coordinator {
 
     /// Writes the tree's frames around the minimum sizes windows have shown. Overlapping layouts (accordion,
     /// fullscreen) also bring the focused window to the front when it is on the focused Space: AX raise alone
-    /// does not lift it above another app. A window that refuses its frame gets the tree laid out again around it.
+    /// does not lift it above another app. Minimum sizes found in a pass are laid out around all at once, when that
+    /// moves anything.
     private func apply(_ key: SpaceKey) {
         guard var workspace = workspaces[key] else { return }
         workspace.minimumSizes = minimumSizes(in: workspace)
@@ -268,15 +269,15 @@ final class Coordinator {
             DispatchQueue.main.async {
                 guard let self, self.enabled else { return }
                 if let front, focusedHere { self.focus(front.id) }
-                if self.minimumSizes(in: workspace) != workspace.minimumSizes {
-                    self.dirty.insert(key)
-                    self.flush()
-                }
+                self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
+                self.flush()
             }
         }
     }
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
-        applier.minimumSizes.filter { workspace.contains($0.key) }
+        var sizes: [WindowID: CGSize] = [:]
+        for id in workspace.windows { sizes[id] = applier.minimumSize(of: id, app: model.windows[id]?.bundleID) }
+        return sizes
     }
 }
