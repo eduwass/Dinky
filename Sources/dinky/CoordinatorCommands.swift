@@ -45,10 +45,16 @@ extension Coordinator {
     }
 
     /// Moves a window dinky just moved to another Space into that Space's tree now, rather than on the next event.
-    func windowMoved(_ id: WindowID) {
+    /// macOS leaves keyboard focus with the moved window, so unless we are about to follow it, focus the window
+    /// that took its place in the tree it left.
+    func windowMoved(_ id: WindowID, refocus: Bool = true) {
         guard var window = model.windows[id] else { return }
+        let hadFocus = focusedWindow == id
+        let from = placements[id]?.space
         window.spaceID = dinky_window_space_id(id)
         track(window)
         flush()
+        guard refocus, hadFocus, let from, let successor = workspaces[from]?.focused, successor != id else { return }
+        focus(successor)
     }
 }

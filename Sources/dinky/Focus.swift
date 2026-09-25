@@ -43,6 +43,10 @@ func focusWindow(pid: pid_t, id: UInt32) {
         noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
     }
     if let element = axWindow(pid: pid, wid: id, timeout: 1) {
+        // Raise alone makes the window main; the app's key window can stay one on another Space, and the
+        // next command would then act on that one. Make this window main and key explicitly.
+        AXUIElementSetAttributeValue(element, kAXMainAttribute as CFString, kCFBooleanTrue)
+        AXUIElementSetAttributeValue(element, kAXFocusedAttribute as CFString, kCFBooleanTrue)
         AXUIElementPerformAction(element, kAXRaiseAction as CFString)
     }
     NSRunningApplication(processIdentifier: pid)?.activate()

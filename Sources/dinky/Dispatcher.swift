@@ -37,9 +37,9 @@ enum Dispatcher {
             }
             return switchWorkspace(.number(previous + 1))
         case .moveWindowToWorkspace(let target, let follow):
-            return moveWindowToWorkspace(target, follow: follow, window: window ?? frontWindowID())
+            return moveWindowToWorkspace(target, follow: follow, window: window ?? focusedWindowID())
         case .moveWindowToDisplay(let target, let follow):
-            return moveWindowToDisplay(target, follow: follow, window: window ?? frontWindowID())
+            return moveWindowToDisplay(target, follow: follow, window: window ?? focusedWindowID())
         case .focus(let direction):
             return focus(direction)
         case .layout(let names):
@@ -124,12 +124,13 @@ enum Dispatcher {
         guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         var ids = [wid]
         let space = display.workspaces[to]
+        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(to + 1)") }
         guard dinky_move_windows_to_space(&ids, 1, space) else { return .error("move failed") }
         // The bridged move is asynchronous; follow only once the window is really there.
         guard waitUntil(0.5, { dinky_window_space_id(wid) == space }) else {
             return .error("window \(wid) did not arrive on workspace \(to + 1)")
         }
-        AppState.shared.coordinator?.windowMoved(wid)
+        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { switchSpace(toSpaceID: space, on: display) }
         return .ok("moved window \(wid) to workspace \(to + 1)")
     }
@@ -185,7 +186,7 @@ enum Dispatcher {
                                  y: to.frame.minY + max(0, frame.minY - from.frame.minY))
             if let element = axWindow(pid: pid, wid: wid) { setPosition(element, origin) }
         }
-        AppState.shared.coordinator?.windowMoved(wid)
+        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { focusWindow(pid: pid, id: wid) }
         return .ok("moved window \(wid) to display \(n + 1)")
     }
@@ -231,4 +232,11 @@ enum Dispatcher {
         var origin = origin
         return AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!) == .success
     }
+}
+
+/// The window a command acts on: the coordinator's focused window (the front app's frontmost document window
+/// on a visible Space), falling back to the front app's AX key window, which can still be one on another Space.
+private func focusedWindowID() -> WindowID {
+    if let id = AppState.shared.coordinator?.focusedWindow, id != 0 { return id }
+    return frontWindowID()
 }

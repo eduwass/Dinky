@@ -9,11 +9,8 @@ command = ["just", "run"]
 auto_start = false
 signal = "STATUS:READY"
 
-[[workspaces]]
-
-[[workspaces.tabs]]
-panes = [{ command = ["claude"] }]
-
-[[workspaces.tabs]]
-title = "agent"
-panes = [{ command = ["pi"] }]
+# [[workspaces]]
+#
+# [[workspaces.tabs]]
+# panes = [{ command = ["pi"] }]
+#
