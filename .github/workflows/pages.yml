@@ -1,0 +1,52 @@
+name: Deploy documentation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - docs/**
+      - PLAN.md
+      - RESULTS.md
+      - RESEARCH.md
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
+      - uses: actions/configure-pages@v5
+      - name: Add the specs to site source
+        run: |
+          for spec in Plan:PLAN Results:RESULTS Research:RESEARCH; do
+            title=${spec%%:*}
+            file=${spec#*:}
+            slug=$(echo "$file" | tr '[:upper:]' '[:lower:]')
+            { printf -- '---\ntitle: %s\npermalink: /%s/\n---\n\n' "$title" "$slug"; cat "$file.md"; } > "docs/$slug.md"
+          done
+      - uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs
+          destination: ./_site
+      - uses: actions/upload-pages-artifact@v3
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

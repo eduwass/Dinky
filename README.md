@@ -19,6 +19,6 @@ Signing uses the author's development identity by default; set `IDENTITY` for yo
 
 ## More
 
-The [manual](docs/manual.md) covers configuration, every command, the bar integration, and the known limits. [PLAN.md](PLAN.md) and [RESULTS.md](RESULTS.md) record the design decisions and what was measured where.
+The [manual](https://mikker.github.io/Dinky/) covers configuration, every command, the bar integration, and the known limits. [PLAN.md](PLAN.md) and [RESULTS.md](RESULTS.md) record the design decisions and what was measured where.
 
 Approaches were studied from [yabai](https://github.com/asmvik/yabai), [mimi](https://github.com/y3owk1n/mimi), [AeroSpace](https://github.com/nikitabobko/AeroSpace) and [JankyBorders](https://github.com/FelixKratz/JankyBorders); see the manual's credits. MIT licensed.
