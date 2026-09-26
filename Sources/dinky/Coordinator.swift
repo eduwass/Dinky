@@ -33,6 +33,7 @@ final class Coordinator {
     private(set) var config: Config
     let applier = FrameApplier()
     private var borders: BorderManager?
+    func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
     private(set) var workspaces: [SpaceKey: Workspace] = [:]
     var placements: [WindowID: Placement] = [:]
     var dirty: Set<SpaceKey> = []

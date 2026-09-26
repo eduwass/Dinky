@@ -28,6 +28,9 @@ final class BorderManager {
         syncAll()
     }
 
+    /// Whether a window id is one of the border windows dinky draws.
+    func isBorder(_ id: UInt32) -> Bool { borders.values.contains { $0.id == id } }
+
     func handle(_ event: WindowEvent) {
         switch event.kind {
         case .spaceChange, .spaceCreated, .spaceDestroyed:

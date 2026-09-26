@@ -14,7 +14,8 @@ final class BorderWindow {
     }
 
     private let target: UInt32
-    private var id: UInt32 = 0
+    /// The border's own WindowServer window id (0 until created).
+    private(set) var id: UInt32 = 0
     private var scale = 0.0
     private var spaceID: UInt64 = 0
     private var drawn: Look?

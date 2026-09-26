@@ -101,21 +101,38 @@ final class HoverFocus {
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
               !SpaceSwitcher.shared.switching else { return nil }
+        // A dialog, sheet or alert has keyboard focus when the front app's focused window is one dinky does not
+        // track. Hover leaves it alone: focusing another window would bury the dialog behind its app.
+        let front = frontWindowID()
+        if front != 0, coordinator.placements[front] == nil { return nil }
         // An accordion child other than the front one only peeks out; with `accordion = false` it stays put.
         if !config.accordion, let container = coordinator.container(of: id), container.mode == .accordion,
            container.children[container.activeIndex] != .window(id) { return nil }
         return id
     }
 
-    /// The frontmost normal (layer 0) window at the point. Nil while a menu is open anywhere: focusing another
-    /// app would close it. Higher layers are passed over: the Dock and Notification Center keep transparent
-    /// windows over the whole screen.
+    /// The frontmost window at the point among normal, floating and modal levels, if hover may look at it.
+    /// Nil while a menu is open anywhere, a modal panel is up or dinky shows a window of its own, such as
+    /// the update dialog: focusing another window would close or bury them. dinky's border windows are
+    /// looked through; the Dock and Notification Center keep transparent windows over the whole screen at
+    /// higher levels and are passed over.
     private func windowUnder(_ point: CGPoint) -> WindowID? {
         let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
         let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
-        if info.contains(where: { $0[kCGWindowLayer as String] as? Int == menuLevel }) { return nil }
+        let modalLevel = Int(CGWindowLevelForKey(.modalPanelWindow))
+        let layers = info.compactMap { $0[kCGWindowLayer as String] as? Int }
+        if layers.contains(menuLevel) || layers.contains(modalLevel) { return nil }
+        // dinky is an accessory app, so a dialog of its own never makes it the front app: the front app's
+        // focused window stays a tile, and only the window list shows the dialog.
+        let ownDialog = info.contains { w in
+            w[kCGWindowOwnerPID as String] as? pid_t == getpid() && (0...modalLevel).contains(w[kCGWindowLayer as String] as? Int ?? -1)
+                && AppState.shared.coordinator?.isBorderWindow(w[kCGWindowNumber as String] as? UInt32 ?? 0) != true
+        }
+        if ownDialog { return nil }
         let window = info.first { w in
-            guard w[kCGWindowLayer as String] as? Int == 0, w[kCGWindowOwnerPID as String] as? pid_t != getpid(),
+            guard let layer = w[kCGWindowLayer as String] as? Int, (0...modalLevel).contains(layer),
+                  let id = w[kCGWindowNumber as String] as? UInt32,
+                  AppState.shared.coordinator?.isBorderWindow(id) != true,
                   (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
                   let bounds = w[kCGWindowBounds as String] as? NSDictionary,
                   let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
