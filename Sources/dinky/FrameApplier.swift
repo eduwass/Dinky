@@ -60,13 +60,15 @@ final class FrameApplier {
 
     /// Minimums are recorded after a retry; note each new one under its app.
     private func rememberAppMinimums(_ results: [FrameResult]) {
+        let retried = results.filter(\.retried)
+        guard !retried.isEmpty else { return }
         let minimums = scheduler.minimumSizes
-        for result in results where result.retried {
+        for result in retried {
             guard let minimum = minimums[result.job.id],
                   let app = NSRunningApplication(processIdentifier: result.job.pid)?.bundleIdentifier else { continue }
             lock.withLock { appMinimums[app] = appMinimums[app]?.grown(to: minimum) ?? minimum }
         }
-        if results.contains(where: \.retried) { saveMinimums() }
+        saveMinimums()
     }
 
     private static func loadMinimums() -> [String: CGSize] {

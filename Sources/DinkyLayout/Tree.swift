@@ -77,7 +77,7 @@ public struct Container: Equatable, Sendable {
     }
 
     /// The active child index, clamped to the children (removing the last child can leave `active` past the end).
-    var activeIndex: Int { min(active, max(children.count - 1, 0)) }
+    public var activeIndex: Int { min(active, max(children.count - 1, 0)) }
 
     /// Insert a child at `index`; it gets 1/(n+1) and the others shrink proportionally.
     mutating func insert(_ node: Node, at index: Int) {
@@ -164,8 +164,8 @@ public struct Container: Equatable, Sendable {
     }
 
     /// Collapse redundant structure bottom-up without changing geometry: drop empty containers,
-    /// replace single-child containers with their child, splice children of same-orientation, same-mode containers. `auto` containers are not spliced: their axis
-    /// depends on their own rectangle.
+    /// replace single-child containers with their child, splice children of same-orientation, same-mode containers.
+    /// `auto` containers are not spliced: their axis depends on their own rectangle.
     mutating func normalize() {
         var newChildren: [Node] = [], newRatios: [Double] = [], newActive = 0
         for (i, child) in children.enumerated() {

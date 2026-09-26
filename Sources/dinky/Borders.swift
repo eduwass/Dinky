@@ -20,7 +20,6 @@ final class BorderManager {
         refreshSpaces()
         focusedID = dinky_border_focused_window()
         syncAll()
-        MissionControl.shared.onChange { [weak self] _ in self?.syncAll() }
     }
 
     func update(config: Borders) {
@@ -30,7 +29,7 @@ final class BorderManager {
     }
 
     func handle(_ event: WindowEvent) {
-        MissionControl.shared.update(from: model)
+        if MissionControl.shared.update(from: model) { syncAll() }
         switch event.kind {
         case .spaceChange, .spaceCreated, .spaceDestroyed:
             refreshSpaces()

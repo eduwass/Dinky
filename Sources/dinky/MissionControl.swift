@@ -7,19 +7,16 @@ final class MissionControl {
     static let shared = MissionControl()
 
     private(set) var active = false
-    private var observers: [(Bool) -> Void] = []
 
-    func onChange(_ handler: @escaping (Bool) -> Void) { observers.append(handler) }
-
-    /// Called with the window model after each of its events.
-    func update(from model: WindowModel) {
+    /// Called with the window model after each of its events. True if `active` changed.
+    func update(from model: WindowModel) -> Bool {
         let screens = NSScreen.screens.map { $0.frame.size }
         let showing = model.windows.values.contains { window in
             window.bundleID == "com.apple.WindowManager" && window.level == 19 && window.isOrderedIn
                 && screens.contains { abs($0.width - window.frame.width) < 2 && abs($0.height - window.frame.height) < 2 }
         }
-        guard showing != active else { return }
+        guard showing != active else { return false }
         active = showing
-        observers.forEach { $0(showing) }
+        return true
     }
 }

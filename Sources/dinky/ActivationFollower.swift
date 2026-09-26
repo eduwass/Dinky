@@ -18,8 +18,6 @@ private let arrivalWindow = 300 * ms
 private let goneWindow = 300 * ms
 private let windowGrace = 250 * ms
 
-private func uptime() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
-
 // The Space-change notification is not reliable for swipes posted by other processes, so the last Space
 // seen on each display is remembered too, and checked on every activation and by a timer.
 private var lastSeenSpaceIDs: [String: UInt64] = [:]
@@ -32,16 +30,14 @@ private var activePID = NSWorkspace.shared.frontmostApplication?.processIdentifi
 /// Counts activations, so a follow waiting for a window knows when a newer activation replaced it.
 private var activations = 0
 
-// Records the current Space of every display. True if any differs from the last one recorded.
-@discardableResult
-func noteCurrentSpace() -> Bool {
+// Records the current Space of every display; a difference from the last one recorded is a Space change.
+private func noteCurrentSpace() {
     let model = AppState.shared.displays
     model.reconcile()
     let seen = Dictionary(model.displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { a, _ in a })
-    let changed = seen != lastSeenSpaceIDs
+    guard seen != lastSeenSpaceIDs else { return }
     lastSeenSpaceIDs = seen
-    if changed { spaceChanged() }
-    return changed
+    spaceChanged()
 }
 
 // Tells the activation follower that this Space change, or this activation on the current Space, is

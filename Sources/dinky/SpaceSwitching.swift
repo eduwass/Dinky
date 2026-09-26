@@ -3,6 +3,9 @@ import DinkyPrivate
 
 // Switching a display's Space with mimi's swipe. Shared by the app, the dispatcher and the activation follower.
 
+/// Nanoseconds since boot, not counting sleep.
+func uptime() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
+
 /// Swipes the display to one of its Spaces, full-screen ones included. False if it is already there.
 /// Returns once the swipe is posted; `SpaceSwitcher` confirms it and coalesces rapid requests. `landed` runs
 /// once the display is on the Space, unless a newer request replaced this one first.
@@ -29,7 +32,7 @@ final class SpaceSwitcher {
         var postedAt: UInt64 = 0
         var retried = false
         var landed: (() -> Void)?
-        let startedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        let startedAt = uptime()
     }
 
     private var flights: [String: Flight] = [:]
@@ -39,6 +42,9 @@ final class SpaceSwitcher {
     private let timeout: UInt64 = 1_000_000_000
 
     func target(on uuid: String) -> UInt64? { flights[uuid]?.target }
+
+    /// Whether any display has a switch in flight.
+    var switching: Bool { !flights.isEmpty }
 
     func request(_ target: UInt64, on uuid: String, landed: (() -> Void)? = nil) -> Bool {
         if flights[uuid] != nil {
@@ -63,7 +69,7 @@ final class SpaceSwitcher {
             return finish(uuid, "switch: Space \(flight.target) is not on display \(uuid)")
         }
         flight.posted = flight.target
-        flight.postedAt = clock_gettime_nsec_np(CLOCK_UPTIME_RAW)
+        flight.postedAt = uptime()
         flights[uuid] = flight
         noteOwnSwitch(to: flight.target, on: uuid)
         posting = true
@@ -76,14 +82,14 @@ final class SpaceSwitcher {
         guard !posting else { return }
         for (uuid, flight) in flights {
             let observed = dinky_current_space_id(uuid as CFString)
-            let ms = Double(clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - flight.startedAt) / 1_000_000
+            let ms = Double(uptime() - flight.startedAt) / 1_000_000
             if flight.posted == 0 {
                 post(on: uuid)  // requested while another display's swipe was being posted
             } else if observed == flight.posted, observed == flight.target {
                 finish(uuid, String(format: "switch: landed on Space %llu in %.0f ms", observed, ms), landed: true)
             } else if observed == flight.posted {
                 post(on: uuid)  // landed on an older request; go on to the newest
-            } else if clock_gettime_nsec_np(CLOCK_UPTIME_RAW) - flight.postedAt > timeout {
+            } else if uptime() - flight.postedAt > timeout {
                 // The posted swipe did not land. Waiting for it first means it can't land late, after this.
                 if observed == flight.target {
                     finish(uuid, String(format: "switch: on Space %llu after %.0f ms", observed, ms), landed: true)

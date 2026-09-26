@@ -68,19 +68,19 @@ final class HoverFocus {
         // Trailing throttle: the last move of a burst is always evaluated, at most every 50 ms.
         guard type == .mouseMoved, tap != nil, !evaluationPending else { return }
         evaluationPending = true
-        let wait = max(0, Int64(lastEvaluatedAt + throttle) - Int64(now()))
+        let wait = max(0, Int64(lastEvaluatedAt + throttle) - Int64(uptime()))
         DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(wait))) { [weak self] in self?.evaluate() }
     }
 
     private func evaluate() {
         evaluationPending = false
-        lastEvaluatedAt = now()
+        lastEvaluatedAt = uptime()
         guard let point = CGEvent(source: nil)?.location, hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= minimumMove else { return }
         lastPoint = point
         noteSpaces()
         guard let id = hoverable(at: point), id != AppState.shared.coordinator?.focusedWindow else { return cancel() }
-        let space = currentSpaces()
-        let work = DispatchWorkItem { [weak self] in self?.fire(id, space) }
+        let spaces = currentSpaces()
+        let work = DispatchWorkItem { [weak self] in self?.fire(id, spaces) }
         dwell?.cancel()
         dwell = work
         DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(config.delayMs), execute: work)
@@ -97,13 +97,13 @@ final class HoverFocus {
     /// The tracked window under the pointer, if hover may focus it now.
     private func hoverable(at point: CGPoint) -> WindowID? {
         let state = AppState.shared
-        guard state.enabled, now() >= quietUntil, !MissionControl.shared.active,
+        guard state.enabled, uptime() >= quietUntil, !MissionControl.shared.active,
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
-              !state.displays.displays.contains(where: { SpaceSwitcher.shared.target(on: $0.uuid) != nil }) else { return nil }
+              !SpaceSwitcher.shared.switching else { return nil }
         // An accordion child other than the front one only peeks out; with `accordion = false` it stays put.
         if !config.accordion, let container = coordinator.container(of: id), container.mode == .accordion,
-           container.children[min(container.active, container.children.count - 1)] != .window(id) { return nil }
+           container.children[container.activeIndex] != .window(id) { return nil }
         return id
     }
 
@@ -117,8 +117,9 @@ final class HoverFocus {
         let window = info.first { w in
             guard w[kCGWindowLayer as String] as? Int == 0, w[kCGWindowOwnerPID as String] as? pid_t != getpid(),
                   (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
-                  let bounds = w[kCGWindowBounds as String] as? [String: CGFloat] else { return false }
-            return CGRect(x: bounds["X"] ?? 0, y: bounds["Y"] ?? 0, width: bounds["Width"] ?? 0, height: bounds["Height"] ?? 0).contains(point)
+                  let bounds = w[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
+            return rect.contains(point)
         }
         return window?[kCGWindowNumber as String] as? UInt32
     }
@@ -139,10 +140,8 @@ final class HoverFocus {
     private func cancel(quietFor duration: UInt64 = 0) {
         dwell?.cancel()
         dwell = nil
-        if duration > 0 { quietUntil = now() + duration }
+        if duration > 0 { quietUntil = uptime() + duration }
     }
-
-    private func now() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
 }
 
 private func hoverCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent,

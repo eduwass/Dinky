@@ -51,7 +51,6 @@ final class AppState {
     }
 
     func startCoordinator() {
-
         guard coordinator == nil else { return }
         let coordinator = Coordinator(displays: displays, config: config)
         self.coordinator = coordinator
@@ -92,9 +91,11 @@ final class AppState {
             configError = nil
             hotkeys.load(modes: config.modes)
             // At launch the app creates the Spaces itself, before the coordinator starts.
-            if coordinator != nil { ensureWorkspaceCount() }
-            coordinator?.update(config: config)
-            if coordinator != nil { hoverFocus.update(config: config.focusFollowsMouse) }
+            if let coordinator {
+                ensureWorkspaceCount()
+                coordinator.update(config: config)
+                hoverFocus.update(config: config.focusFollowsMouse)
+            }
         case .failure(let error):
             configError = error
             fputs("config: \(error), keeping the previous config\n", stderr)
