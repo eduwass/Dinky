@@ -92,6 +92,8 @@ final class Coordinator {
     // MARK: Events
 
     private func handle(_ event: WindowEvent) {
+        // Detected here, not in the border manager, so hover focus stands down even with borders off.
+        if MissionControl.shared.update(from: model) { borders?.missionControlChanged() }
         borders?.handle(event)
         if let window = event.window {
             event.change == .removed ? forget(window.id) : track(window)

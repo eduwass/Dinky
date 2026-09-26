@@ -29,7 +29,6 @@ final class BorderManager {
     }
 
     func handle(_ event: WindowEvent) {
-        if MissionControl.shared.update(from: model) { syncAll() }
         switch event.kind {
         case .spaceChange, .spaceCreated, .spaceDestroyed:
             refreshSpaces()
@@ -53,6 +52,9 @@ final class BorderManager {
             sync(window)
         }
     }
+
+    /// Mission Control came or went: every border hides or returns.
+    func missionControlChanged() { syncAll() }
 
     private func syncAll() {
         for id in borders.keys where model.windows[id] == nil { borders[id] = nil }
