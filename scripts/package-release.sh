@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Builds, signs with Developer ID, notarizes and staples dinky.app, and zips it into dist/.
+# Builds, signs with Developer ID, notarizes and staples dinky.app, zips it into dist/, and writes the Sparkle appcast.
 # Usage: scripts/package-release.sh 0.1.0
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -16,7 +16,7 @@ VERSION="$version" BUILD="$build" IDENTITY="$identity" SIGN_FLAGS="--options run
 codesign --verify --strict --verbose=1 build/dinky.app
 
 mkdir -p dist
-rm -f dist/dinky.app.zip
+rm -f dist/dinky.app.zip dist/signature.txt dist/appcast.xml
 tmp="$(mktemp -d)"; trap 'rm -rf "$tmp"' EXIT
 echo "==> Notarizing with profile $profile"
 ditto -c -k --sequesterRsrc --keepParent build/dinky.app "$tmp/dinky.zip"
@@ -25,4 +25,9 @@ xcrun stapler staple build/dinky.app
 spctl --assess --type execute --verbose=1 build/dinky.app
 
 ditto -c -k --sequesterRsrc --keepParent build/dinky.app dist/dinky.app.zip
+
+echo "==> Signing the update and writing the appcast"
+sign_update="$(find .build/artifacts -path '*/Sparkle/bin/sign_update' | head -1)"
+"$sign_update" --account com.brnbw.dinky -p dist/dinky.app.zip > dist/signature.txt
+python3 scripts/appcast.py "$version"
 echo "==> dist/dinky.app.zip ($(du -h dist/dinky.app.zip | cut -f1)), version $version build $build"

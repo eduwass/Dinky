@@ -1,5 +1,6 @@
 import AppKit
 import DinkyPrivate
+import Sparkle
 
 // `dinky app`: a menu bar item showing the focused display's workspace number, with commands as menu
 // items, and the socket the CLI talks to.
@@ -21,6 +22,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var socket: SocketServer?
     private let onboarding = Onboarding()
     private var signals: [DispatchSourceSignal] = []
+    private let updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationDidFinishLaunching(_ note: Notification) {
         AppState.shared.loadConfig()
@@ -105,6 +107,9 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             menu.addItem(item("Restore \(recoverable) windows from the previous session", "recover"))
         }
         menu.addItem(.separator())
+        let updates = NSMenuItem(title: "Check for Updates…", action: #selector(checkForUpdates(_:)), keyEquivalent: "")
+        updates.target = self
+        menu.addItem(updates)
         menu.addItem(NSMenuItem(title: "Quit dinky", action: #selector(NSApplication.terminate(_:)), keyEquivalent: ""))
     }
 
@@ -121,6 +126,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let it = NSMenuItem(title: title, action: nil, keyEquivalent: "")
         it.submenu = menu
         return it
+    }
+
+    @objc private func checkForUpdates(_ sender: Any?) {
+        updater.checkForUpdates(sender)
     }
 
     @objc private func runCommand(_ sender: NSMenuItem) {

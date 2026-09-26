@@ -21,5 +21,18 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD" "$APP/Contents/Info.plist"
 
-codesign --force $SIGN_FLAGS --sign "$IDENTITY" "$APP"
+# Sparkle.framework from the resolved SwiftPM artifact; the linker rpath finds it here.
+SPARKLE_SRC="$(find .build/artifacts -maxdepth 6 -path '*macos-arm64_x86_64/Sparkle.framework' | head -1)"
+[[ -n "$SPARKLE_SRC" ]] || { echo 'Sparkle.framework not found in .build/artifacts' >&2; exit 1; }
+mkdir -p "$APP/Contents/Frameworks"
+ditto "$SPARKLE_SRC" "$APP/Contents/Frameworks/Sparkle.framework"
+
+# Sign inside out: Sparkle's helpers, the framework, then the app.
+sign() { codesign --force $SIGN_FLAGS --sign "$IDENTITY" "$1"; }
+SPARKLE="$APP/Contents/Frameworks/Sparkle.framework"
+for item in XPCServices/Downloader.xpc XPCServices/Installer.xpc Updater.app Autoupdate Sparkle; do
+  sign "$SPARKLE/Versions/Current/$item"
+done
+sign "$SPARKLE"
+sign "$APP"
 echo "built $APP ($CONFIG, $VERSION build $BUILD)"

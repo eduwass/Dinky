@@ -37,6 +37,6 @@ git rev-parse --verify -q "$tag" >/dev/null || git tag -a "$tag" -m "Release $ve
 git push origin "$tag"
 gh release view "$tag" -R "$repo" >/dev/null 2>&1 \
   || gh release create "$tag" -R "$repo" --verify-tag --draft --title "dinky $version" --generate-notes
-gh release upload "$tag" -R "$repo" dist/dinky.app.zip --clobber
+gh release upload "$tag" -R "$repo" dist/dinky.app.zip dist/appcast.xml --clobber
 gh release edit "$tag" -R "$repo" --draft=false --latest
 echo "==> https://github.com/$repo/releases/tag/$tag"

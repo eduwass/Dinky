@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS(.v15)],
     dependencies: [
         .package(url: "https://github.com/dduan/TOMLDecoder", exact: "0.4.4"),
+        .package(url: "https://github.com/sparkle-project/Sparkle", exact: "2.9.6"),
     ],
     targets: [
         // Private SkyLight and CGS calls. Objective-C, capability checked, nothing else lives here.
@@ -52,8 +53,13 @@ let package = Package(
         // The app and CLI.
         .executableTarget(
             name: "dinky",
-            dependencies: ["DinkyPrivate", "DinkyLayout", "DinkyConfig", "DinkyCommands"],
-            swiftSettings: [.swiftLanguageMode(.v5)]
+            dependencies: [
+                "DinkyPrivate", "DinkyLayout", "DinkyConfig", "DinkyCommands",
+                .product(name: "Sparkle", package: "Sparkle"),
+            ],
+            swiftSettings: [.swiftLanguageMode(.v5)],
+            // The app bundle carries Sparkle.framework in Contents/Frameworks.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
     ]
 )

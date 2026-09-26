@@ -22,5 +22,9 @@
 	<true/>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>SUFeedURL</key>
+	<string>https://github.com/mikker/Dinky/releases/latest/download/appcast.xml</string>
+	<key>SUPublicEDKey</key>
+	<string>jif/E57Xw8xCo7BwHnOeASD+nbQc462aQTYOuvoH/io=</string>
 </dict>
 </plist>
