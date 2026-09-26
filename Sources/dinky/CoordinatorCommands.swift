@@ -54,8 +54,9 @@ extension Coordinator {
     /// that took its place in the tree it left.
     func windowMoved(_ id: WindowID, refocus: Bool = true) {
         guard var window = model.windows[id] else { return }
-        let hadFocus = focusedWindow == id
+        // The tree's own record: by now macOS has already re-pointed the app's frontmost window elsewhere.
         let from = placements[id]?.space
+        let hadFocus = from.flatMap { workspaces[$0]?.focused } == id
         window.spaceID = dinky_window_space_id(id)
         track(window)
         flush()
