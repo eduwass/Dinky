@@ -27,3 +27,11 @@ install: bundle
 # Fuzz the debug build in the Tart VM: random actions, layout invariants checked after each. See scripts/fuzz.py.
 fuzz seed="1" steps="150": build
     scripts/vm-fuzz.sh {{seed}} {{steps}}
+
+# Build, sign with Developer ID, notarize and staple into dist/, without publishing.
+package version:
+    scripts/package-release.sh {{quote(version)}}
+
+# Test, package, tag and publish a GitHub release from a clean, pushed main.
+release version:
+    scripts/release.sh {{quote(version)}}
