@@ -22,7 +22,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var socket: SocketServer?
     private let onboarding = Onboarding()
     private var signals: [DispatchSourceSignal] = []
-    private let updater = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+    // Only a bundle carries the feed URL; a bare debug binary would otherwise show an "Unable to Check
+    // For Updates" alert at launch that blocks the socket until dismissed.
+    private let updater = SPUStandardUpdaterController(startingUpdater: Bundle.main.infoDictionary?["SUFeedURL"] != nil,
+                                                       updaterDelegate: nil, userDriverDelegate: nil)
 
     func applicationDidFinishLaunching(_ note: Notification) {
         AppState.shared.loadConfig()
