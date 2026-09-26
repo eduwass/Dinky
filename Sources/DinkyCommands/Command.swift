@@ -15,7 +15,7 @@ public enum Command: Equatable, Sendable {
     case joinWith(Direction)
     case resize(ResizeDimension, by: Int)
     /// One layout, or several to cycle through: the first that does not describe the current state wins,
-    /// so `layout floating tiling` toggles between the two.
+    /// so `layout floating tiling` and `layout horizontal vertical` toggle between the two.
     case layout([LayoutName])
     case fullscreen
     case flattenWorkspaceTree
@@ -69,8 +69,41 @@ public enum ResizeDimension: String, Equatable, Sendable {
     case smart, width, height
 }
 
+/// A state for `layout`, as in AeroSpace: a mode, an orientation, both, or floating or tiling for the window.
 public enum LayoutName: String, Equatable, Sendable {
-    case tiles, accordion, floating, tiling
+    case tiles, accordion, horizontal, vertical, auto
+    case hTiles = "h_tiles", vTiles = "v_tiles", hAccordion = "h_accordion", vAccordion = "v_accordion"
+    case floating, tiling
+
+    /// The container mode this sets, nil if it leaves the mode alone.
+    public var mode: LayoutMode? {
+        switch self {
+        case .tiles, .hTiles, .vTiles: .tiles
+        case .accordion, .hAccordion, .vAccordion: .accordion
+        default: nil
+        }
+    }
+
+    /// The states a tiled window's container is in: its mode, the axis it runs along now, both together,
+    /// and `auto` when it follows its longer side.
+    public static func describing(_ mode: LayoutMode, axis: Orientation, auto: Bool) -> [LayoutName] {
+        let horizontal = axis == .horizontal
+        let both: LayoutName = switch mode {
+        case .tiles: horizontal ? .hTiles : .vTiles
+        case .accordion: horizontal ? .hAccordion : .vAccordion
+        }
+        return [mode == .tiles ? .tiles : .accordion, horizontal ? .horizontal : .vertical, both] + (auto ? [.auto] : [])
+    }
+
+    /// The container orientation this sets, nil if it leaves the orientation alone.
+    public var orientation: ContainerOrientation? {
+        switch self {
+        case .horizontal, .hTiles, .hAccordion: .horizontal
+        case .vertical, .vTiles, .vAccordion: .vertical
+        case .auto: .auto
+        default: nil
+        }
+    }
 }
 
 public enum Toggle: String, Equatable, Sendable {

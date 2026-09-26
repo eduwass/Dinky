@@ -48,10 +48,10 @@ extension Workspace {
         let parentPath = Array(path.dropLast()), index = path.last!
         let parent = root.container(at: parentPath)
         let sibling = index + (forward ? 1 : -1)
-        if parent.orientation == axis, parent.children.indices.contains(sibling) {
+        if axisOfContainer(at: parentPath) == axis, parent.children.indices.contains(sibling) {
             if case .window(let other) = parent.children[sibling] { return swap(focused, other) }
             var destination = parentPath + [sibling]
-            while case .container(let c) = root.node(at: destination), c.orientation != axis {
+            while case .container(let c) = root.node(at: destination), axisOfContainer(at: destination) != axis {
                 destination.append(c.activeIndex)
             }
             detach(path, adjusting: &destination)
@@ -60,13 +60,13 @@ extension Workspace {
             } else {
                 root.modify(at: Array(destination.dropLast())) { $0.insert(.window(focused), at: destination.last! + 1) }
             }
-        } else if let depth = path.indices.dropLast().last(where: { root.container(at: Array(path.prefix($0))).orientation == axis }) {
+        } else if let depth = path.indices.dropLast().last(where: { axisOfContainer(at: Array(path.prefix($0))) == axis }) {
             var outer = Array(path.prefix(depth + 1))
             detach(path, adjusting: &outer)
             root.modify(at: Array(outer.dropLast())) { $0.insert(.window(focused), at: outer.last! + (forward ? 1 : 0)) }
-        } else if root.orientation != axis {
+        } else if axisOfContainer(at: []) != axis {
             root.modify(at: parentPath) { $0.remove(at: index) }
-            root = Container(axis, .tiles, [.container(root)])
+            root = Container(ContainerOrientation(axis), .tiles, [.container(root)])
             root.insert(.window(focused), at: forward ? 1 : 0)
         } else {
             return false
@@ -84,18 +84,19 @@ extension Workspace {
         guard let focused, let path = root.path(of: focused) else { return false }
         let forward = direction.isForward, offset = forward ? 1 : -1
         guard let depth = path.indices.last(where: { depth in
-            let c = root.container(at: Array(path.prefix(depth)))
-            return c.orientation == direction.orientation && c.children.indices.contains(path[depth] + offset)
+            let prefix = Array(path.prefix(depth))
+            return axisOfContainer(at: prefix) == direction.orientation
+                && root.container(at: prefix).children.indices.contains(path[depth] + offset)
         }) else { return false }
         var target = Array(path.prefix(depth)) + [path[depth] + offset]
         detach(path, adjusting: &target)
         let across = direction.orientation.opposite
         switch root.node(at: target) {
-        case .container(let c) where c.orientation == across:
+        case .container(let c) where axisOfContainer(at: target) == across:
             root.modify(at: target) { $0.insert(.window(focused), at: forward ? 0 : c.children.count) }
         case let node:
             let pair: [Node] = forward ? [.window(focused), node] : [node, .window(focused)]
-            root.modify(at: Array(target.dropLast())) { $0.replace(at: target.last!, with: .container(Container(across, .tiles, pair))) }
+            root.modify(at: Array(target.dropLast())) { $0.replace(at: target.last!, with: .container(Container(ContainerOrientation(across), .tiles, pair))) }
         }
         normalize()
         focus(focused)
@@ -112,10 +113,10 @@ extension Workspace {
         guard let focused, var path = root.path(of: focused) else { return false }
         while let index = path.popLast() {
             let parent = root.container(at: path)
-            guard parent.mode == .tiles, parent.children.count > 1, axis ?? parent.orientation == parent.orientation else { continue }
-            let rect = root.rect(at: path, in: gaps.inset(bounds))
-            let extent = parent.orientation == .horizontal ? rect.width : rect.height
-            let smallest = parent.children[index].minimumExtent(parent.orientation, gap: gaps.inner(parent.orientation), padding: accordionPadding, minimumSizes)
+            let rect = root.rect(at: path, in: gaps.inset(bounds)), along = parent.axis(in: rect)
+            guard parent.mode == .tiles, parent.children.count > 1, axis ?? along == along else { continue }
+            let extent = along == .horizontal ? rect.width : rect.height
+            let smallest = parent.children[index].minimumExtent(along, gap: gaps.inner(along), padding: accordionPadding, minimumSizes)
             let old = parent.ratios[index]
             let smallestOther = parent.ratios.enumerated().filter { $0.offset != index }.map(\.element).min()!
             let lower = max(Self.minimumRatio, min(Double(smallest / extent), old))

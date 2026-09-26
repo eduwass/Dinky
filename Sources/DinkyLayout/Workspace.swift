@@ -6,6 +6,9 @@ public struct Workspace: Equatable, Sendable {
     public var bounds: CGRect
     public var gaps: Gaps
     public var accordionPadding: CGFloat
+    /// Whether a container switching to accordion follows its longer side (`auto`), unless a `layout` command
+    /// chose its orientation.
+    public var autoOrientAccordions: Bool
     /// The tree. The root is always a container, possibly empty.
     public internal(set) var root: Container
     /// The focused window, if any.
@@ -16,10 +19,12 @@ public struct Workspace: Equatable, Sendable {
     public var minimumSizes: [WindowID: CGSize] = [:]
 
     /// An empty workspace whose root uses `mode`.
-    public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, mode: LayoutMode = .tiles) {
+    public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, autoOrientAccordions: Bool = false,
+                mode: LayoutMode = .tiles) {
         self.bounds = bounds
         self.gaps = gaps
         self.accordionPadding = accordionPadding
+        self.autoOrientAccordions = autoOrientAccordions
         self.root = Container(.horizontal, mode)
     }
 
@@ -40,12 +45,13 @@ public struct Workspace: Equatable, Sendable {
         let leaf = root.rect(at: path, in: gaps.inset(bounds))
         let axis: Orientation = leaf.width >= leaf.height ? .horizontal : .vertical
         let parentPath = Array(path.dropLast()), index = path.last!
+        let joins = axisOfContainer(at: parentPath) == axis || root.container(at: parentPath).children.count == 1
         root.modify(at: parentPath) { parent in
-            if parent.children.count == 1 { parent.orientation = axis }
-            if parent.orientation == axis || parent.mode == .accordion {
+            if parent.children.count == 1, parent.orientation != .auto { parent.orientation = ContainerOrientation(axis) }
+            if joins || parent.mode == .accordion {
                 parent.insert(.window(id), at: index + 1)
             } else {
-                parent.replace(at: index, with: .container(Container(axis, .tiles, [.window(focused), .window(id)])))
+                parent.replace(at: index, with: .container(Container(ContainerOrientation(axis), .tiles, [.window(focused), .window(id)])))
             }
         }
         focus(id)
@@ -107,13 +113,13 @@ public struct Workspace: Equatable, Sendable {
     /// The window snapped to the `side` edge: containers along that axis give their first or last child,
     /// the others their most recently focused one. Adapted from AeroSpace's findLeafWindowRecursive(snappedTo:).
     public func edgeWindow(_ side: Direction) -> WindowID? {
-        var container = root
+        var container = root, rect = gaps.inset(bounds)
         while !container.children.isEmpty {
-            let index = container.orientation != side.orientation ? container.activeIndex
+            let index = container.axis(in: rect) != side.orientation ? container.activeIndex
                 : side.isForward ? container.children.count - 1 : 0
             switch container.children[index] {
             case .window(let id): return id
-            case .container(let c): container = c
+            case .container(let c): (container, rect) = (c, container.rect(at: [index], in: rect))
             }
         }
         return nil
@@ -130,11 +136,41 @@ public struct Workspace: Equatable, Sendable {
         root.path(of: id).map { root.container(at: Array($0.dropLast())) }
     }
 
+    /// The axis of the window's parent container, `auto` resolved, nil if the window is not here.
+    public func containerAxis(of id: WindowID) -> Orientation? {
+        root.path(of: id).map { axisOfContainer(at: Array($0.dropLast())) }
+    }
+
+    /// The axis the container at `path` runs along now, `auto` resolved from the rectangle it is laid out in
+    /// (its windows' frames together), so minimum sizes count as they do on screen.
+    func axisOfContainer(at path: [Int]) -> Orientation {
+        let container = root.container(at: path), frames = tiledLayout().frames
+        let rect = Node.container(container).windows.compactMap { frames[$0] }.reduce(CGRect.null) { $0.union($1) }
+        return container.axis(in: rect.isNull ? gaps.inset(bounds) : rect)
+    }
+
     /// Set the layout mode of the focused window's parent container. Ratios are kept, so tiles come back as they were.
-    public mutating func setMode(_ mode: LayoutMode) {
+    public mutating func setMode(_ mode: LayoutMode) { setLayout(mode, nil) }
+
+    /// Set the orientation of the focused window's parent container, and remember that it was chosen.
+    public mutating func setOrientation(_ orientation: ContainerOrientation) { setLayout(nil, orientation) }
+
+    /// Set the mode, the orientation or both of the focused window's parent container, then tidy the tree once,
+    /// so the container is not merged into its parent halfway. With `autoOrientAccordions`, a container becoming
+    /// an accordion turns `auto` unless a command chose its orientation.
+    public mutating func setLayout(_ mode: LayoutMode?, _ orientation: ContainerOrientation?) {
         fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return }
-        root.modify(at: Array(path.dropLast())) { $0.mode = mode }
+        root.modify(at: Array(path.dropLast())) { c in
+            if let mode {
+                if mode == .accordion, c.mode != .accordion, autoOrientAccordions, !c.orientationChosen { c.orientation = .auto }
+                c.mode = mode
+            }
+            if let orientation {
+                c.orientation = orientation
+                c.orientationChosen = true
+            }
+        }
         normalize()
     }
 

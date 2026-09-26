@@ -11,6 +11,14 @@ public enum Orientation: Equatable, Sendable {
     public var opposite: Orientation { self == .horizontal ? .vertical : .horizontal }
 }
 
+/// How a container picks its axis: fixed, or `auto`, along the longer side of its rectangle (a square runs
+/// horizontally). `auto` is resolved wherever the rectangle is known, see `Container.axis(in:)`.
+public enum ContainerOrientation: Equatable, Sendable {
+    case horizontal, vertical, auto
+
+    public init(_ axis: Orientation) { self = axis == .horizontal ? .horizontal : .vertical }
+}
+
 /// How a container shows its children: side by side, or stacked with neighbours peeking out.
 public enum LayoutMode: Equatable, Sendable {
     case tiles, accordion
@@ -51,15 +59,17 @@ public indirect enum Node: Equatable, Sendable {
 
 /// A container: ordered children with ratios that sum to 1.
 public struct Container: Equatable, Sendable {
-    public var orientation: Orientation
+    public var orientation: ContainerOrientation
     public var mode: LayoutMode
+    /// Whether a `layout` command chose the orientation, so switching to accordion keeps it.
+    public var orientationChosen = false
     public private(set) var children: [Node] = []
     public private(set) var ratios: [Double] = []
     /// Index of the most recently focused child. Drives accordion stacking.
     public internal(set) var active = 0
 
     /// A container with the given children, if any, and equal ratios.
-    public init(_ orientation: Orientation, _ mode: LayoutMode = .tiles, _ children: [Node] = []) {
+    public init(_ orientation: ContainerOrientation, _ mode: LayoutMode = .tiles, _ children: [Node] = []) {
         self.orientation = orientation
         self.mode = mode
         self.children = children
@@ -154,7 +164,8 @@ public struct Container: Equatable, Sendable {
     }
 
     /// Collapse redundant structure bottom-up without changing geometry: drop empty containers,
-    /// replace single-child containers with their child, splice children of same-orientation, same-mode containers.
+    /// replace single-child containers with their child, splice children of same-orientation, same-mode containers. `auto` containers are not spliced: their axis
+    /// depends on their own rectangle.
     mutating func normalize() {
         var newChildren: [Node] = [], newRatios: [Double] = [], newActive = 0
         for (i, child) in children.enumerated() {
@@ -167,7 +178,7 @@ public struct Container: Equatable, Sendable {
             switch node {
             case .container(let c) where c.children.isEmpty:
                 continue
-            case .container(let c) where c.orientation == orientation && c.mode == mode:
+            case .container(let c) where c.orientation == orientation && orientation != .auto && c.mode == mode:
                 if i == activeIndex { newActive += c.activeIndex }
                 newChildren += c.children
                 newRatios += c.ratios.map { $0 * ratios[i] }

@@ -100,15 +100,23 @@ public enum LayoutKind: String, CaseIterable {
     case tiles, accordion
 }
 
+/// What a container's orientation becomes when it switches to accordion: `auto`, following its longer side,
+/// or `keep`, the orientation it had. An orientation chosen with a `layout` command is always kept.
+public enum AccordionOrientation: String, CaseIterable {
+    case auto, keep
+}
+
 public struct Layout: Equatable {
     public var `default` = LayoutKind.tiles
     public var accordionPadding = 30
+    public var accordionOrientation = AccordionOrientation.auto
 
     public init() {}
 
     init(_ t: Table) throws {
         self.default = try t.choice("default") ?? self.default
         accordionPadding = try t.int("accordion-padding") ?? accordionPadding
+        accordionOrientation = try t.choice("accordion-orientation") ?? accordionOrientation
         try t.done()
     }
 }

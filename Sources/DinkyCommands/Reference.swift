@@ -35,9 +35,12 @@ extension Command {
             description: "Put the focused window and its neighbour in a new container."),
         Doc(syntax: "resize <smart|width|height> <+N|-N>",
             description: "Grow or shrink the focused window by N points: smart along its container, width or height along that axis."),
-        Doc(syntax: "layout <tiles|accordion|floating|tiling>...",
+        Doc(syntax: "layout <tiles|accordion|horizontal|vertical|auto|h_tiles|v_tiles|h_accordion|v_accordion|floating|tiling>...",
             description: "Set the layout of the focused window's container, or float or tile the window. "
-                + "With several, apply the first that is not current, so 'layout floating tiling' toggles."),
+                + "tiles and accordion set the mode, horizontal, vertical and auto (follow the container's longer side) "
+                + "the orientation, h_accordion and the like both. With several, apply the first that does not describe "
+                + "the window now, so 'layout floating tiling' and 'layout horizontal vertical' toggle. "
+                + "An auto container counts as the orientation it follows now."),
         Doc(syntax: "fullscreen",
             description: "Toggle the focused window filling the workspace. The tree is kept."),
         Doc(syntax: "flatten-workspace-tree",

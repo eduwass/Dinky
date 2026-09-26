@@ -152,19 +152,22 @@ enum Dispatcher {
     }
 
     /// Applies the first layout that does not describe the window now, or the first if all do:
-    /// floating or tiling for the window, tiles or accordion for its container (tiling it first if it floats).
+    /// floating or tiling for the window, a mode, an orientation or both for its container (tiling it first if it floats).
     private static func layout(_ names: [LayoutName], window: WindowID?) -> Reply {
         guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
         let id = window ?? coordinator.focusedWindow
         guard let floating = coordinator.isFloating(id) else { return .error("layout: no window dinky manages is focused") }
-        let current: [LayoutName] = floating ? [.floating] : [.tiling, coordinator.container(of: id)?.mode == .accordion ? .accordion : .tiles]
+        var current: [LayoutName] = floating ? [.floating] : [.tiling]
+        if !floating, let container = coordinator.container(of: id), let axis = coordinator.containerAxis(of: id) {
+            current += LayoutName.describing(container.mode, axis: axis, auto: container.orientation == .auto)
+        }
         let name = names.first { !current.contains($0) } ?? names[0]
         switch name {
         case .floating, .tiling:
             coordinator.setFloating(id, name == .floating)
-        case .tiles, .accordion:
+        default:
             if floating { coordinator.setFloating(id, false) }
-            coordinator.command(on: id) { $0.setMode(name == .accordion ? .accordion : .tiles) }
+            coordinator.command(on: id) { $0.setLayout(name.mode, name.orientation) }
         }
         return .ok("layout \(name.rawValue)")
     }

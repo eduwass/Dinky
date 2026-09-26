@@ -10,6 +10,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.workspaces, 5)
         XCTAssertEqual(config.layout.default, .tiles)
         XCTAssertEqual(config.layout.accordionPadding, 30)
+        XCTAssertEqual(config.layout.accordionOrientation, .auto)
         XCTAssertEqual(config.gaps.inner, Inner(8))
         XCTAssertEqual(config.gaps.outer, Sides(8))
         XCTAssertTrue(config.borders.enabled)
@@ -58,6 +59,12 @@ final class ConfigTests: XCTestCase {
         assertError("workspaces = true\n", path: "workspaces", line: 1, contains: "expected an integer")
         assertError("gaps = 8\n", path: "gaps", line: 1, contains: "expected a table")
         assertError("[layout]\ndefault = 'stack'\n", path: "layout.default", line: 2, contains: "'tiles', 'accordion'")
+        assertError("[layout]\naccordion-orientation = 'sideways'\n", path: "layout.accordion-orientation", line: 2, contains: "'auto', 'keep'")
+    }
+
+    func testAccordionOrientation() throws {
+        XCTAssertEqual(try Config.parse("[layout]\naccordion-orientation = 'keep'\n").layout.accordionOrientation, .keep)
+        XCTAssertEqual(try Config.parse("").layout.accordionOrientation, .auto)
     }
 
     func testSyntaxErrorHasLine() {

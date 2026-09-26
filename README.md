@@ -77,6 +77,7 @@ The config lives at `~/.config/dinky/dinky.toml`. It is TOML, with key names tak
 |---|---|---|
 | `default` | `'tiles'` | Layout for new containers: `'tiles'` or `'accordion'`. |
 | `accordion-padding` | `30` | Points by which neighbouring windows peek out in an accordion. |
+| `accordion-orientation` | `'auto'` | What a container's orientation becomes when it switches to accordion: `'auto'`, so it runs along its longer side (windows peek out at the top and bottom of a tall column) and flips when resized past square, or `'keep'`, the orientation it had. An orientation chosen with `layout horizontal`, `vertical` or `auto` is always kept. |
 
 ### `[gaps]`
 
@@ -171,6 +172,7 @@ workspaces = 5                 # per display; dinky creates missing Spaces, neve
 [layout]
 default = 'tiles'              # tiles | accordion
 accordion-padding = 30
+accordion-orientation = 'auto' # auto: a new accordion runs along its longer side | keep
 
 [gaps]
 inner = 8
@@ -260,7 +262,7 @@ Bindings, the command line and the menu bar share one set of commands. `dinky he
 | `move <left\|down\|up\|right>` | Move the focused window in a direction within the layout tree. |
 | `join-with <left\|down\|up\|right>` | Put the focused window and its neighbour in a new container. |
 | `resize <smart\|width\|height> <+N\|-N>` | Grow or shrink the focused window by N points. |
-| `layout <tiles\|accordion\|floating\|tiling>...` | Set the layout of the focused window's container, or float or tile the window. With several, apply the first that is not current, so `layout floating tiling` toggles. |
+| `layout <tiles\|accordion\|horizontal\|vertical\|auto\|h_tiles\|v_tiles\|h_accordion\|v_accordion\|floating\|tiling>...` | Set the layout of the focused window's container, or float or tile the window. `tiles` and `accordion` set the mode, `horizontal`, `vertical` and `auto` (follow the container's longer side) the orientation, `h_accordion` and the like both. With several, apply the first that does not describe the window now, so `layout floating tiling`, `layout tiles accordion` and `layout horizontal vertical` toggle. An `auto` container counts as the orientation it follows now. |
 | `fullscreen` | Toggle the focused window filling the workspace. The tree is kept. This is not macOS full screen. |
 | `flatten-workspace-tree` | Put every window on the workspace back into one flat container. |
 | `balance-sizes` | Give every window on the focused workspace an equal share of its container. |
@@ -309,7 +311,7 @@ The queries and callbacks follow [AeroSpace](https://nikitabobko.github.io/AeroS
 `--format` takes a string with `%{variable}`s; quote it. `%{right-padding}` pads to line up columns, `%{newline}` and `%{tab}` insert those characters.
 
 - Workspaces: `%{workspace}` (the number), `%{workspace-is-focused}`, `%{workspace-is-visible}`, `%{monitor-id}` (1-based display number), `%{monitor-name}`, `%{monitor-is-main}`.
-- Windows: `%{window-id}`, `%{window-title}`, `%{window-layout}` (`h_tiles`, `v_tiles`, `h_accordion`, `v_accordion`, `floating` or `fullscreen`), `%{window-is-floating}`, `%{window-is-fullscreen}`, `%{app-name}`, `%{app-bundle-id}`, `%{app-pid}`, plus the workspace and monitor variables.
+- Windows: `%{window-id}`, `%{window-title}`, `%{window-layout}` and `%{window-parent-container-layout}` (`h_tiles`, `v_tiles`, `h_accordion`, `v_accordion`, `floating` or `fullscreen`; an `auto` container reports the orientation it follows now), `%{window-is-floating}`, `%{window-is-fullscreen}`, `%{app-name}`, `%{app-bundle-id}`, `%{app-pid}`, plus the workspace and monitor variables.
 - Monitors: `%{monitor-id}`, `%{monitor-name}`, `%{monitor-is-main}`.
 
 `dinky list-workspaces --all` prints every display's numbers, so `for sid in $(dinky list-workspaces --all)` repeats them on two displays; `--format '%{monitor-id}-%{workspace}'` tells them apart.

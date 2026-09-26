@@ -51,14 +51,23 @@ public struct Layout: Equatable, Sendable {
 }
 
 extension Container {
+    /// The axis children run along in `rect`: the set orientation, or for `auto` the longer side (a square is horizontal).
+    public func axis(in rect: CGRect) -> Orientation {
+        switch orientation {
+        case .horizontal: .horizontal
+        case .vertical: .vertical
+        case .auto: rect.width >= rect.height ? .horizontal : .vertical
+        }
+    }
+
     /// Lay out this container in `rect`: tiles split by ratios with the inner gap for its axis between siblings,
     /// accordion children overlap with neighbours peeking out by `padding`. `virtual` lays accordions out as tiles.
     /// `minimums` are sizes windows refused to go below; tiles grow to them when their siblings can give the space.
     func layout(in rect: CGRect, gaps: Gaps, padding: CGFloat, minimums: [WindowID: CGSize] = [:],
                 virtual: Bool = false, into result: inout Layout) {
-        let tiled = mode == .tiles || virtual, gap = gaps.inner(orientation)
+        let tiled = mode == .tiles || virtual, axis = axis(in: rect), gap = gaps.inner(axis)
         let rects = tiled
-            ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(orientation, gap: gap, padding: padding, minimums) })
+            ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
             : accordionRects(in: rect, padding: padding)
         for i in stackingOrder {
             switch children[i] {
@@ -79,7 +88,7 @@ extension Container {
     /// Split `rect` along the orientation by ratios, `gap` between children, edges rounded to whole points.
     /// Children below their `minimums` extent are grown to it, taken from the others, when everyone fits.
     func tileRects(in rect: CGRect, gap: CGFloat, minimums: [CGFloat] = []) -> [CGRect] {
-        let horizontal = orientation == .horizontal
+        let horizontal = axis(in: rect) == .horizontal
         let origin = horizontal ? rect.minX : rect.minY
         let extent = horizontal ? rect.width : rect.height
         let available = extent - gap * CGFloat(max(children.count - 1, 0))
@@ -98,7 +107,7 @@ extension Container {
     /// Accordion rects: each child gets `rect` shrunk along the axis so neighbours of the active child peek out.
     /// Adapted from AeroSpace's layoutAccordion (MIT, github.com/nikitabobko/AeroSpace).
     func accordionRects(in rect: CGRect, padding p: CGFloat) -> [CGRect] {
-        let last = children.count - 1, active = activeIndex
+        let last = children.count - 1, active = activeIndex, horizontal = axis(in: rect) == .horizontal
         return children.indices.map { i in
             let (lead, trail): (CGFloat, CGFloat) = switch i {
             case 0 where last == 0: (0, 0)
@@ -108,7 +117,7 @@ extension Container {
             case active + 1: (2 * p, 0)
             default: (p, p)
             }
-            return orientation == .horizontal
+            return horizontal
                 ? CGRect(x: rect.minX + lead, y: rect.minY, width: rect.width - lead - trail, height: rect.height)
                 : CGRect(x: rect.minX, y: rect.minY + lead, width: rect.width, height: rect.height - lead - trail)
         }
@@ -142,6 +151,7 @@ func fit(_ sizes: [CGFloat], minimums: [CGFloat], total: CGFloat) -> [CGFloat] {
 
 extension Node {
     /// The smallest extent along `axis` this subtree can take without a window going below its minimum.
+    /// An `auto` container counts as running across `axis`: a tile's longer side is usually across its parent's axis.
     func minimumExtent(_ axis: Orientation, gap: CGFloat, padding: CGFloat, _ minimums: [WindowID: CGSize]) -> CGFloat {
         switch self {
         case .window(let id):
@@ -149,7 +159,7 @@ extension Node {
             return axis == .horizontal ? size.width : size.height
         case .container(let c):
             let each = c.children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) }
-            guard c.orientation == axis, !each.isEmpty else { return each.max() ?? 0 }
+            guard c.orientation == ContainerOrientation(axis), !each.isEmpty else { return each.max() ?? 0 }
             return c.mode == .tiles
                 ? each.reduce(0, +) + gap * CGFloat(each.count - 1)
                 : each.max()! + padding * CGFloat(min(each.count - 1, 2))

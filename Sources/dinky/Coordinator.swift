@@ -80,7 +80,10 @@ final class Coordinator {
         } else {
             borders = nil
         }
-        for key in workspaces.keys { workspaces[key]!.accordionPadding = CGFloat(config.layout.accordionPadding) }
+        for key in workspaces.keys {
+            workspaces[key]!.accordionPadding = CGFloat(config.layout.accordionPadding)
+            workspaces[key]!.autoOrientAccordions = config.layout.accordionOrientation == .auto
+        }
         fitToDisplays()
         dirty.formUnion(workspaces.keys)
         flush()
@@ -223,6 +226,7 @@ final class Coordinator {
         if workspaces[key] == nil {
             workspaces[key] = Workspace(bounds: display.visibleArea, gaps: gaps(on: display),
                                         accordionPadding: CGFloat(config.layout.accordionPadding),
+                                        autoOrientAccordions: config.layout.accordionOrientation == .auto,
                                         mode: config.layout.default == .accordion ? .accordion : .tiles)
         }
         return key

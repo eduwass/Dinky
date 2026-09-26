@@ -10,6 +10,7 @@ extension Config {
     [layout]
     default = 'tiles'              # tiles | accordion
     accordion-padding = 30
+    accordion-orientation = 'auto' # auto: a new accordion runs along its longer side | keep
 
     [gaps]
     inner = 8

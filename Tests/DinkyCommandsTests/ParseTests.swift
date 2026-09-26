@@ -47,6 +47,24 @@ final class ParseTests: XCTestCase {
         XCTAssertEqual(try parse("layout tiling"), .layout([.tiling]))
         XCTAssertEqual(try parse("layout floating tiling"), .layout([.floating, .tiling]))
         XCTAssertEqual(try parse("layout accordion tiles"), .layout([.accordion, .tiles]))
+        XCTAssertEqual(try parse("layout horizontal vertical"), .layout([.horizontal, .vertical]))
+        XCTAssertEqual(try parse("layout auto"), .layout([.auto]))
+        XCTAssertEqual(try parse("layout accordion horizontal vertical"), .layout([.accordion, .horizontal, .vertical]))
+        XCTAssertEqual(try parse("layout h_tiles v_tiles h_accordion v_accordion"), .layout([.hTiles, .vTiles, .hAccordion, .vAccordion]))
+        XCTAssertEqual(try parse("layout floating h_accordion auto"), .layout([.floating, .hAccordion, .auto]))
+    }
+
+    func testLayoutNamesSetModeOrientationOrBoth() {
+        XCTAssertEqual(LayoutName.hAccordion.mode, .accordion)
+        XCTAssertEqual(LayoutName.hAccordion.orientation, .horizontal)
+        XCTAssertEqual(LayoutName.vertical.mode, nil)
+        XCTAssertEqual(LayoutName.auto.orientation, .auto)
+        XCTAssertEqual(LayoutName.tiles.orientation, nil)
+    }
+
+    func testLayoutStatesDescribeTheResolvedAxis() {
+        XCTAssertEqual(LayoutName.describing(.accordion, axis: .vertical, auto: true), [.accordion, .vertical, .vAccordion, .auto])
+        XCTAssertEqual(LayoutName.describing(.tiles, axis: .horizontal, auto: false), [.tiles, .horizontal, .hTiles])
     }
 
     func testSimpleCommands() throws {
@@ -108,7 +126,7 @@ final class ParseErrorTests: XCTestCase {
     func testBadStrings() {
         for s in ["", "   ", "workspace", "workspace 0", "workspace -1", "workspace 1 2", "focus sideways",
                   "resize smart 50", "resize diagonal +50", "resize smart +x", "layout", "layout grid",
-                  "layout tiles grid", "move-window-to-display 2", "move-window-to-workspace --follow",
+                  "layout tiles grid", "layout accordion h_list", "layout horizontal sideways", "layout auto_tiles", "move-window-to-display 2", "move-window-to-workspace --follow",
                   "mode", "mode a b", "enable maybe", "fullscreen now", "Workspace 1", "exec-and-forget", "exec-and-forget  "] {
             XCTAssertNotEqual(message(s), "parsed", s)
         }
