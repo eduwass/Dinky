@@ -20,6 +20,7 @@ final class BorderManager {
         refreshSpaces()
         focusedID = dinky_border_focused_window()
         syncAll()
+        MissionControl.shared.onChange { [weak self] _ in self?.syncAll() }
     }
 
     func update(config: Borders) {
@@ -29,6 +30,7 @@ final class BorderManager {
     }
 
     func handle(_ event: WindowEvent) {
+        MissionControl.shared.update(from: model)
         switch event.kind {
         case .spaceChange, .spaceCreated, .spaceDestroyed:
             refreshSpaces()
@@ -63,7 +65,7 @@ final class BorderManager {
             borders[window.id] = nil
             return
         }
-        guard window.isOrderedIn, !window.isMinimized, visibleSpaces.contains(window.spaceID) else {
+        guard window.isOrderedIn, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
             borders[window.id]?.hide()
             return
         }

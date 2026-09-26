@@ -97,7 +97,8 @@ final class HoverFocus {
     /// The tracked window under the pointer, if hover may focus it now.
     private func hoverable(at point: CGPoint) -> WindowID? {
         let state = AppState.shared
-        guard state.enabled, now() >= quietUntil, !CGEventSource.buttonState(.combinedSessionState, button: .left),
+        guard state.enabled, now() >= quietUntil, !MissionControl.shared.active,
+              !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
               !state.displays.displays.contains(where: { SpaceSwitcher.shared.target(on: $0.uuid) != nil }) else { return nil }
         // An accordion child other than the front one only peeks out; with `accordion = false` it stays put.

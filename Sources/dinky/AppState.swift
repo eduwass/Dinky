@@ -51,6 +51,7 @@ final class AppState {
     }
 
     func startCoordinator() {
+
         guard coordinator == nil else { return }
         let coordinator = Coordinator(displays: displays, config: config)
         self.coordinator = coordinator
