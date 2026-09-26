@@ -1,6 +1,6 @@
 ---
 id: din-9egq
-status: in_progress
+status: closed
 deps: []
 links: []
 created: 2026-09-25T22:21:15Z
@@ -27,3 +27,7 @@ Ideas: record the minimum from the first readback instead of after the retry; la
 **2026-09-25T22:37:34Z**
 
 Cause: the second and third passes are a chain, not refusals found separately. Pass 1 asks Safari for 246 wide, it refuses (574). The corrected layout grows Safari's column to exactly its minimum extent, so the TextEdit tile beside it is asked for 0 wide; it refuses (115) and that needs a third layout. Refusals in one pass were already collected into one completion. Fix: minimums are remembered per bundle id for the session, so a new window of an app that has refused before is laid out around its minimum from the start; the scheduler neither rewrites nor retries a window that is already where its recorded minimum lets it be; minimums found in different dimensions are merged, where before the later one overwrote the earlier; the completion re-lays out through edit(), so only when the layout changes. VM reproduction (three TextEdit docs, then open -a Safari, debug-state every 100 ms): before, 3 frame sets with Safari every run; after, 1 set once TextEdit and Safari minimums are known (runs 2 and 3), still 3 passes on the first encounter in a fresh session (a TextEdit minimum is only found by squeezing a TextEdit window). Fuzz seed 23, 100 steps: no shift-frame (was x11 in 150 steps); shift-space x3 (activation following, not frames). Open: the first-encounter chain; options are a floor for tiles with unknown minimums when a sibling's minimum takes space, or recording a minimum from the first readback to shorten each pass by one settle and retry.
+
+**2026-09-26T21:12:30Z**
+
+Fixed except the first encounter with an app's minimum, which now happens once ever: minimums are remembered per app across sessions (6a3126f). The remaining first-encounter chain is accepted. Closing.

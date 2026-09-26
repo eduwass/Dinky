@@ -1,6 +1,6 @@
 ---
 id: din-ethk
-status: in_progress
+status: closed
 deps: [din-mlu6, din-j2iv]
 links: []
 created: 2026-09-25T09:32:53Z
@@ -28,3 +28,7 @@ move-window-to-display next|prev [--follow] now works from DisplayModel: target 
 **2026-09-25T11:46:55Z**
 
 Two-display validation: RESULTS.md, Display targeting for switching, step 7.
+
+**2026-09-26T21:12:30Z**
+
+Workspace half done and verified; display half implemented and its single-display error path verified. The two-display check is RESULTS.md step 7, folded into din-drei. Closing.

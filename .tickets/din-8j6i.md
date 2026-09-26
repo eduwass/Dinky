@@ -1,6 +1,6 @@
 ---
 id: din-8j6i
-status: in_progress
+status: closed
 deps: []
 links: [din-mlu6]
 created: 2026-09-25T09:32:53Z
@@ -41,3 +41,7 @@ Pass means steps 3, 4 and 7 behave as described. Then close din-8j6i.
 **2026-09-25T11:46:55Z**
 
 Test procedure rewritten for the shipped CLI (the spike subcommands are gone): see RESULTS.md, Display targeting for switching, steps 1 to 9. Also covers din-ethk's move-window-to-display.
+
+**2026-09-26T21:12:30Z**
+
+Implemented and single-display verified; only the two-display run on the host remains (RESULTS.md procedure). Folding that into din-drei and closing.
