@@ -358,4 +358,4 @@ dinky studies the approaches of these projects. Where code was adapted, the lice
 - [Tuna](https://tunaformac.com): an earlier synthetic Dock swipe, studied.
 - [bobrwm](https://github.com/bobrwm/bobrwm) (MIT): studied for creating Spaces with the bridged SkyLight operation.
 
-dinky itself has no license chosen yet.
+dinky is MIT licensed; see LICENSE.
