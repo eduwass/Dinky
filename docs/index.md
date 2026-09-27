@@ -54,7 +54,14 @@ Status: early, in daily use by its author on macOS 27. Expect rough edges.
 
 ## Install
 
-Download the signed, notarized app:
+With Homebrew, which also puts the `dinky` command line on your `PATH`:
+
+```sh
+brew install --cask mikker/tap/dinky
+open -a dinky
+```
+
+Or download the signed, notarized app:
 
 ```sh
 curl -fLO https://github.com/mikker/Dinky/releases/latest/download/dinky.app.zip
@@ -68,7 +75,8 @@ in a browser and drag `dinky.app` to Applications. dinky is a menu bar app with
 no Dock icon. It updates itself with Sparkle; the menu has "Check for
 Updates…".
 
-The app binary is also the command line tool. Link it onto your `PATH`:
+The app binary is also the command line tool. Installed by hand, link it onto
+your `PATH`:
 
 ```sh
 ln -s /Applications/dinky.app/Contents/MacOS/dinky /usr/local/bin/dinky

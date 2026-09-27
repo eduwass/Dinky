@@ -9,6 +9,12 @@ Status: early, in daily use by its author on macOS 27. Expect rough edges.
 ## Install
 
 ```
+brew install --cask mikker/tap/dinky
+```
+
+Or from source:
+
+```
 git clone https://github.com/mikker/Dinky.git
 cd Dinky
 just install     # builds and signs build/dinky.app, symlinks the CLI into ~/.local/bin
