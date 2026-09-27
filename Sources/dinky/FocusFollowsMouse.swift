@@ -7,7 +7,9 @@ import DinkyPrivate
 // moves; at most every 50 ms the pointer is looked at, and only real movement counts, so windows moving
 // under a still pointer (a retile, a Space switch) never take focus. The window must stay under the pointer
 // for `delay-ms` before it is focused. Only windows dinky tracks count; panels, menus, the Dock and the
-// desktop never do. Main thread only.
+// desktop never do. Hover also stands down for a moment after a Space change and after an app activation it
+// did not cause (Cmd-Tab, a Dock click): the pointer then still rests on the window being left, and a stray
+// move would focus it back, superseding the activation before the follower has switched Space. Main thread only.
 final class HoverFocus {
     private var config = FocusFollowsMouse()
     private var tap: CFMachPort?
@@ -15,8 +17,13 @@ final class HoverFocus {
     private var evaluationPending = false
     private var lastEvaluatedAt: UInt64 = 0
     private var lastPoint = CGPoint(x: -1, y: -1)
-    /// Hover is ignored until then: just after a Space change or a config reload.
+    /// Where the last move event put the pointer. Read from the event: asking the system right away in
+    /// the callback can still answer with the position before the move.
+    private var latestPoint = CGPoint(x: -1, y: -1)
+    /// Hover is ignored until then: just after a Space change, an app activation or a config reload.
     private var quietUntil: UInt64 = 0
+    /// The app hover last activated itself, and when, so that activation starts no quiet period.
+    private var ownActivation: (pid: pid_t, at: UInt64)?
     private var lastSpaces: [UInt64] = []
     private var dwell: DispatchWorkItem?
     private var observing = false
@@ -31,6 +38,11 @@ final class HoverFocus {
         if !observing {
             observing = true
             AppState.shared.displays.observe { [weak self] _ in self?.noteSpaces() }
+            NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification,
+                                                              object: nil, queue: .main) { [weak self] note in
+                guard let app = note.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication else { return }
+                self?.activated(app.processIdentifier)
+            }
         }
         lastSpaces = currentSpaces()
         cancel(quietFor: quiet)
@@ -60,13 +72,15 @@ final class HoverFocus {
         (self.tap, source) = (nil, nil)
     }
 
-    fileprivate func handle(_ type: CGEventType) {
+    fileprivate func handle(_ type: CGEventType, at location: CGPoint) {
         if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
             if let tap { CGEvent.tapEnable(tap: tap, enable: true) }
             return
         }
+        guard type == .mouseMoved, tap != nil else { return }
+        latestPoint = location
         // Trailing throttle: the last move of a burst is always evaluated, at most every 50 ms.
-        guard type == .mouseMoved, tap != nil, !evaluationPending else { return }
+        guard !evaluationPending else { return }
         evaluationPending = true
         let wait = max(0, Int64(lastEvaluatedAt + throttle) - Int64(uptime()))
         DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(wait))) { [weak self] in self?.evaluate() }
@@ -75,7 +89,8 @@ final class HoverFocus {
     private func evaluate() {
         evaluationPending = false
         lastEvaluatedAt = uptime()
-        guard let point = CGEvent(source: nil)?.location, hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= minimumMove else { return }
+        let point = latestPoint
+        guard hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= minimumMove else { return }
         lastPoint = point
         noteSpaces()
         guard let id = hoverable(at: point), id != AppState.shared.coordinator?.focusedWindow else { return cancel() }
@@ -91,7 +106,17 @@ final class HoverFocus {
         guard let point = CGEvent(source: nil)?.location, currentSpaces() == spaces,
               hoverable(at: point) == id, let coordinator = AppState.shared.coordinator,
               id != coordinator.focusedWindow else { return }
+        ownActivation = (coordinator.model.windows[id]?.pid ?? 0, uptime())
         coordinator.focus(id)
+    }
+
+    /// An activation that is not hover's own cancels any hover and starts the quiet period.
+    private func activated(_ pid: pid_t) {
+        if let own = ownActivation, own.pid == pid, uptime() - own.at < quiet {
+            ownActivation = nil
+            return
+        }
+        cancel(quietFor: quiet)
     }
 
     /// The tracked window under the pointer, if hover may focus it now.
@@ -101,10 +126,13 @@ final class HoverFocus {
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
               !SpaceSwitcher.shared.switching else { return nil }
-        // A dialog, sheet or alert has keyboard focus when the front app's focused window is one dinky does not
-        // track. Hover leaves it alone: focusing another window would bury the dialog behind its app.
+        // A dialog, sheet or alert has keyboard focus when the front app's focused window is one dinky has not
+        // placed although it is on a current Space. Hover leaves it alone: focusing another window would bury
+        // the dialog behind its app. An unplaced window on another Space (the front app's window after a
+        // Cmd-Tab that was not followed, or on a Space dinky has not seen yet) is no dialog.
         let front = frontWindowID()
-        if front != 0, coordinator.placements[front] == nil { return nil }
+        if front != 0, coordinator.placements[front] == nil,
+           coordinator.model.windows[front].map({ coordinator.isVisible($0.spaceID) }) ?? true { return nil }
         // An accordion child other than the front one only peeks out; with `accordion-edges = false` it stays put.
         if !config.accordionEdges, let container = coordinator.container(of: id), container.mode == .accordion,
            container.children[container.activeIndex] != .window(id) { return nil }
@@ -163,6 +191,6 @@ final class HoverFocus {
 
 private func hoverCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEvent,
                            refcon: UnsafeMutableRawPointer?) -> Unmanaged<CGEvent>? {
-    if let refcon { Unmanaged<HoverFocus>.fromOpaque(refcon).takeUnretainedValue().handle(type) }
+    if let refcon { Unmanaged<HoverFocus>.fromOpaque(refcon).takeUnretainedValue().handle(type, at: event.location) }
     return Unmanaged.passUnretained(event)
 }

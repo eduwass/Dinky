@@ -221,7 +221,8 @@ final class Coordinator {
         for key in keys where isVisible(key.space) { apply(key) }
     }
 
-    private func isVisible(_ space: UInt64) -> Bool {
+    /// Whether the Space is a display's current one.
+    func isVisible(_ space: UInt64) -> Bool {
         displays.displays.contains { $0.currentSpaceID == space }
     }
 
