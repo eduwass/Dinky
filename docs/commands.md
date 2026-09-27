@@ -64,11 +64,23 @@ A few subcommands are for the command line only:
 | Command | What it does |
 |---|---|
 | `app` | Run the app in the foreground, logging to the terminal. |
-| `recover` | Ask the running app to restore the windows a crashed session left tiled. See [Recovery](how-it-works.md#recovery). |
+| `recover` | Ask the running app to restore the windows a crashed session left tiled. See [Recovery](#recovery) below. |
 | `debug events\|windows` | Print the live window event stream, or the current windows, without the app. Useful in a bug report. |
 | `doctor [--config <path>]` | Check the config and the macOS settings dinky depends on. Exits 1 on errors. |
 
 `dinky debug-state` asks the app for its tiling state as JSON (displays, each workspace's tree with the frames it expects, placements and windows). For testing, `dinky debug ax-close|ax-minimize|ax-unminimize <window id>`, `dinky debug ax-frame <window id> <x> <y> <w> <h>` and `dinky debug hide-app|unhide-app <pid>` act on windows and apps through Accessibility; `just fuzz <seed> <steps>` uses them to fuzz the app in the test VM (`scripts/fuzz.py`).
+
+## Recovery
+
+Before dinky tiles a window, it journals the window's original frame and Space
+to `~/Library/Application Support/dinky/journal.json`. Turning dinky off with
+`enable off` or quitting it, including through `kill` and logging out, moves
+every journaled window back to its Space and restores its frame.
+
+After a crash, the next launch keeps the journal entries whose windows still
+exist and offers to restore them: the menu shows "Restore N windows from the
+previous session", and `dinky recover` does the same. Restoring leaves dinky
+disabled; `dinky enable on` tiles again.
 
 ## Scripting and SketchyBar
 

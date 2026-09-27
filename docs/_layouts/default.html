@@ -25,11 +25,6 @@
         <a {% if page.url == '/' %}aria-current="page"{% endif %} href="{{ '/' | relative_url }}">00 / Introduction</a>
         <a {% if page.url contains '/configuration/' %}aria-current="page"{% endif %} href="{{ '/configuration/' | relative_url }}">01 / Configuration</a>
         <a {% if page.url contains '/commands/' %}aria-current="page"{% endif %} href="{{ '/commands/' | relative_url }}">02 / Commands</a>
-        <a {% if page.url contains '/how-it-works/' %}aria-current="page"{% endif %} href="{{ '/how-it-works/' | relative_url }}">03 / How it works</a>
-        <a {% if page.url contains '/releasing/' %}aria-current="page"{% endif %} href="{{ '/releasing/' | relative_url }}">04 / Releasing</a>
-        <a {% if page.url contains '/plan/' %}aria-current="page"{% endif %} href="{{ '/plan/' | relative_url }}">05 / Plan</a>
-        <a {% if page.url contains '/results/' %}aria-current="page"{% endif %} href="{{ '/results/' | relative_url }}">06 / Results</a>
-        <a {% if page.url contains '/research/' %}aria-current="page"{% endif %} href="{{ '/research/' | relative_url }}">07 / Research</a>
       </aside>
 
       <main id="content">

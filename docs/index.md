@@ -35,7 +35,7 @@ Status: early, in daily use by its author on macOS 27. Expect rough edges.
 > SkyLight calls to do both. They were found by reading other projects' source
 > and SkyLight's runtime, and a macOS update can change or remove them without
 > notice. Only macOS 27.0 has been tried. Expect dinky to need fixes after
-> macOS updates, especially major ones. See [How it works](how-it-works.md).
+> macOS updates, especially major ones.
 
 ## Requirements
 
@@ -139,12 +139,25 @@ back:
 defaults write com.apple.dock workspaces-auto-swoosh -bool true && killall Dock
 ```
 
+## Known limits
+
+- **One display is what has been tested.** Switching a display the pointer is
+  not on moves the pointer there for about 60 ms and back; you may see a
+  flicker.
+- **dinky cannot remove Spaces.** It creates the ones the config asks for and
+  never removes any; use Mission Control.
+- **Apps refuse some sizes.** Safari enforces a minimum width and Terminal
+  snaps to its character grid, so tiles can overlap or leave gaps. dinky learns
+  each app's minimum size and lays the workspace out around it.
+- **Focus across Spaces.** macOS cannot focus a window on another Space, so
+  dinky switches first.
+- **Private APIs.** A macOS update can break switching, moving or Space
+  creation.
+
 ## Start here
 
 - [Configuration](configuration.md)
 - [Commands, the CLI and SketchyBar](commands.md)
-- [How it works, and its known limits](how-it-works.md)
-- [Releasing](releasing.md)
 - [Source](https://github.com/mikker/Dinky)
 
 ## Credits
