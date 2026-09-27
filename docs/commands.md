@@ -35,7 +35,7 @@ permalink: /commands/
 | `list-windows [flags]` | Print windows as `id \| app \| title`. See below. |
 | `list-monitors [flags]` | Print displays as `number \| name`. `list-displays` is the same. |
 | `debug-state` | Print the tiling state as JSON: displays, each workspace's tree and expected frames, placements and windows. For tests and bug reports. |
-| `exec-and-forget <shell command>` | Run the rest of the line with `/bin/sh -c` without waiting. Its output goes to dinky's log. |
+| `exec-and-forget <shell command>` | Run the rest of the line with `/bin/sh -c` without waiting. Its output goes to dinky's log, `~/Library/Logs/dinky.log`. |
 
 </div>
 
@@ -51,7 +51,7 @@ ln -s /Applications/dinky.app/Contents/MacOS/dinky /usr/local/bin/dinky
 
 `just install` from source links `build/dinky.app`'s binary into `~/.local/bin` instead.
 
-Then `dinky <command>` runs any command above in the running app, for example `dinky workspace 3` or `dinky list-windows`. The CLI checks the command first and prints the expected syntax if it does not parse. It exits 0 on success and 1 on an error or when the app is not running. Run from a shell with no arguments, the binary prints usage instead of starting the app; `dinky app` starts the app in the foreground, which is handy for seeing its log.
+Then `dinky <command>` runs any command above in the running app, for example `dinky workspace 3` or `dinky list-windows`. The CLI checks the command first and prints the expected syntax if it does not parse. It exits 0 on success and 1 on an error or when the app is not running. Run from a shell with no arguments, the binary prints usage instead of starting the app; `dinky app` starts the app in the foreground with its log on the terminal. Started from the bundle, the app logs to `~/Library/Logs/dinky.log` instead: every Space switch and every decision about following an app activation is there, which is what to send with a bug report.
 
 The CLI talks to the app over a unix socket at `$TMPDIR/dinky.sock` (your per-user temp directory; `dinky help` prints the full path). The protocol is one command per connection: write the command line ending in a newline, and read the answer, a first line of `ok` or `error` followed by the reply text. So scripts can skip the CLI:
 
@@ -63,7 +63,7 @@ A few subcommands are for the command line only:
 
 | Command | What it does |
 |---|---|
-| `app` | Run the app in the foreground, logging to the terminal. |
+| `app` | Run the app in the foreground, logging to the terminal instead of `~/Library/Logs/dinky.log`. |
 | `recover` | Ask the running app to restore the windows a crashed session left tiled. See [Recovery](#recovery) below. |
 | `debug events\|windows` | Print the live window event stream, or the current windows, without the app. Useful in a bug report. |
 | `doctor [--config <path>]` | Check the config and the macOS settings dinky depends on. Exits 1 on errors. |

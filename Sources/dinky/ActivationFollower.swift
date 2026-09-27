@@ -29,6 +29,13 @@ private var lastGone: (pid: pid_t, at: UInt64) = (0, 0)
 private var activePID = NSWorkspace.shared.frontmostApplication?.processIdentifier ?? 0
 /// Counts activations, so a follow waiting for a window knows when a newer activation replaced it.
 private var activations = 0
+/// The last few follows, to notice a loop: dinky and macOS chasing each other's activations between two
+/// Spaces. `loopFollows` follows within `loopWindow` pause following for `loopPause`, logged with the trail.
+private var recentFollows: [(at: UInt64, text: String)] = []
+private var pausedUntil: UInt64 = 0
+private let loopFollows = 4
+private let loopWindow = 3_000 * ms
+private let loopPause = 5_000 * ms
 
 // Records the current Space of every display; a difference from the last one recorded is a Space change.
 private func noteCurrentSpace() {
@@ -79,7 +86,7 @@ func installActivationFollower() {
         let previous = activePID
         activePID = app.processIdentifier
         activations += 1
-        guard followEnabled, !isArrivalActivation() else { return }
+        guard followEnabled, uptime() >= pausedUntil, !isArrivalActivation() else { return }
         activated(app.processIdentifier, name: app.localizedName ?? "?", previous: previous)
     }
 }
@@ -102,14 +109,26 @@ private func activated(_ pid: pid_t, name: String, previous: pid_t) {
     DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(windowGrace))) {
         guard activation == activations, lastSpaceChangeAt < activatedAt else { return }
         if windowSpaces(of: pid).contains(here) {
-            print("activate \(name): stayed, its new window opened here")
+            print("\(stamp()) activate \(name): stayed, its new window opened here")
         } else if lastGone.pid == previous, lastGone.at + goneWindow > activatedAt, !hasWindowOnScreen(previous) {
-            print("activate \(name): not followed, macOS replaced the app that went away")
+            print("\(stamp()) activate \(name): not followed, macOS replaced the app that went away")
         } else {
             follow(pid, name: name)
         }
         fflush(stdout)
     }
+}
+
+// Remembers a follow, and pauses following when they come too fast to be the user's doing.
+private func noteFollow(_ text: String) {
+    let now = uptime()
+    recentFollows = recentFollows.filter { now - $0.at < loopWindow } + [(now, text)]
+    guard recentFollows.count >= loopFollows else { return }
+    pausedUntil = now + loopPause
+    let trail = recentFollows.map { String(format: "%.0f ms ago: %@", Double(now - $0.at) / 1_000_000, $0.text) }
+    fputs("\(stamp()) activate: \(recentFollows.count) follows in \(loopWindow / (1_000 * ms)) s look like a loop; "
+        + "not following for \(loopPause / (1_000 * ms)) s\n  " + trail.joined(separator: "\n  ") + "\n", stderr)
+    recentFollows = []
 }
 
 // The Spaces of the app's normal windows, front to back: the first one is its frontmost window's.
@@ -133,9 +152,12 @@ private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UIn
 // Switches to the Space of the app's frontmost window.
 private func follow(_ pid: pid_t, name: String) {
     let model = AppState.shared.displays
-    guard let (space, display) = windowSpaces(of: pid).lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first,
+    guard uptime() >= pausedUntil,
+          let (space, display) = windowSpaces(of: pid).lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first,
           space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else { return }
     let spaces = display.spaces
-    print(String(format: "activate %@: followed %d -> %d on display %u", name,
-                 (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1, display.id))
+    let text = String(format: "activate %@: followed %d -> %d on display %u", name,
+                      (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1, display.id)
+    print("\(stamp()) \(text)")
+    noteFollow(text)
 }

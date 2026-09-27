@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Copies the debug binary and fuzz.py into the Tart VM `dinky`, restarts the app there from that binary,
-# runs the fuzzer over ssh and prints its output. Usage: scripts/vm-fuzz.sh <seed> <steps>
+# runs the fuzzer over ssh and prints its output. Usage: scripts/vm-fuzz.sh <seed> <steps> [--switching]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 
@@ -11,7 +11,7 @@ ssh "${SSH_OPTS[@]}" "admin@$IP" 'pkill -f "[d]inky.app"; pkill -f "[d]inky[-a-z
 scp -q "${SSH_OPTS[@]}" .build/debug/dinky "admin@$IP:dinky-fuzz"
 scp -q "${SSH_OPTS[@]}" scripts/fuzz.py "admin@$IP:fuzz.py"
 ssh "${SSH_OPTS[@]}" "admin@$IP" 'nohup ~/dinky-fuzz app > /tmp/dinky-fuzz.log 2>&1 < /dev/null & sleep 3'
-ssh "${SSH_OPTS[@]}" "admin@$IP" "python3 -u ~/fuzz.py --seed $1 --steps $2 --dinky ~/dinky-fuzz"
+ssh "${SSH_OPTS[@]}" "admin@$IP" "python3 -u ~/fuzz.py --seed $1 --steps $2 --dinky ~/dinky-fuzz ${3:-}"
 status=$?
 ssh "${SSH_OPTS[@]}" "admin@$IP" 'pkill -f "[d]inky-fuzz app"; echo "app log: /tmp/dinky-fuzz.log in the guest"'
 exit $status

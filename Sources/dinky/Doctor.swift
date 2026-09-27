@@ -17,6 +17,7 @@ func runDoctor(_ args: [String]) -> Int32 {
     var url = Config.userConfigURL
     if let i = args.firstIndex(of: "--config"), i + 1 < args.count { url = URL(fileURLWithPath: args[i + 1]) }
     print("  config: \(url.path)")
+    print("  log: \(logURL.path)")
     var config = Config.default
     if !FileManager.default.fileExists(atPath: url.path) {
         warn("no config file yet; the app writes the default one on first run")

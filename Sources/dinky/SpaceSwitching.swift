@@ -6,6 +6,14 @@ import DinkyPrivate
 /// Nanoseconds since boot, not counting sleep.
 func uptime() -> UInt64 { clock_gettime_nsec_np(CLOCK_UPTIME_RAW) }
 
+/// The time of day to the millisecond, to prefix log lines whose timing matters.
+func stamp() -> String {
+    let now = Date()
+    let f = DateFormatter()
+    f.dateFormat = "HH:mm:ss.SSS"
+    return f.string(from: now)
+}
+
 /// Swipes the display to one of its Spaces, full-screen ones included. False if it is already there.
 /// Returns once the swipe is posted; `SpaceSwitcher` confirms it and coalesces rapid requests. `landed` runs
 /// once the display is on the Space, unless a newer request replaced this one first.
@@ -109,7 +117,7 @@ final class SpaceSwitcher {
 
     private func finish(_ uuid: String, _ message: String, error: Bool = false, landed: Bool = false) {
         let flight = flights.removeValue(forKey: uuid)
-        if error { fputs(message + "\n", stderr) } else { print(message) }
+        if error { fputs("\(stamp()) \(message)\n", stderr) } else { print("\(stamp()) \(message)") }
         fflush(stdout)
         if landed { flight?.landed?() }
     }

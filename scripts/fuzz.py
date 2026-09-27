@@ -7,6 +7,10 @@ state (what was only late is noted as "settled late"), and anything that moved b
 happening, is a "spontaneous shift". Violations are printed as they are found and the run goes on.
 
     python3 fuzz.py --seed 1 --steps 150 --dinky ~/dinky-fuzz
+    python3 fuzz.py --seed 1 --steps 150 --switching   # quits, closes, activations and Space switches dominate
+
+The idle wait also polls the current Space: a display that changes Space three or more times while nothing
+happens is a "loop", the follower and macOS chasing each other's activations.
 """
 import argparse, json, os, random, subprocess, sys, time
 
@@ -14,6 +18,26 @@ APPS = {"com.apple.TextEdit", "com.apple.finder", "com.apple.Safari"}
 MIN_WINDOWS, MAX_WINDOWS = 3, 8
 DOCS = "/tmp/dinky-fuzz"
 KEYS = os.path.expanduser("~/dinky-fuzz-keys")
+MOUSE = os.path.expanduser("~/dinky-fuzz-mouse")
+# mouse <x> <y> [steps]: mouseMoved events ending at x,y, for focus-follows-mouse. No arguments: print the position.
+MOUSE_SOURCE = """
+import CoreGraphics
+import Foundation
+if CommandLine.arguments.count < 3 {
+    let p = CGEvent(source: nil)!.location
+    print(Int(p.x), Int(p.y))
+    exit(0)
+}
+let x = Double(CommandLine.arguments[1])!, y = Double(CommandLine.arguments[2])!
+let steps = CommandLine.arguments.count > 3 ? Int(CommandLine.arguments[3])! : 1
+let from = CGEvent(source: nil)!.location
+for i in 1...steps {
+    let t = Double(i) / Double(steps)
+    let p = CGPoint(x: from.x + (x - from.x) * t, y: from.y + (y - from.y) * t)
+    CGEvent(mouseEventSource: nil, mouseType: .mouseMoved, mouseCursorPosition: p, mouseButton: .left)!.post(tap: .cghidEventTap)
+    usleep(10_000)
+}
+"""
 # Control-Arrow with the secondary-fn flag, as Mission Control expects, <count> times. The fuzzer posts it in
 # dinky's `service` mode, which does not bind ctrl-left/right, so the switch is the native one.
 KEYS_SOURCE = """
@@ -32,8 +56,9 @@ for _ in 0..<(Int(CommandLine.arguments[2]) ?? 1) {
 
 
 class Fuzzer:
-    def __init__(self, seed, dinky):
+    def __init__(self, seed, dinky, switching=False):
         self.rng, self.seed, self.dinky = random.Random(seed), seed, dinky
+        self.switching = switching
         self.history, self.hidden, self.docs = [], set(), 0
         self.seen, self.found = set(), {}  # violations reported last step; count per class
         self.landing, self.landings = None, []  # a step's trip to an empty workspace; all of them
@@ -123,13 +148,42 @@ class Fuzzer:
         return self.cli("move-window-to-workspace", self.rng.randint(1, n), *(["--follow"] if self.rng.random() < 0.4 else []))
 
     def native_switch(self, s, direction=None, times=1):
-        if not os.path.exists(KEYS) or open(KEYS + ".swift").read() != KEYS_SOURCE:
-            with open(KEYS + ".swift", "w") as f: f.write(KEYS_SOURCE)
-            subprocess.run(["swiftc", "-O", KEYS + ".swift", "-o", KEYS], check=True)
+        self.tool(KEYS, KEYS_SOURCE)
         self.cli("mode", "service")
         ok = self.run(KEYS, direction or self.rng.choice(["left", "right"]), times)
         time.sleep(0.6 * times)  # each keystroke plays the slide
         self.cli("mode", "main")
+        return ok
+
+    def tool(self, path, source):
+        if not os.path.exists(path) or open(path + ".swift").read() != source:
+            with open(path + ".swift", "w") as f: f.write(source)
+            subprocess.run(["swiftc", "-O", path + ".swift", "-o", path], check=True)
+        return path
+
+    def mouse(self, s):
+        """Moves the pointer onto a visible window, or a few points within the current one, as a hand on a mouse does."""
+        self.tool(MOUSE, MOUSE_SOURCE)
+        ws = [w for w in self.visible(s) if w["live-frame"]]
+        if ws and self.rng.random() < 0.5:
+            f = self.rng.choice(ws)["live-frame"]
+            x, y = int(f[0] + f[2] * self.rng.uniform(0.2, 0.8)), int(f[1] + f[3] * self.rng.uniform(0.2, 0.8))
+            return self.run(MOUSE, x, y, self.rng.choice([1, 5, 20]))
+        out = subprocess.run([MOUSE], capture_output=True, text=True).stdout.split()
+        x, y = (int(out[0]), int(out[1])) if len(out) == 2 else (500, 400)
+        return self.run(MOUSE, x + self.rng.randint(-4, 4), y + self.rng.randint(-4, 4))
+
+    def native_fullscreen(self, s):
+        """Toggles native full screen on a visible window with ctrl-cmd-f, giving it its own Space, or back."""
+        ws = self.visible(s)
+        if not ws: return False
+        w = self.rng.choice(ws)
+        self.run("open", "-a", w["app"])
+        time.sleep(0.5)
+        self.history.append(f"ctrl-cmd-f on {w['id']} ({w['app']})")
+        ok = subprocess.run(["osascript", "-e", 'tell application "System Events" to keystroke "f" using {control down, command down}'],
+                            capture_output=True, text=True).returncode == 0
+        time.sleep(1.5)  # the full-screen slide
         return ok
 
     def go_empty(self, s):
@@ -178,6 +232,11 @@ class Fuzzer:
         (6, open_doc), (4, reopen_doc), (2, open_finder), (1, open_safari), (4, close), (1, quit), (2, minimize),
         (2, unminimize), (1, hide), (2, unhide), (4, activate), (5, workspace), (7, move_to_workspace),
         (2, native_switch), (5, go_empty), (3, twin), (10, command), (2, idle),
+    ]
+    SWITCHING_ACTIONS = [  # apps come and go and focus falls back, on and across Spaces, with a hand on the mouse
+        (5, open_doc), (3, reopen_doc), (2, open_finder), (3, open_safari), (8, close), (5, quit), (2, minimize),
+        (2, unminimize), (3, hide), (3, unhide), (8, activate), (5, workspace), (6, move_to_workspace),
+        (3, native_switch), (5, go_empty), (2, command), (1, idle), (8, mouse), (2, native_fullscreen),
     ]
     # Actions after which the display should still be on the same Space.
     STAYS = {close, quit, minimize, unminimize, hide, twin, command, idle}
@@ -266,10 +325,21 @@ class Fuzzer:
         for _ in range(MIN_WINDOWS): self.open_doc(self.state()); time.sleep(1.5)
         time.sleep(1)
 
+    def settle(self):
+        """Waits 1.5 s for the state to settle, polling the display's Space; the state after, and the Spaces seen."""
+        seen = []
+        for _ in range(6):
+            time.sleep(0.25)
+            s = self.state()
+            if s is None: return None, seen
+            space = s["displays"][0]["current-space"]
+            if not seen or seen[-1] != space: seen.append(space)
+        return s, seen
+
     def fuzz(self, steps):
         self.setup()
         s = self.state()
-        weights, actions = zip(*self.ACTIONS)
+        weights, actions = zip(*(self.SWITCHING_ACTIONS if self.switching else self.ACTIONS))
         for step in range(1, steps + 1):
             start = len(self.history)
             action = self.rng.choices(actions, weights)[0]
@@ -278,8 +348,7 @@ class Fuzzer:
             print(f"{step:4} " + "; ".join(self.history[start:]), flush=True)
             time.sleep(0.8)
             after = self.state()
-            time.sleep(1.5)
-            idle = self.state()
+            idle, spaces = self.settle()
             if after is None or idle is None:
                 self.found["app-died"] = 1
                 print(f"\n=== VIOLATION seed {self.seed} step {step}: the app is gone (no socket)")
@@ -289,6 +358,8 @@ class Fuzzer:
             late = self.check(after).keys() - checked.keys()
             if late: print("       settled late: " + ", ".join(f"{k} {i}" for k, i in sorted(late, key=str)))
             checked.update(self.shifts(after, idle))
+            if len(spaces) >= 3:
+                checked[("h-loop", 0)] = f"the display kept changing Space while idle: {' -> '.join(map(str, spaces))}"
             if action in self.STAYS and after["displays"][0]["current-space"] != s["displays"][0]["current-space"]:
                 checked[("g-bounce", action.__name__)] = f"{action.__name__} moved the display to Space {after['displays'][0]['current-space']}"
             if self.landing: self.note_landing(idle)
@@ -344,5 +415,6 @@ if __name__ == "__main__":
     parser.add_argument("--seed", type=int, default=1)
     parser.add_argument("--steps", type=int, default=150)
     parser.add_argument("--dinky", default=os.path.expanduser("~/dinky-fuzz"))
+    parser.add_argument("--switching", action="store_true", help="quits, closes, activations and Space switches dominate")
     args = parser.parse_args()
-    sys.exit(Fuzzer(args.seed, args.dinky).fuzz(args.steps))
+    sys.exit(Fuzzer(args.seed, args.dinky, args.switching).fuzz(args.steps))
