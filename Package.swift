@@ -36,7 +36,7 @@ let package = Package(
         ),
         .testTarget(
             name: "DinkyCommandsTests",
-            dependencies: ["DinkyCommands", "DinkyConfig"],
+            dependencies: ["DinkyCommands", "DinkyConfig", .product(name: "TOMLDecoder", package: "TOMLDecoder")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         // Config types and TOML loading. No AppKit. Unit tested.

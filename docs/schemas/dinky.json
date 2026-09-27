@@ -1,0 +1,214 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://mikker.github.io/Dinky/schemas/dinky.json",
+  "title": "dinky configuration",
+  "description": "~/.config/dinky/dinky.toml. Every key is optional; a key left out keeps its default.",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "start-at-login": {
+      "type": "boolean",
+      "default": true,
+      "description": "Register dinky as a login item."
+    },
+    "workspaces": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 5,
+      "description": "Spaces per display. dinky creates missing Spaces and never removes any."
+    },
+    "default-layout": {
+      "type": "string",
+      "enum": ["tiles", "accordion"],
+      "default": "tiles",
+      "description": "The layout new containers start in."
+    },
+    "follow-app-activation": {
+      "type": "boolean",
+      "default": true,
+      "description": "When Cmd-Tab or a Dock click activates an app on another Space, switch there with the fast switch."
+    },
+    "accordion": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The accordion layout.",
+      "properties": {
+        "padding": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 30,
+          "description": "Points by which neighbouring windows peek out."
+        },
+        "orientation": {
+          "type": "string",
+          "enum": ["auto", "keep"],
+          "default": "auto",
+          "description": "What a container's orientation becomes when it switches to accordion: auto runs along its longer side, keep keeps the orientation it had."
+        }
+      }
+    },
+    "gaps": { "$ref": "#/definitions/gaps" },
+    "display": {
+      "type": "object",
+      "description": "Overrides for one display, keyed by pattern: main, secondary, or a case-insensitive part of the display's name as `dinky list-displays` prints it.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "gaps": { "$ref": "#/definitions/gaps" }
+        }
+      }
+    },
+    "borders": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "The border drawn around windows.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true, "description": "Draw a border around windows." },
+        "width": { "type": "number", "minimum": 0, "default": 4, "description": "Border width in points." },
+        "active-color": { "$ref": "#/definitions/color", "default": "#e1e3e4", "description": "Colour of the focused window's border." },
+        "inactive-color": { "$ref": "#/definitions/color", "default": "#494d64", "description": "Colour of other windows' borders." },
+        "style": { "type": "string", "enum": ["round", "square"], "default": "round", "description": "Corner style." },
+        "order": {
+          "type": "string",
+          "enum": ["below", "above"],
+          "default": "below",
+          "description": "below draws the border directly below the window. above draws it above, as a ring that never covers the window's content or takes clicks."
+        },
+        "exclude-apps": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "default": [],
+          "description": "Bundle IDs whose windows get no border."
+        }
+      }
+    },
+    "focus-follows-mouse": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Focus the window under the pointer once the pointer rests on it.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": false },
+        "delay-ms": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 100,
+          "description": "How long the pointer must rest on a window before it takes focus. 0 focuses as soon as the pointer stops."
+        },
+        "accordion-edges": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether resting on the peeking edge of an accordion child focuses it."
+        }
+      }
+    },
+    "hooks": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "dinky commands run on events. Shell goes through exec-and-forget.",
+      "properties": {
+        "startup": { "$ref": "#/definitions/hook", "description": "Once, when dinky starts, after it has read the windows and displays." },
+        "workspace-changed": {
+          "$ref": "#/definitions/hook",
+          "description": "Whenever a display's current workspace changes. exec-and-forget gets DINKY_WORKSPACE, DINKY_PREV_WORKSPACE and DINKY_DISPLAY."
+        },
+        "focus-changed": { "$ref": "#/definitions/hook", "description": "When the focused window changes, debounced by 50 ms." },
+        "mode-changed": { "$ref": "#/definitions/hook", "description": "When the binding mode changes." }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "description": "Rules for new windows. Every rule whose conditions all match runs, in order; for layout floating and layout tiling the last one wins.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["run"],
+        "properties": {
+          "app-id": { "type": "string", "minLength": 1, "description": "The app's bundle ID, e.g. com.apple.Safari." },
+          "app-name": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in the app's name." },
+          "title": { "type": "string", "minLength": 1, "description": "Case-insensitive regex found anywhere in the window title." },
+          "kind": { "type": "string", "enum": ["normal", "dialog", "sheet", "panel"], "description": "The kind of window." },
+          "run": { "$ref": "#/definitions/commands", "description": "The command or commands to run for a matching window." }
+        }
+      }
+    },
+    "mode": {
+      "type": "object",
+      "description": "Key bindings, grouped in modes. dinky starts in main; the `mode <name>` command switches.",
+      "additionalProperties": {
+        "type": "object",
+        "description": "Key combinations mapped to the command or commands they run.",
+        "propertyNames": { "$ref": "#/definitions/keyCombo" },
+        "additionalProperties": { "$ref": "#/definitions/commands" }
+      }
+    }
+  },
+  "definitions": {
+    "gaps": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Gaps in points. A side or axis left out keeps its default.",
+      "properties": {
+        "inner": {
+          "description": "Points between tiled windows: one value for both axes, or per axis.",
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "horizontal": { "type": "integer", "minimum": 0, "description": "Between side-by-side windows." },
+                "vertical": { "type": "integer", "minimum": 0, "description": "Between stacked windows." }
+              }
+            }
+          ]
+        },
+        "outer": {
+          "description": "Points between tiled windows and the screen edge: one value, or per side.",
+          "oneOf": [
+            { "type": "integer", "minimum": 0 },
+            {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "top": { "type": "integer", "minimum": 0 },
+                "bottom": { "type": "integer", "minimum": 0 },
+                "left": { "type": "integer", "minimum": 0 },
+                "right": { "type": "integer", "minimum": 0 }
+              }
+            }
+          ]
+        }
+      }
+    },
+    "color": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}([0-9a-fA-F]{2})?$",
+      "description": "A colour, '#rrggbb' or '#rrggbbaa'."
+    },
+    "command": {
+      "type": "string",
+      "pattern": "^\\s*(workspace|workspace-back-and-forth|move-window-to-workspace|move-window-to-display|focus|focus-monitor|move|join-with|resize|layout|fullscreen|flatten-workspace-tree|balance-sizes|retile|mode|reload-config|enable|list-workspaces|list-windows|list-monitors|list-displays|debug-state|exec-and-forget)(\\s.*)?$",
+      "description": "A dinky command, as `dinky help` lists them: `workspace 3`, `layout floating`, `exec-and-forget open -a Safari`."
+    },
+    "commands": {
+      "description": "A command or a list of commands, run in order.",
+      "oneOf": [
+        { "$ref": "#/definitions/command" },
+        { "type": "array", "minItems": 1, "items": { "$ref": "#/definitions/command" } }
+      ]
+    },
+    "hook": {
+      "description": "A command or a list of commands, run in order. May be empty.",
+      "oneOf": [
+        { "$ref": "#/definitions/command" },
+        { "type": "array", "items": { "$ref": "#/definitions/command" } }
+      ]
+    },
+    "keyCombo": {
+      "type": "string",
+      "pattern": "^((alt|ctrl|cmd|shift)-)*([a-z0-9]|f[1-9]|f1[0-9]|f20|keypad-([0-9]|clear|decimal|divide|enter|equal|minus|multiply|plus)|section|minus|equal|left-bracket|right-bracket|backslash|semicolon|quote|comma|period|slash|backtick|page-up|page-down|home|end|forward-delete|space|enter|esc|backspace|tab|left|down|up|right)$",
+      "description": "Zero or more modifiers (alt, ctrl, cmd, shift) and one key name, joined by '-': alt-shift-h, ctrl-left, alt-page-up, f5."
+    }
+  }
+}
