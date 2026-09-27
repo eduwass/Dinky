@@ -74,26 +74,17 @@ final class Table {
         }
     }
 
-    /// A command string or a list of them, none empty. Commands stay strings here;
-    /// the dispatcher owns the vocabulary.
-    func commands(_ key: String) throws -> [String]? {
+    /// A command string or a list of them, none blank. Commands stay strings here; the dispatcher owns
+    /// the vocabulary. An empty list is an error unless `allowEmpty`, as it is for hooks.
+    func commands(_ key: String, allowEmpty: Bool = false) throws -> [String]? {
         guard use(key) else { return nil }
         guard let commands = stringArray(key) ?? (try? string(key)).map({ [$0] }) else {
             throw ConfigError(path: path(key), "expected a command string or a list of them")
         }
-        if commands.isEmpty || commands.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+        if (commands.isEmpty && !allowEmpty) || commands.contains(where: { $0.trimmingCharacters(in: .whitespaces).isEmpty }) {
             throw ConfigError(path: path(key), "commands can't be empty")
         }
         return commands
-    }
-
-    /// Whether `key` is present, marking it read.
-    func contains(_ key: String) -> Bool { use(key) }
-
-    /// The raw array at `key`, nil if absent or not an array. Marks it read.
-    func array(_ key: String) -> TOMLArray? {
-        guard use(key) else { return nil }
-        return try? table.array(forKey: key)
     }
 
     /// Whether the value at `key` is a table.

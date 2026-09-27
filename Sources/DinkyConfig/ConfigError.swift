@@ -3,7 +3,7 @@ import Foundation
 /// Any problem loading the config: bad TOML, an unknown key, a wrong type or value.
 /// `description` is the text to show in the menu bar and the log.
 public struct ConfigError: Error, Equatable, CustomStringConvertible, LocalizedError {
-    /// Dotted key path such as `gaps.outer.top` or `on-window-detected[0].if.app-id`; empty for file-level errors.
+    /// Dotted key path such as `gaps.outer.top` or `rules[0].app-id`; empty for file-level errors.
     public var path: String
     public var message: String
     public var line: Int?
@@ -23,8 +23,9 @@ public struct ConfigError: Error, Equatable, CustomStringConvertible, LocalizedE
 }
 
 /// Best effort line lookup for a key path, for errors TOMLDecoder gives no line for, such as unknown keys.
-/// Tracks `[table]` headers and dotted keys, and returns the line whose full key is the longest
-/// prefix of `path` (so a typo inside an inline table points at the line holding the table).
+/// Tracks `[table]` headers and dotted keys, and returns the line whose full key shares the longest prefix
+/// with `path`, either way round: a typo inside an inline table points at the line holding the table, and an
+/// unknown table written as a dotted key, `if.app-id = 'x'`, points at that line.
 func lineNumber(of path: String, in toml: String) -> Int? {
     let target = keyParts(path.replacingOccurrences(of: #"\[\d+\]"#, with: "", options: .regularExpression))
     var header: [String] = []
@@ -40,8 +41,9 @@ func lineNumber(of path: String, in toml: String) -> Int? {
         } else {
             continue
         }
-        if full.count > (best?.length ?? 0), full.count <= target.count, Array(target.prefix(full.count)) == full {
-            best = (index + 1, full.count)
+        let shared = min(full.count, target.count)
+        if shared > (best?.length ?? 0), Array(target.prefix(shared)) == Array(full.prefix(shared)) {
+            best = (index + 1, shared)
         }
     }
     return best?.line

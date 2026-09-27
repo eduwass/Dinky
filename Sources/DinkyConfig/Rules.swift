@@ -1,38 +1,34 @@
 import Foundation
 
-/// One `[[on-window-detected]]` entry: when a new window matches `if`, run the commands.
-/// Key names follow AeroSpace; `window-kind` is dinky's own.
+/// One `[[rules]]` entry: when a new window matches every condition that is set, run the commands.
+/// `app-name` and `title` are case-insensitive regexes found anywhere in the text.
 public struct WindowRule: Equatable {
-    public var matcher = WindowMatcher()
-    public var checkFurtherCallbacks = false
+    public var appId: String?
+    public var appName: String?
+    public var title: String?
+    public var kind: WindowKind?
     public var run: [String] = []
 
     public init() {}
 
     init(_ t: Table) throws {
-        matcher = try t.table("if").map(WindowMatcher.init) ?? matcher
-        checkFurtherCallbacks = try t.bool("check-further-callbacks") ?? checkFurtherCallbacks
+        appId = try t.string("app-id")
+        appName = try regex(t, "app-name")
+        title = try regex(t, "title")
+        kind = try t.choice("kind")
         guard let run = try t.commands("run") else { throw ConfigError(path: t.path("run"), "missing, every rule needs 'run'") }
         self.run = run
         try t.done()
     }
-}
 
-/// Every condition that is set must hold. Regexes are case-insensitive substring matches, as in AeroSpace.
-public struct WindowMatcher: Equatable {
-    public var appId: String?
-    public var appNameRegexSubstring: String?
-    public var windowTitleRegexSubstring: String?
-    public var windowKind: WindowKind?
-
-    public init() {}
-
-    init(_ t: Table) throws {
-        appId = try t.string("app-id")
-        appNameRegexSubstring = try regex(t, "app-name-regex-substring")
-        windowTitleRegexSubstring = try regex(t, "window-title-regex-substring")
-        windowKind = try t.choice("window-kind")
-        try t.done()
+    /// Whether every condition that is set holds for this window.
+    public func matches(appId: String?, appName: String?, title: String, kind: WindowKind) -> Bool {
+        func search(_ pattern: String?, _ text: String?) -> Bool {
+            guard let pattern else { return true }
+            return text?.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
+        }
+        return (self.appId == nil || self.appId == appId) && (self.kind == nil || self.kind == kind)
+            && search(self.appName, appName) && search(self.title, title)
     }
 }
 
@@ -48,26 +44,24 @@ public enum WindowKind: String, CaseIterable {
     case normal, dialog, sheet, panel
 }
 
-/// `[mode.<name>.binding]`: key combos mapped to the commands they run, in order.
+/// `[mode.<name>]`: key combos mapped to the commands they run, in order.
 public struct Mode: Equatable {
     public var bindings: [KeyCombo: [String]] = [:]
 
     public init() {}
 
     init(_ t: Table) throws {
-        if let table = try t.table("binding") {
-            for key in table.keys {
-                let combo: KeyCombo
-                do {
-                    combo = try KeyCombo(key)
-                } catch {
-                    throw ConfigError(path: table.path(key), error.message)
-                }
-                if bindings[combo] != nil {
-                    throw ConfigError(path: table.path(key), "'\(combo)' is bound twice")
-                }
-                bindings[combo] = try table.commands(key)
+        for key in t.keys {
+            let combo: KeyCombo
+            do {
+                combo = try KeyCombo(key)
+            } catch {
+                throw ConfigError(path: t.path(key), error.message)
             }
+            if bindings[combo] != nil {
+                throw ConfigError(path: t.path(key), "'\(combo)' is bound twice")
+            }
+            bindings[combo] = try t.commands(key)
         }
         try t.done()
     }

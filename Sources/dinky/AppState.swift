@@ -30,7 +30,7 @@ final class AppState {
     private(set) var coordinator: Coordinator?
     /// The journal of original frames that disable, quit and `dinky recover` restore.
     let recovery = Recovery()
-    private let callbacks = Callbacks()
+    private let hooks = Hooks()
     private let hoverFocus = HoverFocus()
     private var watcher: ConfigWatcher?
 
@@ -47,6 +47,9 @@ final class AppState {
             try? (Config.defaultTOML + "\n").write(to: url, atomically: true, encoding: .utf8)
         }
         apply(Result { () throws(ConfigError) in try Config.load(from: url) })
+        if watcher == nil {
+            watcher = ConfigWatcher(url: url) { [weak self] in self?.apply($0) }
+        }
         return configError
     }
 
@@ -55,7 +58,7 @@ final class AppState {
         let coordinator = Coordinator(displays: displays, config: config)
         self.coordinator = coordinator
         coordinator.start()
-        callbacks.start()
+        hooks.start()
         recovery.start(model: coordinator.model)
         hoverFocus.update(config: config.focusFollowsMouse)
     }
@@ -106,13 +109,7 @@ final class AppState {
     private func applyConfig() {
         hotkeys.enabled = enabled
         coordinator?.enabled = enabled
-        followEnabled = enabled && config.switching.followAppActivation
+        followEnabled = enabled && config.followAppActivation
         applyStartAtLogin(config.startAtLogin)
-        if config.autoReloadConfig, watcher == nil {
-            watcher = ConfigWatcher(url: Config.userConfigURL) { [weak self] in self?.apply($0) }
-        } else if !config.autoReloadConfig {
-            watcher?.stop()
-            watcher = nil
-        }
     }
 }

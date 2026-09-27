@@ -22,18 +22,16 @@ extension Display {
 }
 
 extension DisplayModel {
-    /// What per-monitor config values are matched against.
+    /// What `[display.<pattern>]` tables are matched against.
     func monitor(_ display: Display) -> Monitor {
         Monitor(name: display.name, isMain: display.isMain, count: displays.count)
     }
 }
 
 extension DinkyLayout.Gaps {
-    /// The config's gaps as they apply on `monitor`.
-    init(_ gaps: DinkyConfig.Gaps, on monitor: Monitor) {
-        func value(_ v: PerMonitor) -> CGFloat { CGFloat(v.value(for: monitor)) }
-        self.init(horizontal: value(gaps.inner.horizontal), vertical: value(gaps.inner.vertical),
-                  top: value(gaps.outer.top), bottom: value(gaps.outer.bottom),
-                  left: value(gaps.outer.left), right: value(gaps.outer.right))
+    init(_ gaps: DinkyConfig.Gaps) {
+        self.init(horizontal: CGFloat(gaps.inner.horizontal), vertical: CGFloat(gaps.inner.vertical),
+                  top: CGFloat(gaps.outer.top), bottom: CGFloat(gaps.outer.bottom),
+                  left: CGFloat(gaps.outer.left), right: CGFloat(gaps.outer.right))
     }
 }

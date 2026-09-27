@@ -1,44 +1,57 @@
-// The config dinky ships with: the PLAN.md draft with every binding written out.
+// The config dinky writes on first run. Apart from the rules and bindings, which it spells out, its
+// values are the built-in defaults, so a key left out of a user's file means what this file says.
 
 extension Config {
     public static let defaultTOML = """
-    config-version = 1
-    start-at-login = true
-    auto-reload-config = true
-    workspaces = 5                 # per display; dinky creates missing Spaces, never removes
+    #:schema https://mikker.github.io/Dinky/schemas/dinky.json
+    # ~/.config/dinky/dinky.toml. Saved changes take effect at once.
+    # A key you leave out keeps the value shown here.
+    # Every key and command: https://mikker.github.io/Dinky/configuration/
 
-    [layout]
-    default = 'tiles'              # tiles | accordion
-    accordion-padding = 30
-    accordion-orientation = 'auto' # auto: a new accordion runs along its longer side | keep
+    start-at-login = true
+    workspaces = 5                  # per display; dinky creates missing Spaces, never removes any
+    default-layout = 'tiles'        # tiles | accordion
+    follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
+
+    [accordion]
+    padding = 30                    # points the neighbours peek out by
+    orientation = 'auto'            # auto: run along the container's longer side | keep
 
     [gaps]
-    inner = 8
-    outer = { top = 8, bottom = 8, left = 8, right = 8 }
+    inner = 8                       # or { horizontal = 8, vertical = 8 }
+    outer = 8                       # or { top = 8, bottom = 8, left = 8, right = 8 }
+
+    # Overrides for one display: main, secondary, or part of its name as `dinky list-displays` prints it.
+    # [display.main]
+    # gaps.outer.top = 44
 
     [borders]
     enabled = true
     width = 4
-    active-color = '#e1e3e4'
+    active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
     inactive-color = '#494d64'
-    style = 'round'                # round | square
-    order = 'below'                # below | above (a click-through ring over the window)
-    exclude-apps = []              # bundle IDs that get no border
-    only-apps = []                 # when set, only these bundle IDs get borders
-
-    [switching]
-    follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch
+    style = 'round'                 # round | square
+    order = 'below'                 # below | above (a click-through ring over the window)
+    exclude-apps = []               # bundle IDs whose windows get no border
 
     [focus-follows-mouse]
-    enabled = false                # focus the window under the pointer once it rests there
-    delay-ms = 100
-    accordion = true               # false: hovering a peeking accordion edge does not focus it
+    enabled = false
+    delay-ms = 100                  # how long the pointer rests on a window before it takes focus
+    accordion-edges = true          # resting on a peeking accordion edge focuses that window
 
-    [[on-window-detected]]
-    if.app-id = 'com.apple.systempreferences'
+    # dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
+    # [hooks]
+    # startup = ['exec-and-forget brew services restart sketchybar']
+    # workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']
+    # focus-changed = []
+    # mode-changed = []
+
+    # Every rule whose conditions all match a new window runs, in order.
+    [[rules]]
+    app-id = 'com.apple.systempreferences'   # also: app-name, title (regexes), kind (normal|dialog|sheet|panel)
     run = 'layout floating'
 
-    [mode.main.binding]
+    [mode.main]
     ctrl-left = 'workspace prev'
     ctrl-right = 'workspace next'
     alt-1 = 'workspace 1'
@@ -77,7 +90,7 @@ extension Config {
     alt-shift-n = 'move-window-to-display next'
     alt-shift-semicolon = 'mode service'
 
-    [mode.service.binding]
+    [mode.service]
     esc = ['reload-config', 'mode main']
     r = ['flatten-workspace-tree', 'mode main']
     alt-shift-h = ['join-with left', 'mode main']

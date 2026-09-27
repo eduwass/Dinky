@@ -2,8 +2,7 @@ import Carbon.HIToolbox
 import CoreGraphics
 import DinkyConfig
 
-// AeroSpace key names (KeyCombo.keyNames) to macOS virtual keycodes, qwerty layout.
-// Names follow AeroSpace's keysMap.swift (MIT, github.com/nikitabobko/AeroSpace).
+// Key names (KeyCombo.keyNames) to macOS virtual keycodes, qwerty layout.
 
 /// A key press as the event tap sees it: keycode plus the modifiers bindings care about.
 struct KeyPress: Hashable {
@@ -44,22 +43,22 @@ let keyCodes: [String: CGKeyCode] = {
         "0": kVK_ANSI_0, "1": kVK_ANSI_1, "2": kVK_ANSI_2, "3": kVK_ANSI_3, "4": kVK_ANSI_4,
         "5": kVK_ANSI_5, "6": kVK_ANSI_6, "7": kVK_ANSI_7, "8": kVK_ANSI_8, "9": kVK_ANSI_9,
 
-        "sectionSign": kVK_ISO_Section, "minus": kVK_ANSI_Minus, "equal": kVK_ANSI_Equal,
-        "leftSquareBracket": kVK_ANSI_LeftBracket, "rightSquareBracket": kVK_ANSI_RightBracket,
+        "section": kVK_ISO_Section, "minus": kVK_ANSI_Minus, "equal": kVK_ANSI_Equal,
+        "left-bracket": kVK_ANSI_LeftBracket, "right-bracket": kVK_ANSI_RightBracket,
         "backslash": kVK_ANSI_Backslash, "semicolon": kVK_ANSI_Semicolon, "quote": kVK_ANSI_Quote,
         "comma": kVK_ANSI_Comma, "period": kVK_ANSI_Period, "slash": kVK_ANSI_Slash, "backtick": kVK_ANSI_Grave,
 
-        "keypad0": kVK_ANSI_Keypad0, "keypad1": kVK_ANSI_Keypad1, "keypad2": kVK_ANSI_Keypad2,
-        "keypad3": kVK_ANSI_Keypad3, "keypad4": kVK_ANSI_Keypad4, "keypad5": kVK_ANSI_Keypad5,
-        "keypad6": kVK_ANSI_Keypad6, "keypad7": kVK_ANSI_Keypad7, "keypad8": kVK_ANSI_Keypad8,
-        "keypad9": kVK_ANSI_Keypad9, "keypadClear": kVK_ANSI_KeypadClear,
-        "keypadDecimalMark": kVK_ANSI_KeypadDecimal, "keypadDivide": kVK_ANSI_KeypadDivide,
-        "keypadEnter": kVK_ANSI_KeypadEnter, "keypadEqual": kVK_ANSI_KeypadEquals,
-        "keypadMinus": kVK_ANSI_KeypadMinus, "keypadMultiply": kVK_ANSI_KeypadMultiply,
-        "keypadPlus": kVK_ANSI_KeypadPlus,
+        "keypad-0": kVK_ANSI_Keypad0, "keypad-1": kVK_ANSI_Keypad1, "keypad-2": kVK_ANSI_Keypad2,
+        "keypad-3": kVK_ANSI_Keypad3, "keypad-4": kVK_ANSI_Keypad4, "keypad-5": kVK_ANSI_Keypad5,
+        "keypad-6": kVK_ANSI_Keypad6, "keypad-7": kVK_ANSI_Keypad7, "keypad-8": kVK_ANSI_Keypad8,
+        "keypad-9": kVK_ANSI_Keypad9, "keypad-clear": kVK_ANSI_KeypadClear,
+        "keypad-decimal": kVK_ANSI_KeypadDecimal, "keypad-divide": kVK_ANSI_KeypadDivide,
+        "keypad-enter": kVK_ANSI_KeypadEnter, "keypad-equal": kVK_ANSI_KeypadEquals,
+        "keypad-minus": kVK_ANSI_KeypadMinus, "keypad-multiply": kVK_ANSI_KeypadMultiply,
+        "keypad-plus": kVK_ANSI_KeypadPlus,
 
-        "pageUp": kVK_PageUp, "pageDown": kVK_PageDown, "home": kVK_Home, "end": kVK_End,
-        "forwardDelete": kVK_ForwardDelete, "space": kVK_Space, "enter": kVK_Return, "esc": kVK_Escape,
+        "page-up": kVK_PageUp, "page-down": kVK_PageDown, "home": kVK_Home, "end": kVK_End,
+        "forward-delete": kVK_ForwardDelete, "space": kVK_Space, "enter": kVK_Return, "esc": kVK_Escape,
         "backspace": kVK_Delete, "tab": kVK_Tab,
         "left": kVK_LeftArrow, "down": kVK_DownArrow, "up": kVK_UpArrow, "right": kVK_RightArrow,
 

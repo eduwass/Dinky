@@ -21,8 +21,7 @@ Latest release: **{{ site.version }}**
 
 Workspaces are native Spaces, switched with the same Dock gesture a trackpad
 sends. Windows tile automatically as they open, with an accordion mode, focus
-borders, a TOML config in [AeroSpace](https://github.com/nikitabobko/AeroSpace)'s
-dialect, and a `dinky` command line for scripts and bars.
+borders, a TOML config, and a `dinky` command line for scripts and bars.
 
 It is not a compositor: macOS still draws every window, and dinky can only ask
 apps to move and resize. It has no scrolling or infinite-canvas layouts and no
@@ -171,8 +170,8 @@ license is noted.
 - [mimi](https://github.com/y3owk1n/mimi) (MIT): the augmented Dock swipe that
   makes switching fast, and the Mach-O symbol lookup for the bridged SkyLight
   operations.
-- [AeroSpace](https://github.com/nikitabobko/AeroSpace) (MIT): config shape,
-  key names and key syntax, the command vocabulary and the accordion layout.
+- [AeroSpace](https://github.com/nikitabobko/AeroSpace) (MIT): the key
+  syntax, the command vocabulary and the accordion layout.
 - [JankyBorders](https://github.com/FelixKratz/JankyBorders) (GPL-3.0):
   studied only. dinky's borders and WindowServer notifications follow its
   approach but are written from scratch.

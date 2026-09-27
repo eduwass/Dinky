@@ -87,7 +87,7 @@ final class ParseTests: XCTestCase {
     func testEveryDefaultBindingParses() throws {
         let commands = Config.default.modes.values.flatMap { $0.bindings.values.flatMap { $0 } }
         XCTAssertFalse(commands.isEmpty)
-        for command in commands + Config.default.onWindowDetected.flatMap(\.run) {
+        for command in commands + Config.default.rules.flatMap(\.run) {
             XCTAssertNoThrow(try parse(command), command)
         }
     }

@@ -26,25 +26,23 @@ public func checkConfig(_ config: Config, keyIsKnown: (String) -> Bool) -> [Conf
         }
     }
     if config.modes["main"] == nil {
-        findings.append(.init(level: .warning, message: "no [mode.main.binding]: no key bindings are active"))
+        findings.append(.init(level: .warning, message: "no [mode.main]: no key bindings are active"))
     }
     for (name, mode) in config.modes.sorted(by: { $0.key < $1.key }) {
         for (combo, commands) in mode.bindings.sorted(by: { $0.key.description < $1.key.description }) {
-            let place = "mode.\(name).binding.\(combo)"
+            let place = "mode.\(name).\(combo)"
             if !keyIsKnown(combo.key) {
                 findings.append(.init(level: .error, message: "\(place): unknown key '\(combo.key)'"))
             }
             check(commands, at: place)
         }
     }
-    for (i, rule) in config.onWindowDetected.enumerated() {
-        check(rule.run, at: "on-window-detected[\(i)].run")
+    for (i, rule) in config.rules.enumerated() {
+        check(rule.run, at: "rules[\(i)].run")
     }
-    check(config.onFocusChanged, at: "on-focus-changed")
-    check(config.onModeChanged, at: "on-mode-changed")
-    check(config.afterStartupCommand, at: "after-startup-command")
-    if let program = config.execOnWorkspaceChange.first, program.isEmpty {
-        findings.append(.init(level: .error, message: "exec-on-workspace-change: the first element must be the program"))
-    }
+    check(config.hooks.startup, at: "hooks.startup")
+    check(config.hooks.workspaceChanged, at: "hooks.workspace-changed")
+    check(config.hooks.focusChanged, at: "hooks.focus-changed")
+    check(config.hooks.modeChanged, at: "hooks.mode-changed")
     return findings
 }

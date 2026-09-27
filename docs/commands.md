@@ -8,7 +8,7 @@ permalink: /commands/
 # Commands
 
 > **TL;DR:** Key bindings, `dinky <command>` and the menu bar share one
-> vocabulary, borrowed from AeroSpace. `dinky help` prints it.
+> vocabulary. `dinky help` prints it.
 
 <div class="wide-table" markdown="1">
 
@@ -84,7 +84,7 @@ disabled; `dinky enable on` tiles again.
 
 ## Scripting and SketchyBar
 
-The queries and callbacks follow [AeroSpace](https://nikitabobko.github.io/AeroSpace/commands)'s names, flags and output, so bar scripts written for AeroSpace mostly work by changing `aerospace` to `dinky`: `aerospace list-windows --workspace 3` becomes `dinky list-windows --workspace 3` with the same output. The difference is that dinky's workspaces are numbers per display, so with two displays the numbers repeat.
+The queries follow [AeroSpace](https://nikitabobko.github.io/AeroSpace/commands)'s names, flags and output, so bar scripts written for AeroSpace mostly work by changing `aerospace` to `dinky`: `aerospace list-windows --workspace 3` becomes `dinky list-windows --workspace 3` with the same output. The difference is that dinky's workspaces are numbers per display, so with two displays the numbers repeat.
 
 ### Queries
 
@@ -108,20 +108,19 @@ Each prints one line per item. Without a display flag they cover the focused dis
 
 `dinky list-workspaces --all` prints every display's numbers, so `for sid in $(dinky list-workspaces --all)` repeats them on two displays; `--format '%{monitor-id}-%{workspace}'` tells them apart.
 
-### Callbacks
+### Hooks
 
-Top-level config keys, empty by default:
+The config's `[hooks]` table runs dinky commands on events; see [Configuration](configuration.md#hooks). A bar is driven with `exec-and-forget`:
 
 ```toml
-# A program and its arguments, run whenever a display's current workspace changes, by dinky or natively.
-exec-on-workspace-change = ['/bin/bash', '-c',
-    'sketchybar --trigger aerospace_workspace_change FOCUSED_WORKSPACE=$DINKY_FOCUSED_WORKSPACE'
-]
-# dinky commands, run when the focused window changes (debounced by 50 ms) and when the binding mode changes.
-on-focus-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
-on-mode-changed = ['exec-and-forget sketchybar --trigger aerospace_mode_changed']
-# dinky commands, run once when dinky starts, after it has read the windows and displays.
-after-startup-command = ['exec-and-forget brew services restart sketchybar']
+[hooks]
+# Once dinky has read the windows and displays.
+startup = ['exec-and-forget brew services restart sketchybar']
+# Whenever a display's current workspace changes, by dinky or natively.
+workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change WORKSPACE=$DINKY_WORKSPACE']
+# When the focused window changes (debounced by 50 ms) and when the binding mode changes.
+focus-changed = ['exec-and-forget sketchybar --trigger focus_changed']
+mode-changed = ['exec-and-forget sketchybar --trigger mode_changed']
 ```
 
-`exec-on-workspace-change` gets `DINKY_FOCUSED_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_MONITOR_ID` (the display that switched), and the first two again as `AEROSPACE_FOCUSED_WORKSPACE` and `AEROSPACE_PREV_WORKSPACE` so AeroSpace scripts keep working. Programs started by callbacks and `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Apart from `after-startup-command`, nothing fires while dinky starts up.
+`workspace-changed` runs its `exec-and-forget` with `DINKY_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_DISPLAY` (the 1-based number of the display that switched) in the environment. Programs started by `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Apart from `startup`, nothing fires while dinky starts up.

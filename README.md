@@ -2,7 +2,7 @@
 
 A tiling window manager for macOS that leaves System Integrity Protection on.
 
-Workspaces are native Spaces, switched in about 70 ms with the same Dock gesture a trackpad sends. Windows tile automatically as they open, with an accordion mode, focus borders, a TOML config in AeroSpace's dialect, and a `dinky` command line for scripts and bars. Nothing is injected into the Dock and SIP stays enabled, at the cost of a few private SkyLight calls that may need attention on each macOS release.
+Workspaces are native Spaces, switched in about 70 ms with the same Dock gesture a trackpad sends. Windows tile automatically as they open, with an accordion mode, focus borders, a TOML config, and a `dinky` command line for scripts and bars. Nothing is injected into the Dock and SIP stays enabled, at the cost of a few private SkyLight calls that may need attention on each macOS release.
 
 Status: early, in daily use by its author on macOS 27. Expect rough edges.
 

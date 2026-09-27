@@ -2,7 +2,7 @@ import AppKit
 import DinkyCommands
 import DinkyConfig
 
-// Window classification for the coordinator: the AX window kind and the on-window-detected rules.
+// Window classification for the coordinator: the AX window kind and the config's `[[rules]]`.
 
 extension Coordinator {
     /// False for a window to tile, true for one to float, nil while its AX element is not there yet
@@ -24,48 +24,39 @@ extension Coordinator {
         var resizable: DarwinBoolean = false
         AXUIElementIsAttributeSettable(element, kAXSizeAttribute as CFString, &resizable)
         let title = axString(element, kAXTitleAttribute) ?? ""
-        let rules = config.commands(for: window, kind: kind, title: title)
-        // Other rule commands, such as move-window-to-workspace, run for this window once it is placed.
-        for command in rules where command != .layout([.floating]) {
-            DispatchQueue.main.async {
-                let reply = Dispatcher.run(command, window: window.id)
-                if !reply.ok { fputs("on-window-detected: \(reply.text)\n", stderr) }
+        // `layout floating` and `layout tiling` decide here, the last one wins. Other rule commands, such as
+        // move-window-to-workspace, run for this window once it is placed.
+        var floats: Bool?
+        for command in config.commands(for: window, kind: kind, title: title) {
+            switch command {
+            case .layout([.floating]): floats = true
+            case .layout([.tiling]): floats = false
+            default:
+                DispatchQueue.main.async {
+                    let reply = Dispatcher.run(command, window: window.id)
+                    if !reply.ok { fputs("rule: \(reply.text)\n", stderr) }
+                }
             }
         }
-        return kind != .normal || !resizable.boolValue || rules.contains(.layout([.floating]))
+        return kind != .normal || !resizable.boolValue || floats == true
     }
 }
 
 extension Config {
-    /// The commands the matching `on-window-detected` rules run, in order. Commands that do not parse are skipped.
+    /// The commands of every rule that matches, in order. Commands that do not parse are skipped.
     func commands(for window: Window, kind: WindowKind, title: String) -> [Command] {
-        var commands: [Command] = []
-        for rule in onWindowDetected where rule.matcher.matches(window, kind: kind, title: title) {
-            commands += rule.run.compactMap { try? Command.parse($0) }
-            if !rule.checkFurtherCallbacks { break }
-        }
-        return commands
+        rules.filter { $0.matches(appId: window.bundleID, appName: window.appName, title: title, kind: kind) }
+            .flatMap { $0.run.compactMap { try? Command.parse($0) } }
     }
 }
 
-/// The on-window-detected kind for an AX subrole. Anything that is not a standard window, dialog or sheet is a panel.
+/// The rule kind for an AX subrole. Anything that is not a standard window, dialog or sheet is a panel.
 private func windowKind(subrole: String?) -> WindowKind {
     switch subrole {
     case kAXStandardWindowSubrole: .normal
     case kAXDialogSubrole, kAXSystemDialogSubrole: .dialog
     case "AXSheet": .sheet
     default: .panel
-    }
-}
-
-private extension WindowMatcher {
-    func matches(_ window: Window, kind: WindowKind, title: String) -> Bool {
-        func search(_ pattern: String?, _ text: String?) -> Bool {
-            guard let pattern else { return true }
-            return text?.range(of: pattern, options: [.regularExpression, .caseInsensitive]) != nil
-        }
-        return (appId == nil || appId == window.bundleID) && (windowKind == nil || windowKind == kind)
-            && search(appNameRegexSubstring, window.appName) && search(windowTitleRegexSubstring, title)
     }
 }
 

@@ -15,47 +15,52 @@ final class ConfigCheckTests: XCTestCase {
     func testMissingMainModeIsAWarning() throws {
         let findings = try check("workspaces = 3")
         XCTAssertEqual(findings.map(\.level), [.warning])
-        XCTAssertTrue(findings[0].message.contains("mode.main"))
+        XCTAssertTrue(findings[0].message.contains("[mode.main]"))
     }
 
     func testUnknownCommandInBinding() throws {
-        let findings = try check("[mode.main.binding]\nalt-h = 'fly left'")
+        let findings = try check("[mode.main]\nalt-h = 'fly left'")
         XCTAssertEqual(findings.count, 1)
         XCTAssertEqual(findings[0].level, .error)
-        XCTAssertTrue(findings[0].message.hasPrefix("mode.main.binding.alt-h:"))
+        XCTAssertTrue(findings[0].message.hasPrefix("mode.main.alt-h:"))
     }
 
     func testModeCommandMustNameAMode() throws {
-        let findings = try check("[mode.main.binding]\nalt-h = 'mode resize'")
+        let findings = try check("[mode.main]\nalt-h = 'mode resize'")
         XCTAssertEqual(findings.count, 1)
         XCTAssertTrue(findings[0].message.contains("names a mode that is not in the config"))
-        XCTAssertEqual(try check("[mode.main.binding]\nalt-h = 'mode resize'\n[mode.resize.binding]\nesc = 'mode main'"), [])
+        XCTAssertEqual(try check("[mode.main]\nalt-h = 'mode resize'\n[mode.resize]\nesc = 'mode main'"), [])
     }
 
     func testUnknownKeyName() throws {
-        let findings = try check("[mode.main.binding]\nalt-h = 'focus left'", known: [])
+        let findings = try check("[mode.main]\nalt-h = 'focus left'", known: [])
         XCTAssertEqual(findings.count, 1)
         XCTAssertTrue(findings[0].message.contains("unknown key 'h'"))
     }
 
-    func testRuleAndCallbackCommandsAreChecked() throws {
+    func testRuleAndHookCommandsAreChecked() throws {
         let findings = try check("""
-        on-focus-changed = ['exec-and-forget true', 'nonsense']
-        [mode.main.binding]
+        [hooks]
+        focus-changed = ['exec-and-forget true', 'nonsense']
+        [mode.main]
         alt-h = 'focus left'
-        [[on-window-detected]]
-        if.app-id = 'com.apple.finder'
+        [[rules]]
+        app-id = 'com.apple.finder'
         run = 'layout floating'
+        [[rules]]
+        run = 'float'
         """)
-        XCTAssertEqual(findings.count, 1)
-        XCTAssertTrue(findings[0].message.hasPrefix("on-focus-changed:"))
+        XCTAssertEqual(findings.count, 2)
+        XCTAssertTrue(findings[0].message.hasPrefix("rules[1].run:"), findings[0].message)
+        XCTAssertTrue(findings[1].message.hasPrefix("hooks.focus-changed:"), findings[1].message)
     }
 
-    func testAfterStartupAndNewCommandsAreChecked() throws {
+    func testStartupHookIsChecked() throws {
         let findings = try check("""
-        after-startup-command = ['exec-and-forget true', 'balance-sizes', 'focus-monitor next', 'focus left --boundaries nowhere']
+        [hooks]
+        startup = ['exec-and-forget true', 'balance-sizes', 'focus-monitor next', 'focus left --boundaries nowhere']
         """)
         XCTAssertEqual(findings.map(\.level), [.warning, .error])
-        XCTAssertTrue(findings[1].message.hasPrefix("after-startup-command:"), findings[1].message)
+        XCTAssertTrue(findings[1].message.hasPrefix("hooks.startup:"), findings[1].message)
     }
 }

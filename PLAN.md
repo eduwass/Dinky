@@ -13,7 +13,7 @@ Agreed 25 September 2026. Work is tracked with `tk` in `.tickets/`; `tk ready` l
 | New windows | Tiled automatically as they appear. Sheets, dialogs, utility panels and per-app rules float. |
 | Layouts | Tiles with widest-axis insertion, stable split axes. Accordion as a container mode, AeroSpace style: children overlap, neighbours peek out by `accordion-padding`. |
 | Floating | Toggle per window, per-app rules in config. Floating windows keep native placement. |
-| Bindings | `alt` is the default modifier, AeroSpace vocabulary and key syntax. `ctrl-left/right` also bound to workspace prev/next. Modes supported. |
+| Bindings | `alt` is the default modifier, AeroSpace's command vocabulary and key syntax. `ctrl-left/right` also bound to workspace prev/next. Modes supported. |
 | Moving windows | `move-window-to-workspace N` stays put; `--follow` or a second binding follows. Same for displays. |
 | Switching | mimi's augmented swipe on the target display. Cmd-Tab and Dock activations are followed with the same swipe, with the native "switch to a Space with open windows" setting off. Onboarding asks before changing that setting. |
 | Borders | Built in, JankyBorders approach reimplemented (it is GPL). Every focused window gets a border, tiled or floating. |
@@ -27,59 +27,7 @@ Agreed 25 September 2026. Work is tracked with `tk` in `.tickets/`; `tk ready` l
 
 ## Config draft
 
-```toml
-config-version = 1
-start-at-login = true
-auto-reload-config = true
-workspaces = 5                 # per display; dinky creates missing Spaces, never removes
-
-[layout]
-default = 'tiles'              # tiles | accordion
-accordion-padding = 30
-
-[gaps]
-inner = 8
-outer = { top = 8, bottom = 8, left = 8, right = 8 }
-
-[borders]
-enabled = true
-width = 4
-active-color = '#e1e3e4'
-inactive-color = '#494d64'
-style = 'round'                # round | square
-order = 'below'                # below | above; above draws a click-through ring over the shadow
-exclude-apps = []              # bundle ids that never get a border
-only-apps = []                 # when set, only these bundle ids get borders
-
-[switching]
-follow-app-activation = true   # Cmd-Tab and Dock clicks go through the fast switch
-
-[[on-window-detected]]
-if.app-id = 'com.apple.systempreferences'
-run = 'layout floating'
-
-[mode.main.binding]
-ctrl-left = 'workspace prev'
-ctrl-right = 'workspace next'
-alt-1 = 'workspace 1'          # ... alt-9
-alt-shift-1 = 'move-window-to-workspace 1'
-alt-tab = 'workspace-back-and-forth'
-alt-h = 'focus left'           # j k l
-alt-shift-h = 'move left'      # j k l
-alt-minus = 'resize smart -50'
-alt-equal = 'resize smart +50'
-alt-f = 'fullscreen'
-alt-shift-f = 'layout floating tiling'
-alt-comma = 'layout accordion'
-alt-slash = 'layout tiles'
-alt-shift-n = 'move-window-to-display next'
-alt-shift-semicolon = 'mode service'
-
-[mode.service.binding]
-esc = ['reload-config', 'mode main']
-r = ['flatten-workspace-tree', 'mode main']
-alt-shift-h = ['join-with left', 'mode main']   # j k l
-```
+The draft that was here was a close copy of AeroSpace's format. On 27 September 2026 the format was redone for dinky alone: flatter keys, `[hooks]`, `[[rules]]`, `[mode.<name>]` and `[display.<pattern>]` overrides. The current file is in [docs/configuration.md](docs/configuration.md) and `Sources/DinkyConfig/DefaultConfig.swift`.
 
 ## Architecture
 

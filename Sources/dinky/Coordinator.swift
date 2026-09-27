@@ -82,8 +82,8 @@ final class Coordinator {
             borders = nil
         }
         for key in workspaces.keys {
-            workspaces[key]!.accordionPadding = CGFloat(config.layout.accordionPadding)
-            workspaces[key]!.autoOrientAccordions = config.layout.accordionOrientation == .auto
+            workspaces[key]!.accordionPadding = CGFloat(config.accordion.padding)
+            workspaces[key]!.autoOrientAccordions = config.accordion.orientation == .auto
         }
         fitToDisplays()
         dirty.formUnion(workspaces.keys)
@@ -127,7 +127,7 @@ final class Coordinator {
     }
 
     private func gaps(on display: Display) -> DinkyLayout.Gaps {
-        DinkyLayout.Gaps(config.gaps, on: displays.monitor(display))
+        DinkyLayout.Gaps(config.gaps(for: displays.monitor(display)))
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
@@ -194,9 +194,9 @@ final class Coordinator {
         let key = SpaceKey(display: display.uuid, space: window.spaceID)
         if workspaces[key] == nil {
             workspaces[key] = Workspace(bounds: display.visibleArea, gaps: gaps(on: display),
-                                        accordionPadding: CGFloat(config.layout.accordionPadding),
-                                        autoOrientAccordions: config.layout.accordionOrientation == .auto,
-                                        mode: config.layout.default == .accordion ? .accordion : .tiles)
+                                        accordionPadding: CGFloat(config.accordion.padding),
+                                        autoOrientAccordions: config.accordion.orientation == .auto,
+                                        mode: config.defaultLayout == .accordion ? .accordion : .tiles)
         }
         return key
     }

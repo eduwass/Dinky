@@ -105,8 +105,8 @@ final class HoverFocus {
         // track. Hover leaves it alone: focusing another window would bury the dialog behind its app.
         let front = frontWindowID()
         if front != 0, coordinator.placements[front] == nil { return nil }
-        // An accordion child other than the front one only peeks out; with `accordion = false` it stays put.
-        if !config.accordion, let container = coordinator.container(of: id), container.mode == .accordion,
+        // An accordion child other than the front one only peeks out; with `accordion-edges = false` it stays put.
+        if !config.accordionEdges, let container = coordinator.container(of: id), container.mode == .accordion,
            container.children[container.activeIndex] != .window(id) { return nil }
         return id
     }

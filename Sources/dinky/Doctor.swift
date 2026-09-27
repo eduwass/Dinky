@@ -23,16 +23,13 @@ func runDoctor(_ args: [String]) -> Int32 {
     } else {
         do {
             config = try Config.load(from: url)
-            ok("parses: \(config.workspaces) workspaces per display, \(config.modes.count) modes, \(config.onWindowDetected.count) window rules")
+            ok("parses: \(config.workspaces) workspaces per display, \(config.modes.count) modes, \(config.rules.count) window rules")
         } catch {
             fail("\(error)")
         }
     }
     for finding in checkConfig(config, keyIsKnown: { keyCodes[$0] != nil }) {
         finding.level == .error ? fail(finding.message) : warn(finding.message)
-    }
-    if let program = config.execOnWorkspaceChange.first, !program.isEmpty, !programExists(program) {
-        warn("exec-on-workspace-change: '\(program)' was not found on PATH")
     }
 
     // Dock settings the design depends on. Both default to on when unset.
@@ -41,7 +38,7 @@ func runDoctor(_ args: [String]) -> Int32 {
     } else {
         ok("Spaces are not auto-rearranged")
     }
-    if config.switching.followAppActivation {
+    if config.followAppActivation {
         if dockSetting("workspaces-auto-swoosh") ?? true {
             warn("\"When switching to an application, switch to a Space with open windows\" is on; Cmd-Tab will use macOS's slow switch instead of dinky's. The app's onboarding can turn it off")
         } else {
@@ -72,10 +69,4 @@ func runDoctor(_ args: [String]) -> Int32 {
 /// A boolean Dock setting, nil when unset.
 func dockSetting(_ key: String) -> Bool? {
     CFPreferencesCopyAppValue(key as CFString, "com.apple.dock" as CFString) as? Bool
-}
-
-private func programExists(_ program: String) -> Bool {
-    if program.contains("/") { return FileManager.default.isExecutableFile(atPath: program) }
-    let path = (ProcessInfo.processInfo.environment["PATH"] ?? "") + ":/opt/homebrew/bin:/usr/local/bin"
-    return path.split(separator: ":").contains { FileManager.default.isExecutableFile(atPath: "\($0)/\(program)") }
 }

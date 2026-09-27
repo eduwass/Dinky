@@ -16,17 +16,18 @@ struct Reply {
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
 // Workspace commands act on the focused display.
 enum Dispatcher {
-    static func run(_ line: String) -> Reply {
+    /// `env` is added to the environment of an `exec-and-forget`, for hooks.
+    static func run(_ line: String, env: [String: String] = [:]) -> Reply {
         do {
-            return run(try Command.parse(line))
+            return run(try Command.parse(line), env: env)
         } catch {
             return .error(error.description)
         }
     }
 
     /// Runs a command. `window` stands in for the focused window in commands that act on one, for
-    /// on-window-detected rules; bindings and the CLI leave it nil.
-    static func run(_ command: Command, window: WindowID? = nil) -> Reply {
+    /// window rules; bindings and the CLI leave it nil.
+    static func run(_ command: Command, window: WindowID? = nil, env: [String: String] = [:]) -> Reply {
         switch command {
         case .workspace(let target):
             return switchWorkspace(target)
@@ -88,7 +89,7 @@ enum Dispatcher {
             guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
             return .ok(coordinator.debugState())
         case .execAndForget(let shell):
-            exec(["/bin/sh", "-c", shell])
+            exec(["/bin/sh", "-c", shell], env: env)
             return .ok("")
         }
     }
