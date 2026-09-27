@@ -252,3 +252,9 @@ th {
     scroll-behavior: auto;
   }
 }
+
+.tagline {
+  margin: -1lh 0 2lh;
+  color: var(--accent);
+  font-style: italic;
+}

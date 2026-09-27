@@ -7,6 +7,8 @@ permalink: /
 
 # Tiling on native Spaces, SIP left on.
 
+<p class="tagline">oh wow. you moved a rectangle.</p>
+
 > **TL;DR:** dinky tiles the windows on each native Space, switches Spaces
 > in about 70 ms instead of half a second, and draws a border around the
 > focused window. Nothing is injected into the Dock.

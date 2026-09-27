@@ -21,6 +21,18 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD" "$APP/Contents/Info.plist"
 
+# The app icon, from Resources/icon.png (1024 x 1024).
+if [[ -f Resources/icon.png ]]; then
+  ICONSET="$(mktemp -d)/AppIcon.iconset"
+  mkdir -p "$ICONSET" "$APP/Contents/Resources"
+  for size in 16 32 128 256 512; do
+    sips -z "$size" "$size" Resources/icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
+    sips -z "$((size * 2))" "$((size * 2))" Resources/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
+  done
+  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
+  plutil -replace CFBundleIconFile -string "AppIcon" "$APP/Contents/Info.plist"
+fi
+
 # Sparkle.framework from the resolved SwiftPM artifact; the linker rpath finds it here.
 SPARKLE_SRC="$(find .build/artifacts -maxdepth 6 -path '*macos-arm64_x86_64/Sparkle.framework' | head -1)"
 [[ -n "$SPARKLE_SRC" ]] || { echo 'Sparkle.framework not found in .build/artifacts' >&2; exit 1; }
