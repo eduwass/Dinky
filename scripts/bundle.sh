@@ -21,17 +21,15 @@ cp Resources/Info.plist "$APP/Contents/Info.plist"
 plutil -replace CFBundleShortVersionString -string "$VERSION" "$APP/Contents/Info.plist"
 plutil -replace CFBundleVersion -string "$BUILD" "$APP/Contents/Info.plist"
 
-# The app icon, from Resources/icon.png (1024 x 1024).
-if [[ -f Resources/icon.png ]]; then
-  ICONSET="$(mktemp -d)/AppIcon.iconset"
-  mkdir -p "$ICONSET" "$APP/Contents/Resources"
-  for size in 16 32 128 256 512; do
-    sips -z "$size" "$size" Resources/icon.png --out "$ICONSET/icon_${size}x${size}.png" >/dev/null
-    sips -z "$((size * 2))" "$((size * 2))" Resources/icon.png --out "$ICONSET/icon_${size}x${size}@2x.png" >/dev/null
-  done
-  iconutil -c icns "$ICONSET" -o "$APP/Contents/Resources/AppIcon.icns"
-  plutil -replace CFBundleIconFile -string "AppIcon" "$APP/Contents/Info.plist"
-fi
+# The app icon: Resources/Dinky.icon (Icon Composer) compiled into Assets.car and an icns fallback.
+ICON_OUT="$(mktemp -d)"
+xcrun actool Resources/Dinky.icon --compile "$ICON_OUT" --platform macosx --minimum-deployment-target 15.0 \
+  --app-icon Dinky --include-all-app-icons --output-partial-info-plist "$ICON_OUT/partial.plist" >/dev/null
+mkdir -p "$APP/Contents/Resources"
+cp "$ICON_OUT/Assets.car" "$ICON_OUT/Dinky.icns" "$APP/Contents/Resources/"
+plutil -replace CFBundleIconFile -string Dinky "$APP/Contents/Info.plist"
+plutil -replace CFBundleIconName -string Dinky "$APP/Contents/Info.plist"
+rm -rf "$ICON_OUT"
 
 # Sparkle.framework from the resolved SwiftPM artifact; the linker rpath finds it here.
 SPARKLE_SRC="$(find .build/artifacts -maxdepth 6 -path '*macos-arm64_x86_64/Sparkle.framework' | head -1)"

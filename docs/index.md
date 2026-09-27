@@ -5,6 +5,8 @@ description: A tiling window manager for macOS that leaves System Integrity Prot
 permalink: /
 ---
 
+<img class="app-icon" src="{{ '/assets/icon.png' | relative_url }}" alt="dinky's icon: a sketched face, laughing" width="128" height="128">
+
 # Tiling on native Spaces, SIP left on.
 
 <p class="tagline">oh wow. you moved a rectangle.</p>

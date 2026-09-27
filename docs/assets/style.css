@@ -258,3 +258,10 @@ th {
   color: var(--accent);
   font-style: italic;
 }
+
+.app-icon {
+  display: block;
+  width: 128px;
+  height: 128px;
+  margin: 0 0 1lh;
+}
