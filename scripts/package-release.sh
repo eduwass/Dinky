@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
 # Builds, signs with Developer ID, notarizes and staples dinky.app, zips it into dist/, and writes the Sparkle
 # appcast and the Homebrew cask.
-# Usage: scripts/package-release.sh 0.1.0
+# Usage: scripts/package-release.sh 0.3
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version="${1:?Usage: scripts/package-release.sh X.Y.Z}"
+version="${1:?Usage: scripts/package-release.sh X.Y}"
 version="${version#v}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected version X.Y.Z' >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+$ ]] || { echo 'Expected version X.Y' >&2; exit 1; }
 profile="${NOTARYTOOL_PROFILE:-TunaNotary}"
 identity="${DEVELOPER_ID_APPLICATION:-$(security find-identity -v -p codesigning | sed -n 's/.*"\(Developer ID Application:[^"]*\)".*/\1/p' | head -1)}"
 [[ -n "$identity" ]] || { echo 'No Developer ID Application identity; set DEVELOPER_ID_APPLICATION' >&2; exit 1; }

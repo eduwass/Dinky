@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Tests, packages, tags and publishes a GitHub release from a clean, pushed main, then updates the cask in
-# mikker/homebrew-tap. Usage: scripts/release.sh 0.1.0   (run again to retry a failed release or tap update)
+# mikker/homebrew-tap. Usage: scripts/release.sh 0.3   (run again to retry a failed release or tap update)
+# Versions are X.Y, bumped by 0.1 each release.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-version="${1:?Usage: scripts/release.sh X.Y.Z}"
+version="${1:?Usage: scripts/release.sh X.Y}"
 version="${version#v}"
-[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo 'Expected version X.Y.Z' >&2; exit 1; }
+[[ "$version" =~ ^[0-9]+\.[0-9]+$ ]] || { echo 'Expected version X.Y' >&2; exit 1; }
 tag="v$version"
 repo=mikker/Dinky
 
