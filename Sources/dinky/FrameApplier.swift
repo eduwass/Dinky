@@ -1,5 +1,6 @@
 import AppKit
 import DinkyLayout
+import DinkyPrivate
 
 // Applies a layout through Accessibility. Scheduling (a queue per app, newest frame wins, one retry)
 // lives in FrameScheduler; this file is only the AX side: element lookup, writes, readback, raises.
@@ -43,16 +44,19 @@ final class FrameApplier {
     /// Drops every frame not written yet.
     func cancel() { scheduler.cancel() }
 
-    /// Write every frame in `layout`, then raise overlapping windows into the layout's order if they are not.
+    /// Write every frame in `layout`, then raise overlapping windows into the layout's order if they are not,
+    /// unless that would move focus away from a window other than `front`, the one the layout puts on top.
     /// `completion` runs on a background queue with the readback of every app touched.
-    func apply(_ layout: Layout, pids: [WindowID: pid_t], completion: @escaping ([FrameResult]) -> Void = { _ in }) {
+    func apply(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID? = nil,
+               completion: @escaping ([FrameResult]) -> Void = { _ in }) {
         let jobs = layout.order.compactMap { id in
             pids[id].map { FrameJob(pid: $0, id: id, frame: layout.frames[id]!) }
         }
         scheduler.submit(jobs) { [unowned self] results in
             rememberAppMinimums(results)
             raiseQueue.async {
-                self.raise(layout.raises(current: onScreenOrder()), pids: pids)
+                let ids = layout.raises(current: onScreenOrder())
+                if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids) }
                 completion(results)
             }
         }
@@ -82,6 +86,17 @@ final class FrameApplier {
         guard let data = try? JSONEncoder().encode(raw) else { return }
         try? FileManager.default.createDirectory(at: Self.minimumsURL.deletingLastPathComponent(), withIntermediateDirectories: true)
         try? data.write(to: Self.minimumsURL, options: .atomic)
+    }
+
+    /// Raising a window of the frontmost app makes it that app's key window. So windows are raised only when
+    /// that cannot move focus: the focused window is the layout's front one, or its app owns none of them.
+    /// Otherwise the layout is older than the focus, say right after Cmd-` or while a pass that started before
+    /// a newer one finishes, and raising would take focus back. The next pass raises once the tree has caught up.
+    private static func raisingKeepsFocus(_ ids: [WindowID], front: WindowID?, pids: [WindowID: pid_t]) -> Bool {
+        let focused = dinky_border_focused_window()
+        guard focused != 0, focused != front else { return true }
+        let owner = dinky_window_info(focused).pid
+        return !ids.contains { pids[$0] == owner }
     }
 
     /// Raise back to front, so the last raised ends up frontmost. AXRaise does not activate the app.

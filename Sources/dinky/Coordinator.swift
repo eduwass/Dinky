@@ -101,6 +101,14 @@ final class Coordinator {
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
         if [.frontApp, .windowReorder, .windowCreate].contains(event.kind) { syncFocus() }
+        if event.kind == .frontApp {
+            // The app's front window settles a few ms after the app, as the border manager also knows: Cmd-`
+            // between one app's windows reports the app with its previous window still in front.
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
+                self?.syncFocus()
+                self?.flush()
+            }
+        }
         flush()
     }
 
@@ -226,36 +234,24 @@ final class Coordinator {
         displays.displays.contains { $0.currentSpaceID == space }
     }
 
-    /// Writes the tree's frames around the minimum sizes windows have shown. Overlapping layouts (accordion,
-    /// fullscreen) also bring the focused window to the front when it is on the focused Space: AX raise alone
-    /// does not lift it above another app. Minimum sizes found in a pass are laid out around all at once, when that
-    /// moves anything.
+    /// Writes the tree's frames around the minimum sizes windows have shown, then lets the applier raise
+    /// overlapping windows (accordion, fullscreen) into the tree's stacking, with its focused window on top.
+    /// Nothing is activated: the tree follows macOS's focus (`syncFocus`) and commands that choose a window
+    /// focus it themselves, so a pass, which may have started before the latest focus change, must not.
+    /// Minimum sizes found in a pass are laid out around all at once, when that moves anything.
     private func apply(_ key: SpaceKey) {
         guard var workspace = workspaces[key] else { return }
         workspace.minimumSizes = minimumSizes(in: workspace)
         workspaces[key] = workspace
         let layout = workspace.layout()
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
-        let overlaps = !layout.raises(current: []).isEmpty
-        let front = overlaps ? workspace.focused : nil
-        applier.apply(layout, pids: pids) { [weak self] _ in
+        applier.apply(layout, pids: pids, front: workspace.focused) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.enabled else { return }
-                if let front, self.shouldBringForward(front, in: key) { self.focus(front) }
                 self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
                 self.flush()
             }
         }
-    }
-
-    /// Whether a finished pass should still activate the window that was its tree's focus when it started.
-    /// Not when the tree's focus has moved on since, nor when focus has left the tree, nor when the window
-    /// already has focus. Passes overlap: one started with a stale focus (right after launch, the tree's
-    /// first window) and a newer one would otherwise activate their windows in turn, each activation
-    /// starting the next pass, without end.
-    private func shouldBringForward(_ id: WindowID, in key: SpaceKey) -> Bool {
-        let now = focusedWindow
-        return workspaces[key]?.focused == id && placements[now]?.space == key && now != id
     }
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
