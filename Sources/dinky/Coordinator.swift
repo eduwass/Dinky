@@ -237,16 +237,25 @@ final class Coordinator {
         let layout = workspace.layout()
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
         let overlaps = !layout.raises(current: []).isEmpty
-        let front = overlaps ? workspace.focused.flatMap { model.windows[$0] } : nil
-        let focusedHere = placements[focusedWindow]?.space == key
+        let front = overlaps ? workspace.focused : nil
         applier.apply(layout, pids: pids) { [weak self] _ in
             DispatchQueue.main.async {
                 guard let self, self.enabled else { return }
-                if let front, focusedHere { self.focus(front.id) }
+                if let front, self.shouldBringForward(front, in: key) { self.focus(front) }
                 self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
                 self.flush()
             }
         }
+    }
+
+    /// Whether a finished pass should still activate the window that was its tree's focus when it started.
+    /// Not when the tree's focus has moved on since, nor when focus has left the tree, nor when the window
+    /// already has focus. Passes overlap: one started with a stale focus (right after launch, the tree's
+    /// first window) and a newer one would otherwise activate their windows in turn, each activation
+    /// starting the next pass, without end.
+    private func shouldBringForward(_ id: WindowID, in key: SpaceKey) -> Bool {
+        let now = focusedWindow
+        return workspaces[key]?.focused == id && placements[now]?.space == key && now != id
     }
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
