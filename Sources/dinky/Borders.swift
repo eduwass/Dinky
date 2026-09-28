@@ -13,6 +13,7 @@ final class BorderManager {
     private var borders: [UInt32: BorderWindow] = [:]
     private var focusedID: UInt32 = 0
     private var visibleSpaces: Set<UInt64> = []
+    private var restackPending = false
 
     init(config: Borders, model: WindowModel) {
         self.config = config
@@ -51,8 +52,22 @@ final class BorderManager {
         guard let window = event.window else { return }
         if event.change == .removed {
             borders[window.id] = nil
+        } else if event.kind == .windowReorder {
+            restack()
         } else {
             sync(window)
+        }
+    }
+
+    /// A border is ordered next to its target once, so a window raised later lands on top of every border
+    /// below it: an app's activation, or the accordion raising its other windows, buries the focused border
+    /// under the windows raised after it. So any reorder places every border again, once per run-loop turn.
+    private func restack() {
+        guard !restackPending else { return }
+        restackPending = true
+        DispatchQueue.main.async { [weak self] in
+            self?.restackPending = false
+            self?.syncAll()
         }
     }
 
