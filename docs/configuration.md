@@ -127,7 +127,7 @@ The schema knows every key, the key syntax and the command names. `dinky doctor`
 | Key | Default | Meaning |
 |---|---|---|
 | `start-at-login` | `true` | Register dinky as a login item. |
-| `workspaces` | `5` | Spaces per display, at least 1. dinky creates missing Spaces and never removes any. |
+| `workspaces` | `5` | Spaces per display, at least 1. dinky creates missing Spaces and never removes any. A `[display.<pattern>]` table can set its own. |
 | `default-layout` | `'tiles'` | Layout for new containers: `'tiles'` or `'accordion'`. |
 | `follow-app-activation` | `true` | When Cmd-Tab or a Dock click activates an app on another Space, switch there with the fast switch. Works when the macOS "switch to a Space with open windows" setting is off. |
 
@@ -151,7 +151,7 @@ A side or axis left out keeps its default, like every other key.
 
 Settings for one display. The pattern is `main` (the main display in System Settings), `secondary` (the other one, when there are exactly two), or a case-insensitive part of the display's name as `dinky list-displays` prints it, such as `built-in` or `dell`. Quote a pattern with spaces: `[display."LG UltraFine"]`.
 
-The only setting so far is `gaps`, written as above. A display table changes only what it sets; when several match one display, name patterns win over `main` and `secondary`, and a longer name pattern wins over a shorter one.
+A display table takes `gaps`, written as above, and `workspaces`, the number of Spaces on that display in place of the general count. A display table changes only what it sets; when several match one display, name patterns win over `main` and `secondary`, and a longer name pattern wins over a shorter one.
 
 ```toml
 [gaps]
@@ -163,6 +163,9 @@ gaps.outer.top = 44
 [display.built-in]
 gaps.outer.top = 10
 gaps.inner = 6
+
+[display.secondary]     # one workspace on the second display
+workspaces = 1
 ```
 
 ## `[borders]`

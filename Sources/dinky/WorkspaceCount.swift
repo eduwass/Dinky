@@ -1,15 +1,17 @@
 import DinkyPrivate
 import Foundation
 
-/// Gives every display at least `config.workspaces` user Spaces, creating the missing ones at the end of
-/// each display's strip. Never removes one. Each new Space must show up in the display model (within 2 s)
-/// before the next is created. If creation fails on a display, that is logged once and the display skipped.
+/// Gives every display at least its configured number of user Spaces (`workspaces`, or a `[display.<pattern>]`
+/// table's), creating the missing ones at the end of each display's strip. Never removes one. Each new Space
+/// must show up in the display model (within 2 s) before the next is created. If creation fails on a display, that is logged once and the display skipped.
 /// Blocks the main thread while it works; a Space normally appears on the first poll.
 func ensureWorkspaceCount() {
-    let wanted = AppState.shared.config.workspaces
+    let config = AppState.shared.config
     let model = AppState.shared.displays
     model.reconcile()
-    for display in model.displays where display.workspaces.count < wanted {
+    for display in model.displays {
+        let wanted = config.workspaces(for: model.monitor(display))
+        guard display.workspaces.count < wanted else { continue }
         var created: [UInt64] = []
         while display.workspaces.count + created.count < wanted {
             let space = dinky_create_space(display.uuid as CFString)

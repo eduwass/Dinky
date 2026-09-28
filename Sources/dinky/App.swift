@@ -55,6 +55,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         installActivationFollower()
         ensureWorkspaceCount()
         AppState.shared.startCoordinator()
+        followDisplayConnections()
         // After the display model's own subscription, so it has read the new Space.
         EventHub.shared.subscribe { [weak self] event in
             if event.kind == .spaceChange { self?.refresh() }
@@ -65,6 +66,20 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         print("app: status item up, listening on \(socketPath)")
         print("STATUS:READY")  // fut's run extension watches for this line
         fflush(stdout)
+    }
+
+    /// A display plugged in after launch gets its missing workspaces too. The Spaces of a new display take
+    /// a moment to settle in WindowServer, so this waits a second before counting.
+    private func followDisplayConnections() {
+        var known = Set(AppState.shared.displays.displays.map(\.uuid))
+        AppState.shared.displays.observe { model in
+            let now = Set(model.displays.map(\.uuid))
+            let connected = now.subtracting(known)
+            known = now
+            guard !connected.isEmpty else { return }
+            print("displays: connected \(connected.sorted()), checking workspaces")
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { ensureWorkspaceCount() }
+        }
     }
 
     private func refresh() {

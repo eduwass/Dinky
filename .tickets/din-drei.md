@@ -28,3 +28,7 @@ Host checklist: just bundle; open build/dinky.app; grant Accessibility; answer t
 **2026-09-26T21:12:30Z**
 
 Also covers the two-display checks from din-8j6i and din-ethk: RESULTS.md, Display targeting for switching, steps 1 to 9.
+
+**2026-09-28T06:33:18Z**
+
+Two-display host run 28 September (PG27UCDM main + LS24D60xU portrait, SIP on): steps 1-4 pass, step 7 passes with --follow. Steps 5, 6, 8 and plain move-window-to-display still need the user at the machine, plus a display unplug/replug to see 'displays: connected ... checking workspaces' in the log. Details in RESULTS.md.

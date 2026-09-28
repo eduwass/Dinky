@@ -111,23 +111,36 @@ public enum MonitorPattern: Equatable {
 public struct DisplayOverride: Equatable {
     public var pattern: MonitorPattern
     public var gaps = GapsPatch()
+    /// Spaces on this display in place of the general `workspaces`, nil to keep it.
+    public var workspaces: Int?
 
     init(_ pattern: String, _ t: Table) throws {
         guard !pattern.isEmpty else { throw ConfigError(path: t.path, "a display pattern can't be empty") }
         self.pattern = MonitorPattern(pattern)
         gaps = try t.table("gaps").map(GapsPatch.init) ?? gaps
+        workspaces = try t.int("workspaces")
+        if let workspaces, workspaces < 1 { throw ConfigError(path: t.path("workspaces"), "must be at least 1") }
         try t.done()
     }
 }
 
 extension Config {
-    /// The gaps on `monitor`: the general ones, with the overrides of every matching display table applied.
-    /// `main` and `secondary` go first, then name patterns, shortest first, so the most specific wins.
-    public func gaps(for monitor: Monitor) -> Gaps {
-        let matching = displays.filter { $0.pattern.matches(monitor) }
+    /// The display tables matching `monitor`, least specific first: `main` and `secondary`, then name
+    /// patterns, shortest first, so applying them in order lets the most specific win.
+    private func overrides(for monitor: Monitor) -> [DisplayOverride] {
         func rank(_ override: DisplayOverride) -> Int {
             if case .name(let text) = override.pattern { return text.count } else { return -1 }
         }
-        return matching.sorted { rank($0) < rank($1) }.reduce(gaps) { $0.applying($1.gaps) }
+        return displays.filter { $0.pattern.matches(monitor) }.sorted { rank($0) < rank($1) }
+    }
+
+    /// The gaps on `monitor`: the general ones, with the overrides of every matching display table applied.
+    public func gaps(for monitor: Monitor) -> Gaps {
+        overrides(for: monitor).reduce(gaps) { $0.applying($1.gaps) }
+    }
+
+    /// How many workspaces `monitor` gets: the most specific matching display table's, else `workspaces`.
+    public func workspaces(for monitor: Monitor) -> Int {
+        overrides(for: monitor).reduce(workspaces) { $1.workspaces ?? $0 }
     }
 }

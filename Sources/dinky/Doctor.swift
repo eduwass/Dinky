@@ -47,12 +47,17 @@ func runDoctor(_ args: [String]) -> Int32 {
         }
     }
 
-    for (i, display) in dinky_displays().enumerated() {
+    let displays = dinky_displays()
+    for (i, display) in displays.enumerated() {
         let user = display.spaces.filter(\.isUser).count
-        if user < config.workspaces {
-            ok("display \(i + 1) has \(user) of \(config.workspaces) workspaces; the app creates the rest on start")
+        let name = screen(of: display.displayID)?.localizedName ?? ""
+        let wanted = config.workspaces(for: Monitor(name: name, isMain: CGDisplayIsMain(display.displayID) != 0,
+                                                    count: displays.count))
+        let label = name.isEmpty ? "display \(i + 1)" : "display \(i + 1) (\(name))"
+        if user < wanted {
+            ok("\(label) has \(user) of \(wanted) workspaces; the app creates the rest")
         } else {
-            ok("display \(i + 1) has \(user) workspaces")
+            ok("\(label) has \(user) workspace\(user == 1 ? "" : "s")")
         }
     }
 

@@ -51,6 +51,20 @@ final class GapsTests: XCTestCase {
         XCTAssertEqual(gaps.outer.bottom, 1, "the overrides layer, each one only changes what it sets")
     }
 
+    func testWorkspacesPerDisplay() throws {
+        let config = try Config.parse("""
+        workspaces = 4
+        [display.secondary]
+        workspaces = 1
+        [display.dell]
+        gaps.outer.top = 2
+        """)
+        XCTAssertEqual(config.workspaces(for: builtIn), 1, "secondary of two")
+        XCTAssertEqual(config.workspaces(for: dell), 4, "a table without workspaces keeps the general count")
+        XCTAssertEqual(config.workspaces(for: Monitor(name: "LG", isMain: false, count: 3)), 4)
+        XCTAssertThrowsError(try Config.parse("[display.main]\nworkspaces = 0\n"))
+    }
+
     func testPatterns() {
         XCTAssertTrue(MonitorPattern.main.matches(dell))
         XCTAssertFalse(MonitorPattern.main.matches(builtIn))

@@ -156,8 +156,9 @@ private func follow(_ pid: pid_t, name: String) {
           let (space, display) = windowSpaces(of: pid).lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first,
           space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else { return }
     let spaces = display.spaces
-    let text = String(format: "activate %@: followed %d -> %d on display %u", name,
-                      (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1, display.id)
+    let text = String(format: "activate %@: followed %d -> %d on %@", name,
+                      (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1,
+                      display.name.isEmpty ? "display \(display.id)" : display.name)
     print("\(stamp()) \(text)")
     noteFollow(text)
 }

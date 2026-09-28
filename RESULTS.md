@@ -104,6 +104,21 @@ Setup: two displays attached, "Displays have separate Spaces" on (the default), 
 
 Pass means steps 3, 4 and 7 behave as described. Then close din-8j6i.
 
+**Host run, 28 September 2026.** macOS 27.0 build 26A428, SIP on, Apple M1 Max with the lid closed. Two externals: PG27UCDM at 2560x1440 as main, and LS24D60xU rotated to 1440x2560 portrait, placed left of main at (-1440, -647). "Displays have separate Spaces" on, `mru-spaces` false. Main had 5 workspaces and the portrait display 1 (`[display.secondary] workspaces = 1`). Pointer moved with synthetic mouseMoved events; commands ran from a Ghostty window on main. The user was working on the machine during the run.
+
+| Step | Result |
+|---|---|
+| 1 | Pass. Two displays, main marked, each with its current Space. |
+| 2 | Pass. Pointer on main: `workspace 1` landed in 160 ms, no warp. |
+| 3 | Pass. Pointer on the portrait display, focus on main: main switched (184 ms), the portrait display kept its Space, the pointer ended where it was left. |
+| 4 | Pass. Ten alternating switches with the pointer on the portrait display: 10 of 10 landed on main in 93 to 176 ms, the pointer read the same after every one. |
+| 5, 6, 8 | Not run. They need a hand on the mouse, eyes on the menu bar, and System Settings. |
+| 7 | Pass for `--follow`: the window moved to the portrait display's workspace, both displays re-tiled, focus followed. Plain `move-window-to-display` not run. |
+
+0.7 s after step 4's last switch, the follower logged `activate Helium: followed 1 -> 2` and took main back to workspace 2, where Helium's window was. The same happened 2.6 s after a single switch in step 2. With the user active it is not clear whether these were their activations; din-ame0 has the trail.
+
+Found and fixed in the same run: a display connected after launch never got its workspaces, since the count was only ensured at launch and on reload. The app now ensures it a second after a new display appears. `[display.<pattern>]` tables take `workspaces`, so one display can have a different count. A new workspace whose default layout is accordion now starts with `auto` orientation, so on the portrait display it runs top to bottom (AeroSpace's `default-root-container-orientation = 'auto'`).
+
 ## Space creation spike: works
 
 Run on 25 September 2026 in the same VM (macOS 27.0 26A5416b, SIP off, one 1024x768 display, 3 Spaces at the start). Ticket din-19v3.

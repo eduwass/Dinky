@@ -55,7 +55,8 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "gaps": { "$ref": "#/definitions/gaps" }
+          "gaps": { "$ref": "#/definitions/gaps" },
+          "workspaces": { "type": "integer", "minimum": 1, "description": "Spaces on this display in place of the general workspaces. dinky creates missing ones and never removes any." }
         }
       }
     },
