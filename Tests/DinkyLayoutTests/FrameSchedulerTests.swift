@@ -227,7 +227,17 @@ final class FrameSchedulerTests: XCTestCase {
         let layout = workspace(3, mode: .accordion).layout()
         XCTAssertEqual(layout.order, [3, 2, 1])
         XCTAssertEqual(layout.raises(current: [3, 99, 2, 1]), [])
-        XCTAssertEqual(layout.raises(current: [1, 2, 3]), [1, 2, 3])
+        XCTAssertEqual(layout.raises(current: [1, 2, 3]), [2, 3], "1 is already below 2, so only 2 and 3 go up")
+        XCTAssertEqual(layout.raises(current: [3, 1, 2]), [], "the front window is on top; which one peeks is not worth a flash")
+    }
+
+    func testAccordionNeighboursOnlyNeedTheFrontWindowOnTop() {
+        var ws = workspace(3, mode: .accordion)
+        ws.focus(2)
+        let layout = ws.layout()
+        XCTAssertEqual(layout.order, [2, 1, 3])
+        XCTAssertEqual(layout.raises(current: [2, 3, 1]), [], "1 and 3 peek out at opposite edges, so their order never shows")
+        XCTAssertEqual(layout.raises(current: [3, 2, 1]), [2], "only the front window goes up, nothing flashes above it")
     }
 
     func testFullscreenRaisesWhenNotInFront() {
@@ -235,6 +245,6 @@ final class FrameSchedulerTests: XCTestCase {
         ws.toggleFullscreen()
         let layout = ws.layout()
         XCTAssertEqual(layout.raises(current: [2, 1]), [])
-        XCTAssertEqual(layout.raises(current: [1, 2]), [1, 2])
+        XCTAssertEqual(layout.raises(current: [1, 2]), [2])
     }
 }
