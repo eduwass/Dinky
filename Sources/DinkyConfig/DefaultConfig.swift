@@ -3,10 +3,10 @@
 
 extension Config {
     public static let defaultTOML = """
-    #:schema https://mikker.github.io/Dinky/schemas/dinky.json
+    #:schema https://dinky.rodeo/schemas/dinky.json
     # ~/.config/dinky/dinky.toml. Saved changes take effect at once.
     # A key you leave out keeps the value shown here.
-    # Every key and command: https://mikker.github.io/Dinky/configuration/
+    # Every key and command: https://dinky.rodeo/configuration/
 
     start-at-login = true
     workspaces = 5                  # per display; dinky creates missing Spaces, never removes any

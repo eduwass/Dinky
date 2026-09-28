@@ -1,7 +1,7 @@
 title: dinky
 description: A tiling window manager for macOS that leaves System Integrity Protection on.
-url: https://mikker.github.io
-baseurl: "/Dinky"
+url: https://dinky.rodeo
+baseurl: ""
 repository: mikker/Dinky
 version: "0.3"
 markdown: kramdown

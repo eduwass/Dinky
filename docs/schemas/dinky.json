@@ -1,6 +1,6 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "$id": "https://mikker.github.io/Dinky/schemas/dinky.json",
+  "$id": "https://dinky.rodeo/schemas/dinky.json",
   "title": "dinky configuration",
   "description": "~/.config/dinky/dinky.toml. Every key is optional; a key left out keeps its default.",
   "type": "object",

@@ -5,7 +5,7 @@ cask "dinky" do
   url "https://github.com/mikker/Dinky/releases/download/v#{version}/dinky.app.zip"
   name "dinky"
   desc "Tiling window manager for macOS on native Spaces, with SIP left on"
-  homepage "https://mikker.github.io/Dinky/"
+  homepage "https://dinky.rodeo/"
 
   livecheck do
     url "https://github.com/mikker/Dinky/releases/latest/download/appcast.xml"
