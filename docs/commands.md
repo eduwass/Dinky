@@ -116,11 +116,13 @@ The config's `[hooks]` table runs dinky commands on events; see [Configuration](
 [hooks]
 # Once dinky has read the windows and displays.
 startup = ['exec-and-forget brew services restart sketchybar']
-# Whenever a display's current workspace changes, by dinky or natively.
+# As soon as dinky starts a switch, before it lands: highlight the target at once.
+workspace-changing = ['exec-and-forget sketchybar --trigger workspace_changing DINKY_DISPLAY=$DINKY_DISPLAY DINKY_WORKSPACE=$DINKY_WORKSPACE']
+# Whenever a display's current workspace changes, by dinky or natively, or a dinky switch gives up.
 workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change WORKSPACE=$DINKY_WORKSPACE']
 # When the focused window changes (debounced by 50 ms) and when the binding mode changes.
 focus-changed = ['exec-and-forget sketchybar --trigger focus_changed']
 mode-changed = ['exec-and-forget sketchybar --trigger mode_changed']
 ```
 
-`workspace-changed` runs its `exec-and-forget` with `DINKY_WORKSPACE` (the new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_DISPLAY` (the 1-based number of the display that switched) in the environment. Programs started by `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Apart from `startup`, nothing fires while dinky starts up.
+`workspace-changing` and `workspace-changed` run their `exec-and-forget` with `DINKY_WORKSPACE` (the target or new number, empty on a full-screen app's Space), `DINKY_PREV_WORKSPACE` and `DINKY_DISPLAY` (the 1-based number of the display that switched) in the environment. `workspace-changing` fires only for dinky's own switches; a native switch (Control-Arrow, Mission Control) is seen once it lands. A bar can draw the target on `workspace-changing` and read the real state on `workspace-changed`, which always follows. Programs started by `exec-and-forget` find Homebrew's `/opt/homebrew/bin` on `PATH`. Apart from `startup`, nothing fires while dinky starts up.

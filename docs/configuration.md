@@ -193,13 +193,15 @@ dinky commands run on events. Each is a command or a list of commands, empty by 
 | Key | Runs |
 |---|---|
 | `startup` | Once, when dinky starts, after it has read the windows and displays. |
-| `workspace-changed` | Whenever a display's current workspace changes, by dinky or natively. |
+| `workspace-changing` | As soon as dinky starts switching a display, before the swipe lands, and again when a burst of switches changes the target. For a bar that should react at once. |
+| `workspace-changed` | Whenever a display's current workspace changes, by dinky or natively. Also when a dinky switch gives up, with the workspace the display stayed on, so whatever `workspace-changing` announced is corrected. |
 | `focus-changed` | When the focused window changes, debounced by 50 ms. |
 | `mode-changed` | When the binding mode changes. |
 
 ```toml
 [hooks]
 startup = ['exec-and-forget brew services restart sketchybar']
+workspace-changing = ['exec-and-forget sketchybar --trigger workspace_changing DINKY_DISPLAY=$DINKY_DISPLAY DINKY_WORKSPACE=$DINKY_WORKSPACE']
 workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']
 ```
 

@@ -41,6 +41,7 @@ public func checkConfig(_ config: Config, keyIsKnown: (String) -> Bool) -> [Conf
         check(rule.run, at: "rules[\(i)].run")
     }
     check(config.hooks.startup, at: "hooks.startup")
+    check(config.hooks.workspaceChanging, at: "hooks.workspace-changing")
     check(config.hooks.workspaceChanged, at: "hooks.workspace-changed")
     check(config.hooks.focusChanged, at: "hooks.focus-changed")
     check(config.hooks.modeChanged, at: "hooks.mode-changed")

@@ -108,6 +108,10 @@
       "description": "dinky commands run on events. Shell goes through exec-and-forget.",
       "properties": {
         "startup": { "$ref": "#/definitions/hook", "description": "Once, when dinky starts, after it has read the windows and displays." },
+        "workspace-changing": {
+          "$ref": "#/definitions/hook",
+          "description": "As soon as dinky starts switching a display, and again when a burst of switches changes the target. exec-and-forget gets DINKY_WORKSPACE (the target), DINKY_PREV_WORKSPACE and DINKY_DISPLAY."
+        },
         "workspace-changed": {
           "$ref": "#/definitions/hook",
           "description": "Whenever a display's current workspace changes. exec-and-forget gets DINKY_WORKSPACE, DINKY_PREV_WORKSPACE and DINKY_DISPLAY."

@@ -168,7 +168,9 @@ public struct FocusFollowsMouse: Equatable {
 public struct Hooks: Equatable {
     /// Once, after dinky has first read the windows and displays.
     public var startup: [String] = []
-    /// When a display's current workspace changes, by dinky or natively.
+    /// When dinky starts switching a display to a workspace, or a switch in flight gets a new target.
+    public var workspaceChanging: [String] = []
+    /// When a display's current workspace changes, by dinky or natively, and when a dinky switch gives up.
     public var workspaceChanged: [String] = []
     /// When the focused window changes.
     public var focusChanged: [String] = []
@@ -179,6 +181,7 @@ public struct Hooks: Equatable {
 
     init(_ t: Table) throws {
         startup = try t.commands("startup", allowEmpty: true) ?? startup
+        workspaceChanging = try t.commands("workspace-changing", allowEmpty: true) ?? workspaceChanging
         workspaceChanged = try t.commands("workspace-changed", allowEmpty: true) ?? workspaceChanged
         focusChanged = try t.commands("focus-changed", allowEmpty: true) ?? focusChanged
         modeChanged = try t.commands("mode-changed", allowEmpty: true) ?? modeChanged

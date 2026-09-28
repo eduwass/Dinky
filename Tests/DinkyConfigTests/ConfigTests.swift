@@ -187,11 +187,13 @@ final class ConfigTests: XCTestCase {
         let hooks = try Config.parse("""
         [hooks]
         startup = 'exec-and-forget brew services restart sketchybar'
+        workspace-changing = 'exec-and-forget sketchybar --trigger workspace_changing'
         workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']
         focus-changed = []
         mode-changed = ['exec-and-forget sketchybar --trigger mode_changed', 'retile']
         """).hooks
         XCTAssertEqual(hooks.startup, ["exec-and-forget brew services restart sketchybar"])
+        XCTAssertEqual(hooks.workspaceChanging, ["exec-and-forget sketchybar --trigger workspace_changing"])
         XCTAssertEqual(hooks.workspaceChanged, ["exec-and-forget sketchybar --trigger workspace_change"])
         XCTAssertEqual(hooks.focusChanged, [])
         XCTAssertEqual(hooks.modeChanged, ["exec-and-forget sketchybar --trigger mode_changed", "retile"])

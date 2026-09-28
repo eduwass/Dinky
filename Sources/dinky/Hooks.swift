@@ -1,8 +1,9 @@
 import Foundation
 
-// The config's `[hooks]`: `workspace-changed` when any display's current workspace changes (dinky's switches
-// and native ones alike), `focus-changed` when the focused window changes, debounced, `mode-changed` when
-// the binding mode changes, and `startup` once. Started once the coordinator has read the windows and
+// The config's `[hooks]`: `workspace-changing` when dinky starts or retargets a switch, `workspace-changed`
+// when any display's current workspace changes (dinky's switches and native ones alike) or a dinky switch
+// gives up, `focus-changed` when the focused window changes, debounced, `mode-changed` when the binding mode
+// changes, and `startup` once. Started once the coordinator has read the windows and
 // displays, so startup fires nothing but `startup`. Main thread only.
 final class Hooks {
     /// The workspace number each display was last seen on, by UUID; "" off the numbered workspaces.
@@ -13,6 +14,8 @@ final class Hooks {
         let state = AppState.shared
         for display in state.displays.displays { workspaces[display.uuid] = number(display) }
         state.displays.observe { [weak self] in self?.displaysChanged($0) }
+        SpaceSwitcher.shared.onTarget = { [weak self] uuid, target in self?.switchTargeted(uuid, target) }
+        SpaceSwitcher.shared.onGiveUp = { [weak self] uuid in self?.switchGaveUp(uuid) }
         state.coordinator?.onFocusChange = { [weak self] in self?.focusChanged() }
         state.hotkeys.onModeChange = { _ in run(AppState.shared.config.hooks.modeChanged) }
         run(state.config.hooks.startup)
@@ -31,8 +34,33 @@ final class Hooks {
             // dinky's swipe passes through the Spaces in between; report only where it lands.
             if let target = SpaceSwitcher.shared.target(on: display.uuid), target != display.currentSpaceID { continue }
             workspaces[display.uuid] = new
-            run(commands, env: ["DINKY_WORKSPACE": new, "DINKY_PREV_WORKSPACE": old, "DINKY_DISPLAY": "\(i + 1)"])
+            runWorkspaceHooks(commands, workspace: new, previous: old, display: i)
         }
+    }
+
+    /// Announces where a dinky switch is going before it lands, so a bar can show it at once.
+    private func switchTargeted(_ uuid: String, _ target: UInt64) {
+        let displays = AppState.shared.displays.displays
+        guard let i = displays.firstIndex(where: { $0.uuid == uuid }) else { return }
+        let workspace = displays[i].workspaces.firstIndex(of: target).map { "\($0 + 1)" } ?? ""
+        runWorkspaceHooks(AppState.shared.config.hooks.workspaceChanging, workspace: workspace, previous: number(displays[i]), display: i)
+    }
+
+    /// A switch that did not land still ends with `workspace-changed`, naming where the display is, so what
+    /// `workspace-changing` announced does not stand.
+    private func switchGaveUp(_ uuid: String) {
+        let model = AppState.shared.displays
+        model.reconcile()
+        guard let i = model.displays.firstIndex(where: { $0.uuid == uuid }) else { return }
+        let new = number(model.displays[i])
+        let old = workspaces[uuid] ?? new
+        workspaces[uuid] = new
+        runWorkspaceHooks(AppState.shared.config.hooks.workspaceChanged, workspace: new, previous: old, display: i)
+    }
+
+    /// Runs workspace hooks with the numbers `exec-and-forget` passes on; `display` is 0-based.
+    private func runWorkspaceHooks(_ commands: [String], workspace: String, previous: String, display: Int) {
+        run(commands, env: ["DINKY_WORKSPACE": workspace, "DINKY_PREV_WORKSPACE": previous, "DINKY_DISPLAY": "\(display + 1)"])
     }
 
     private func focusChanged() {

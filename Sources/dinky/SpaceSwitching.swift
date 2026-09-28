@@ -49,20 +49,27 @@ final class SpaceSwitcher {
     private var posting = false
     private let timeout: UInt64 = 1_000_000_000
 
+    /// Called with the display UUID and the target when a switch starts, and when a new request retargets one.
+    var onTarget: ((String, UInt64) -> Void)?
+    /// Called with the display UUID when a switch ends without landing on its target.
+    var onGiveUp: ((String) -> Void)?
+
     func target(on uuid: String) -> UInt64? { flights[uuid]?.target }
 
     /// Whether any display has a switch in flight.
     var switching: Bool { !flights.isEmpty }
 
     func request(_ target: UInt64, on uuid: String, landed: (() -> Void)? = nil) -> Bool {
-        if flights[uuid] != nil {
+        if let flight = flights[uuid] {
             flights[uuid]!.target = target
             flights[uuid]!.retried = false
             flights[uuid]!.landed = landed
+            if flight.target != target { onTarget?(uuid, target) }
             return true
         }
         guard dinky_current_space_id(uuid as CFString) != target else { return false }
         flights[uuid] = Flight(target: target, landed: landed)
+        onTarget?(uuid, target)
         if !posting { post(on: uuid) }
         startPolling()
         return true
@@ -119,7 +126,7 @@ final class SpaceSwitcher {
         let flight = flights.removeValue(forKey: uuid)
         if error { fputs("\(stamp()) \(message)\n", stderr) } else { print("\(stamp()) \(message)") }
         fflush(stdout)
-        if landed { flight?.landed?() }
+        if landed { flight?.landed?() } else if flight != nil { onGiveUp?(uuid) }
     }
 
     private func startPolling() {
