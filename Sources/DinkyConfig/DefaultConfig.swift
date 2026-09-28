@@ -30,7 +30,6 @@ extension Config {
     width = 4
     active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
     inactive-color = '#494d64'
-    style = 'round'                 # round | square
     order = 'below'                 # below | above (a click-through ring over the window)
     exclude-apps = []               # bundle IDs whose windows get no border
 

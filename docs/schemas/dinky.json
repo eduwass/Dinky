@@ -69,7 +69,6 @@
         "width": { "type": "number", "minimum": 0, "default": 4, "description": "Border width in points." },
         "active-color": { "$ref": "#/definitions/color", "default": "#e1e3e4", "description": "Colour of the focused window's border." },
         "inactive-color": { "$ref": "#/definitions/color", "default": "#494d64", "description": "Colour of other windows' borders." },
-        "style": { "type": "string", "enum": ["round", "square"], "default": "round", "description": "Corner style." },
         "order": {
           "type": "string",
           "enum": ["below", "above"],

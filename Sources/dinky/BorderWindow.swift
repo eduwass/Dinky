@@ -10,7 +10,6 @@ final class BorderWindow {
         var cornerRadius: Int
         var color: DinkyConfig.Color
         var width: Double
-        var style: BorderStyle
     }
 
     private let target: UInt32
@@ -31,7 +30,7 @@ final class BorderWindow {
 
     func update(_ window: Window, color: DinkyConfig.Color, config: Borders) {
         let look = Look(size: window.frame.size, cornerRadius: window.cornerRadius,
-                        color: color, width: config.width, style: config.style)
+                        color: color, width: config.width)
         let scale = backingScale(of: window.frame)
         if scale != self.scale { recreate(scale: scale) }
         guard id != 0 else { return }
@@ -45,8 +44,7 @@ final class BorderWindow {
             dinky_border_move(id, target, window.frame, config.width, order)
         } else {
             let rgba = DinkyBorderColor(red: color.red, green: color.green, blue: color.blue, alpha: color.alpha)
-            let style: DinkyBorderStyle = config.style == .round ? .round : .square
-            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, style, order)
+            dinky_border_update(id, target, window.frame, Int32(window.cornerRadius), rgba, config.width, order)
             drawn = look
         }
         isShown = true

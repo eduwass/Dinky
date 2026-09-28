@@ -114,10 +114,6 @@ public struct Accordion: Equatable {
     }
 }
 
-public enum BorderStyle: String, CaseIterable {
-    case round, square
-}
-
 /// Below the target, or above it as a ring that never covers content or takes clicks.
 public enum BorderOrder: String, CaseIterable {
     case below, above
@@ -128,7 +124,6 @@ public struct Borders: Equatable {
     public var width = 4.0
     public var activeColor = try! Color(hex: "#e1e3e4")
     public var inactiveColor = try! Color(hex: "#494d64")
-    public var style = BorderStyle.round
     public var order = BorderOrder.below
     /// Bundle IDs whose windows get no border.
     public var excludeApps: [String] = []
@@ -140,7 +135,6 @@ public struct Borders: Equatable {
         width = try t.double("width") ?? width
         activeColor = try t.color("active-color") ?? activeColor
         inactiveColor = try t.color("inactive-color") ?? inactiveColor
-        style = try t.choice("style") ?? style
         order = try t.choice("order") ?? order
         excludeApps = try t.strings("exclude-apps") ?? excludeApps
         try t.done()

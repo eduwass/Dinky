@@ -90,10 +90,9 @@ static void add_rounded_rect(CGMutablePathRef path, CGRect rect, double radius)
 
 // A ring filled between the outer edge and the target's own rounded outline, interior left
 // transparent. Everything is in points: the context comes scaled to the border's resolution,
-// so the same width and radii are right at 1x and 2x. Round rings grow the target's radius by
-// the width; square rings fill in behind (or, ordered above, around) the target's corners.
-static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColor color,
-                 double width, DinkyBorderStyle style)
+// so the same width and radii are right at 1x and 2x. The outer edge grows the target's
+// radius by the width.
+static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColor color, double width)
 {
     int cid = dinky_connection();
     CGContextRef context = SLWindowContextCreate(cid, border, NULL);
@@ -101,7 +100,7 @@ static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColo
 
     CGRect bounds = { CGPointZero, size };
     CGMutablePathRef ring = CGPathCreateMutable();
-    add_rounded_rect(ring, bounds, style == DinkyBorderStyleRound ? cornerRadius + width : 0);
+    add_rounded_rect(ring, bounds, cornerRadius + width);
     add_rounded_rect(ring, CGRectInset(bounds, width, width), cornerRadius);
 
     CGContextClearRect(context, bounds);
@@ -116,7 +115,7 @@ static void draw(uint32_t border, CGSize size, int cornerRadius, DinkyBorderColo
 }
 
 void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cornerRadius,
-                         DinkyBorderColor color, double width, DinkyBorderStyle style, DinkyBorderOrder order)
+                         DinkyBorderColor color, double width, DinkyBorderOrder order)
 {
     int cid = dinky_connection();
     CGRect outer = outer_frame(frame, width);
@@ -128,7 +127,7 @@ void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cor
     // Hold screen updates so the reshaped, redrawn and moved border appears at once.
     SLSDisableUpdate(cid);
     SLSSetWindowShape(cid, border, 0, 0, region);
-    draw(border, outer.size, cornerRadius, color, width, style);
+    draw(border, outer.size, cornerRadius, color, width);
     place(border, target, outer.origin, order);
     SLSReenableUpdate(cid);
     CFRelease(region);

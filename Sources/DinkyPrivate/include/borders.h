@@ -9,11 +9,6 @@ NS_ASSUME_NONNULL_BEGIN
 // interior is transparent and the whole window ignores the mouse. The JankyBorders approach,
 // reimplemented. Every function takes the border's own window ID. Main thread only.
 
-typedef NS_ENUM(int, DinkyBorderStyle) {
-    DinkyBorderStyleRound = 0,   // follows the target's corner radius
-    DinkyBorderStyleSquare = 1,  // square corners, filled in around the target's rounded ones
-};
-
 // As CGSOrderingMode. Below, the target's own shadow falls on the ring and darkens it a
 // little, as in JankyBorders; above, the ring is drawn over the shadow and keeps its colour.
 typedef NS_ENUM(int, DinkyBorderOrder) {
@@ -33,8 +28,7 @@ uint32_t dinky_border_create(double scale);
 // frame in global top-left coordinates) on the outside, then moves it, copies the target's
 // level and sub-level and orders it directly next to `target`, all in one transaction.
 void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cornerRadius,
-                         DinkyBorderColor color, double width, DinkyBorderStyle style,
-                         DinkyBorderOrder order);
+                         DinkyBorderColor color, double width, DinkyBorderOrder order);
 
 // Moves and re-orders without redrawing: the cheap path for drags and re-tiles that keep the size.
 void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width,

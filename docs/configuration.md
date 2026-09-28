@@ -50,7 +50,6 @@ enabled = true
 width = 4
 active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
 inactive-color = '#494d64'
-style = 'round'                 # round | square
 order = 'below'                 # below | above (a click-through ring over the window)
 exclude-apps = []               # bundle IDs whose windows get no border
 
@@ -176,7 +175,6 @@ workspaces = 1
 | `width` | `4` | Border width in points. May be fractional. |
 | `active-color` | `'#e1e3e4'` | Colour of the focused window's border: `'#rrggbb'` or `'#rrggbbaa'`. |
 | `inactive-color` | `'#494d64'` | Colour of other windows' borders, same format. |
-| `style` | `'round'` | Corner style: `'round'` or `'square'`. |
 | `order` | `'below'` | `'below'` draws the border directly below the window. `'above'` draws it above, as a ring that never covers the window's content or takes clicks. |
 | `exclude-apps` | `[]` | Bundle IDs whose windows get no border. |
 
@@ -287,7 +285,6 @@ enabled = true
 width = 4
 active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
 inactive-color = '#494d64'
-style = 'round'                 # round | square
 order = 'below'                 # below | above (a click-through ring over the window)
 exclude-apps = []               # bundle IDs whose windows get no border
 

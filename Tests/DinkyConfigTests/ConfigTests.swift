@@ -16,7 +16,6 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(config.borders.enabled)
         XCTAssertEqual(config.borders.width, 4)
         XCTAssertEqual(config.borders.activeColor, Color(red: 0xE1 / 255, green: 0xE3 / 255, blue: 0xE4 / 255))
-        XCTAssertEqual(config.borders.style, .round)
         XCTAssertEqual(config.hooks, Hooks())
         XCTAssertEqual(config.rules.count, 1)
         XCTAssertEqual(config.rules[0].appId, "com.apple.systempreferences")
@@ -108,12 +107,10 @@ final class ConfigTests: XCTestCase {
         let borders = try Config.parse("""
         [borders]
         order = 'above'
-        style = 'square'
         width = 2.5
         exclude-apps = ['com.apple.finder', 'com.apple.Terminal']
         """).borders
         XCTAssertEqual(borders.order, .above)
-        XCTAssertEqual(borders.style, .square)
         XCTAssertEqual(borders.width, 2.5)
         XCTAssertEqual(borders.excludeApps, ["com.apple.finder", "com.apple.Terminal"])
         XCTAssertFalse(borders.decorates(bundleID: "com.apple.finder"))
