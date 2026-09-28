@@ -18,14 +18,15 @@ public struct Workspace: Equatable, Sendable {
     /// Sizes windows refused to go below. Tiles grow to them when their siblings can give the space.
     public var minimumSizes: [WindowID: CGSize] = [:]
 
-    /// An empty workspace whose root uses `mode`.
+    /// An empty workspace whose root uses `mode`. An accordion root with `autoOrientAccordions` starts `auto`,
+    /// as a container switched to accordion would, so it runs top to bottom on a tall display.
     public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, autoOrientAccordions: Bool = false,
                 mode: LayoutMode = .tiles) {
         self.bounds = bounds
         self.gaps = gaps
         self.accordionPadding = accordionPadding
         self.autoOrientAccordions = autoOrientAccordions
-        self.root = Container(.horizontal, mode)
+        self.root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal, mode)
     }
 
     /// All windows in tree order.

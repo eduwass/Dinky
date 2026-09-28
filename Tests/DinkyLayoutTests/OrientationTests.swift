@@ -28,6 +28,20 @@ final class OrientationTests: XCTestCase {
         XCTAssertEqual(ws.containerAxis(of: 2), .vertical)
     }
 
+    func testANewAccordionWorkspaceOnATallDisplayRunsTopToBottom() {
+        let tall = rect(0, 0, 600, 1000)
+        var ws = Workspace(bounds: tall, autoOrientAccordions: true, mode: .accordion)
+        ws.insert(1)
+        ws.insert(2)
+        XCTAssertEqual(shape(ws.root), "a*[1 2]")
+        XCTAssertEqual(ws.containerAxis(of: 2), .vertical)
+        XCTAssertEqual(ws.layout().frames[2], rect(0, 30, 600, 970))
+        var kept = Workspace(bounds: tall, autoOrientAccordions: false, mode: .accordion)
+        kept.insert(1)
+        XCTAssertEqual(shape(kept.root), "ah[1]", "without auto orientation the root stays horizontal")
+        XCTAssertEqual(shape(Workspace(bounds: tall, autoOrientAccordions: true).root), "h[]", "tiles are unchanged")
+    }
+
     func testAccordionInATallColumnPeeksTopAndBottom() {
         var ws = column()
         ws.setMode(.accordion)
