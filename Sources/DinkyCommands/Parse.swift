@@ -56,6 +56,7 @@ extension Command {
         case "focus":
             return try focus(args)
         case "focus-monitor":
+            if let n = one.flatMap({ Int($0) }) { return n >= 1 ? .focusMonitorNumber(n) : nil }
             return one.flatMap(MonitorTarget.init(rawValue:)).map { .focusMonitor($0) }
         case "move":
             return one.flatMap(Direction.init).map { .move($0) }

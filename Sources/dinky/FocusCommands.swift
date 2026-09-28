@@ -50,6 +50,16 @@ extension Dispatcher {
         return focus(line[index], window: AppState.shared.coordinator?.workspace(on: line[index])?.focused)
     }
 
+    /// Focuses the display numbered `n` (1-based, `list-monitors` order), as `focusMonitor` does. Focusing the
+    /// display that already has focus is fine, so a bar can run `focus-monitor N` before `workspace M`.
+    static func focusMonitor(number n: Int) -> Reply {
+        let model = AppState.shared.displays
+        model.reconcile()
+        guard model.displays.indices.contains(n - 1) else { return .error("no display \(n), there are \(model.displays.count)") }
+        let display = model.displays[n - 1]
+        return focus(display, window: AppState.shared.coordinator?.workspace(on: display)?.focused)
+    }
+
     /// Enters a display from `direction`: the window at the edge facing where focus came from.
     private static func enter(_ display: Display, from direction: Direction) -> Reply {
         focus(display, window: AppState.shared.coordinator?.workspace(on: display)?.edgeWindow(direction.opposite))

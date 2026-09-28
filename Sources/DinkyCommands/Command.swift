@@ -11,6 +11,8 @@ public enum Command: Equatable, Sendable {
     /// Focus the neighbour in a direction. `boundaries` says where the search stops, `action` what happens there.
     case focus(Direction, boundaries: FocusBoundaries = .workspace, action: BoundariesAction = .stop)
     case focusMonitor(MonitorTarget)
+    /// `focus-monitor N`: the display numbered N by `list-monitors`, from 1.
+    case focusMonitorNumber(Int)
     case move(Direction)
     case joinWith(Direction)
     case resize(ResizeDimension, by: Int)

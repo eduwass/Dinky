@@ -42,6 +42,8 @@ final class FocusParseTests: XCTestCase {
         XCTAssertNil(MonitorTarget.next.direction)
         XCTAssertThrowsError(try parse("focus-monitor"))
         XCTAssertThrowsError(try parse("focus-monitor main"))
+        XCTAssertEqual(try parse("focus-monitor 2"), .focusMonitorNumber(2))
+        XCTAssertThrowsError(try parse("focus-monitor 0"))
     }
 
     func testBalanceSizes() throws {

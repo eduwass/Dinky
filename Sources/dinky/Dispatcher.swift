@@ -45,6 +45,8 @@ enum Dispatcher {
             return focus(direction, boundaries: boundaries, action: action)
         case .focusMonitor(let target):
             return focusMonitor(target)
+        case .focusMonitorNumber(let n):
+            return focusMonitor(number: n)
         case .layout(let names):
             return layout(names, window: window)
         case .move(let direction):
