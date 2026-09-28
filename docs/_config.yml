@@ -3,7 +3,7 @@ description: A tiling window manager for macOS that leaves System Integrity Prot
 url: https://mikker.github.io
 baseurl: "/Dinky"
 repository: mikker/Dinky
-version: "0.2.2"
+version: "0.3"
 markdown: kramdown
 permalink: pretty
 relative_links:

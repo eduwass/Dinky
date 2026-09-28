@@ -25,6 +25,7 @@ update_tap() (
   echo "==> tap: dinky $version"
 )
 
+grep -qx "version: \"$version\"" docs/_config.yml || { echo "Set version: \"$version\" in docs/_config.yml first" >&2; exit 1; }
 [[ "$(git branch --show-current)" == main ]] || { echo 'Release from main' >&2; exit 1; }
 [[ -z "$(git status --porcelain)" ]] || { echo 'Commit your changes first' >&2; exit 1; }
 git fetch -q origin main
