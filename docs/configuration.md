@@ -182,7 +182,7 @@ workspaces = 1
 
 | Key | Default | Meaning |
 |---|---|---|
-| `enabled` | `false` | Focus the window under the pointer once the pointer rests on it. Only windows dinky manages take focus; panels, menus, the menu bar, the Dock and the desktop never do. Nothing happens while a mouse button is down, while a menu is open, or for 300 ms after a Space change or a config reload, and windows that move under a still pointer never take focus. |
+| `enabled` | `false` | Focus the window under the pointer once the pointer rests on it. Only windows dinky manages take focus; panels, menus, the menu bar, the Dock and the desktop never do. Nothing happens while a mouse button is down or a menu is open, and windows that move under a still pointer never take focus. After Cmd-Tab, a Dock click, a Space change or a config reload, hover waits until the pointer moves onto another window, so a nudge of the mouse does not undo the switch. |
 | `delay-ms` | `100` | How long the pointer must rest on a window before it takes focus. `0` focuses as soon as the pointer stops. |
 | `accordion-edges` | `true` | Whether resting on the peeking edge of an accordion child focuses it. With `false`, only an accordion's front window takes focus from hover. |
 

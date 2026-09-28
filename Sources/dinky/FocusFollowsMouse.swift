@@ -7,9 +7,11 @@ import DinkyPrivate
 // moves; at most every 50 ms the pointer is looked at, and only real movement counts, so windows moving
 // under a still pointer (a retile, a Space switch) never take focus. The window must stay under the pointer
 // for `delay-ms` before it is focused. Only windows dinky tracks count; panels, menus, the Dock and the
-// desktop never do. Hover also stands down for a moment after a Space change and after an app activation it
-// did not cause (Cmd-Tab, a Dock click): the pointer then still rests on the window being left, and a stray
-// move would focus it back, superseding the activation before the follower has switched Space. Main thread only.
+// desktop never do. After a Space change, a config load and an app activation hover did not cause (Cmd-Tab,
+// a Dock click), hover parks until the pointer leaves the window it rests on: a hand on the mouse twitches, and
+// that would focus the window being left and undo the activation. Leaving is judged against the windows as
+// they are now, the one under the pointer against the one at the spot where it parked, so windows sliding or
+// retiling under a still pointer never count. Main thread only.
 final class HoverFocus {
     private var config = FocusFollowsMouse()
     private var tap: CFMachPort?
@@ -20,16 +22,18 @@ final class HoverFocus {
     /// Where the last move event put the pointer. Read from the event: asking the system right away in
     /// the callback can still answer with the position before the move.
     private var latestPoint = CGPoint(x: -1, y: -1)
-    /// Hover is ignored until then: just after a Space change, an app activation or a config reload.
-    private var quietUntil: UInt64 = 0
-    /// The app hover last activated itself, and when, so that activation starts no quiet period.
+    /// Where the pointer rested at the last Space change, config load or activation hover did not cause. Hover
+    /// is off until the pointer is over another window than the one at this spot.
+    private var parkedAt: CGPoint?
+    /// The app hover last activated itself, and when, so that activation does not park hover.
     private var ownActivation: (pid: pid_t, at: UInt64)?
     private var lastSpaces: [UInt64] = []
     private var dwell: DispatchWorkItem?
     private var observing = false
 
     private let throttle: UInt64 = 50_000_000
-    private let quiet: UInt64 = 300_000_000
+    /// How long after hover's own activation the activation notification may arrive.
+    private let ownActivationWindow: UInt64 = 300_000_000
     private let minimumMove: CGFloat = 2
 
     /// Starts or stops the tap for this config. Called at startup and on every config load.
@@ -45,7 +49,7 @@ final class HoverFocus {
             }
         }
         lastSpaces = currentSpaces()
-        cancel(quietFor: quiet)
+        park()
         if config.enabled { start() } else { stop() }
     }
 
@@ -93,6 +97,10 @@ final class HoverFocus {
         guard hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= minimumMove else { return }
         lastPoint = point
         noteSpaces()
+        if let parked = parkedAt {
+            guard windowUnder(point) != windowUnder(parked) else { return cancel() }
+            parkedAt = nil
+        }
         guard let id = hoverable(at: point), id != AppState.shared.coordinator?.focusedWindow else { return cancel() }
         let spaces = currentSpaces()
         let work = DispatchWorkItem { [weak self] in self?.fire(id, spaces) }
@@ -110,19 +118,19 @@ final class HoverFocus {
         coordinator.focus(id)
     }
 
-    /// An activation that is not hover's own cancels any hover and starts the quiet period.
+    /// An activation that is not hover's own cancels any hover and parks it.
     private func activated(_ pid: pid_t) {
-        if let own = ownActivation, own.pid == pid, uptime() - own.at < quiet {
+        if let own = ownActivation, own.pid == pid, uptime() - own.at < ownActivationWindow {
             ownActivation = nil
             return
         }
-        cancel(quietFor: quiet)
+        park()
     }
 
     /// The tracked window under the pointer, if hover may focus it now.
     private func hoverable(at point: CGPoint) -> WindowID? {
         let state = AppState.shared
-        guard state.enabled, uptime() >= quietUntil, !MissionControl.shared.active,
+        guard state.enabled, !MissionControl.shared.active,
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
               let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
               !SpaceSwitcher.shared.switching else { return nil }
@@ -174,18 +182,22 @@ final class HoverFocus {
         AppState.shared.displays.displays.map { dinky_current_space_id($0.uuid as CFString) }
     }
 
-    /// A Space change since the last look cancels any hover and starts the quiet period.
+    /// A Space change since the last look cancels any hover and parks it.
     private func noteSpaces() {
         let spaces = currentSpaces()
         guard spaces != lastSpaces else { return }
         lastSpaces = spaces
-        cancel(quietFor: quiet)
+        park()
     }
 
-    private func cancel(quietFor duration: UInt64 = 0) {
+    private func park() {
+        cancel()
+        parkedAt = CGEvent(source: nil)?.location
+    }
+
+    private func cancel() {
         dwell?.cancel()
         dwell = nil
-        if duration > 0 { quietUntil = uptime() + duration }
     }
 }
 
