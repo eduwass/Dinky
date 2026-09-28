@@ -7,20 +7,125 @@ permalink: /configuration/
 
 # Configuration
 
-> **TL;DR:** Edit `~/.config/dinky/dinky.toml`; dinky reloads it on save.
-> A key you leave out keeps the value in the shipped file below.
+`~/.config/dinky/dinky.toml`, written on first run and reloaded on save.
 
-The config lives at `~/.config/dinky/dinky.toml`. It is TOML.
+- Every key is optional; a missing key keeps the default below. Without
+  `[mode.main]` there are no bindings, without `[[rules]]` no rules.
+- Unknown keys are errors. A broken config does not load: the previous one
+  stays and the error shows in the menu.
+- `dinky doctor [--config <path>]` also checks commands, modes and key names.
+- The [JSON Schema](schemas/dinky.json) gives completion in editors that read
+  Taplo's `#:schema` line, such as Zed or VS Code with Even Better TOML.
 
-- If the file is missing, dinky writes the default config below.
-- dinky reloads the file when it changes. `dinky reload-config` does it by hand.
-- A config with an error does not load: dinky keeps the previous one and shows the error at the top of its menu bar menu. Unknown keys are errors, so typos do not pass silently.
-- `dinky doctor` checks a config beyond parsing: that every binding, rule and hook command is in the vocabulary, that `mode X` names a mode, that key names are known, and that a main mode exists. `dinky doctor --config <path>` checks another file.
-- Every key is optional. A key you leave out keeps the value in the shipped file, which is what the tables below list as the default. The exceptions are the rules and bindings: a config without `[mode.main]` has no key bindings, and one without `[[rules]]` has no rules.
+## Top level
 
-## Editor completion
+| Key | Default | |
+|---|---|---|
+| `start-at-login` | `true` | Register as a login item. |
+| `workspaces` | `5` | Spaces per display. Missing ones are created, none removed. |
+| `default-layout` | `'tiles'` | `'tiles'` or `'accordion'` for new containers. |
+| `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
 
-dinky publishes a [JSON Schema](schemas/dinky.json) for the config. The shipped file starts with this Taplo schema directive, which gives validation, documentation and completion in TOML editors that support it, such as VS Code with Even Better TOML or Zed:
+## `[accordion]`
+
+| Key | Default | |
+|---|---|---|
+| `padding` | `30` | Points the neighbours peek out by. |
+| `orientation` | `'auto'` | On switching to accordion, `'auto'` runs along the container's longer side; `'keep'` keeps its orientation. An orientation set with `layout` is always kept. |
+
+## `[gaps]`
+
+| Key | Default | |
+|---|---|---|
+| `inner` | `8` | Between windows. Or `{ horizontal = 8, vertical = 6 }`. |
+| `outer` | `8` | To the screen edge. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
+
+## `[display.<pattern>]`
+
+Per-display `gaps` and `workspaces`. The pattern is `main`, `secondary` (when
+there are two), or part of the name from `dinky list-displays`. Name patterns
+beat `main`/`secondary`; longer names beat shorter.
+
+```toml
+[display.main]          # the display with the bar
+gaps.outer.top = 44
+
+[display."LG UltraFine"]
+workspaces = 1
+```
+
+## `[borders]`
+
+| Key | Default | |
+|---|---|---|
+| `enabled` | `true` | |
+| `width` | `4` | Points; may be fractional. |
+| `active-color` | `'#e1e3e4'` | `'#rrggbb'` or `'#rrggbbaa'`. |
+| `inactive-color` | `'#494d64'` | |
+| `order` | `'below'` | `'above'` draws a click-through ring over the window. |
+| `exclude-apps` | `[]` | Bundle IDs that get no border. |
+
+## `[focus-follows-mouse]`
+
+| Key | Default | |
+|---|---|---|
+| `enabled` | `false` | Focus the managed window the pointer rests on. Ignored while a button is down or a menu is open, and until the pointer moves to another window after Cmd-Tab or a Space change. |
+| `delay-ms` | `100` | How long the pointer must rest. |
+| `accordion-edges` | `true` | Resting on a peeking accordion edge focuses that window. |
+
+## `[hooks]`
+
+Commands run on events. See [Scripting](commands.md#scripting) for the
+environment `exec-and-forget` gets.
+
+| Key | Runs |
+|---|---|
+| `startup` | Once, after dinky has read the windows and displays. |
+| `workspace-changing` | When a dinky switch starts, before it lands. |
+| `workspace-changed` | When a display's workspace changes, or a switch gives up. |
+| `focus-changed` | When focus changes, debounced 50 ms. |
+| `mode-changed` | When the binding mode changes. |
+
+## `[[rules]]`
+
+Every rule whose conditions all match a new window runs, in order. Dialogs,
+sheets, panels and fixed-size windows float without one.
+
+| Key | |
+|---|---|
+| `app-id` | Bundle ID. |
+| `app-name` | Case-insensitive regex. |
+| `title` | Case-insensitive regex. |
+| `kind` | `'normal'`, `'dialog'`, `'sheet'` or `'panel'`. |
+| `run` | Required. A command or a list. |
+
+```toml
+[[rules]]
+app-id = 'com.apple.Music'
+run = ['layout floating', 'move-window-to-workspace 5']
+```
+
+## `[mode.<name>]`
+
+Key bindings. dinky starts in `main`; `mode <name>` switches. Each key maps to
+a command or a list of commands. Bound keys are swallowed.
+
+### Keys
+
+Modifiers (`alt`, `ctrl`, `cmd`, `shift`) and one key, joined by `-`:
+`alt-shift-h`, `ctrl-left`, `f5`. Names follow a US layout.
+
+- `a`–`z`, `0`–`9`, `f1`–`f20`
+- `minus` `equal` `left-bracket` `right-bracket` `backslash` `semicolon`
+  `quote` `comma` `period` `slash` `backtick` `section`
+- `space` `enter` `esc` `backspace` `tab` `forward-delete` `left` `down` `up`
+  `right` `page-up` `page-down` `home` `end`
+- `keypad-0`–`keypad-9`, `keypad-clear` `keypad-decimal` `keypad-divide`
+  `keypad-enter` `keypad-equal` `keypad-minus` `keypad-multiply` `keypad-plus`
+
+The default `alt-` bindings take over Option-letter characters.
+
+## Default config
 
 ```toml
 #:schema https://dinky.rodeo/schemas/dinky.json
@@ -116,244 +221,4 @@ alt-shift-h = ['join-with left', 'mode main']
 alt-shift-j = ['join-with down', 'mode main']
 alt-shift-k = ['join-with up', 'mode main']
 alt-shift-l = ['join-with right', 'mode main']
-
 ```
-
-The schema knows every key, the key syntax and the command names. `dinky doctor` checks the rest: that each command's arguments parse and that `mode X` names a mode.
-
-## Top level
-
-| Key | Default | Meaning |
-|---|---|---|
-| `start-at-login` | `true` | Register dinky as a login item. |
-| `workspaces` | `5` | Spaces per display, at least 1. dinky creates missing Spaces and never removes any. A `[display.<pattern>]` table can set its own. |
-| `default-layout` | `'tiles'` | Layout for new containers: `'tiles'` or `'accordion'`. |
-| `follow-app-activation` | `true` | When Cmd-Tab or a Dock click activates an app on another Space, switch there with the fast switch. Works when the macOS "switch to a Space with open windows" setting is off. |
-
-## `[accordion]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `padding` | `30` | Points by which neighbouring windows peek out in an accordion. |
-| `orientation` | `'auto'` | What a container's orientation becomes when it switches to accordion: `'auto'`, so it runs along its longer side (windows peek out at the top and bottom of a tall column) and flips when resized past square, or `'keep'`, the orientation it had. An orientation chosen with `layout horizontal`, `vertical` or `auto` is always kept. |
-
-## `[gaps]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `inner` | `8` | Points between tiled windows. One value for both axes, or `inner = { horizontal = 8, vertical = 6 }` (between side-by-side windows, and between stacked ones). |
-| `outer` | `8` | Points between tiled windows and the screen edge. One value, or per side: `outer = { top = 44, bottom = 8, left = 8, right = 8 }` or `outer.top = 44`. |
-
-A side or axis left out keeps its default, like every other key.
-
-## `[display.<pattern>]`
-
-Settings for one display. The pattern is `main` (the main display in System Settings), `secondary` (the other one, when there are exactly two), or a case-insensitive part of the display's name as `dinky list-displays` prints it, such as `built-in` or `dell`. Quote a pattern with spaces: `[display."LG UltraFine"]`.
-
-A display table takes `gaps`, written as above, and `workspaces`, the number of Spaces on that display in place of the general count. A display table changes only what it sets; when several match one display, name patterns win over `main` and `secondary`, and a longer name pattern wins over a shorter one.
-
-```toml
-[gaps]
-outer = 8
-
-[display.main]          # the display with the bar
-gaps.outer.top = 44
-
-[display.built-in]
-gaps.outer.top = 10
-gaps.inner = 6
-
-[display.secondary]     # one workspace on the second display
-workspaces = 1
-```
-
-## `[borders]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `enabled` | `true` | Draw a border around windows. |
-| `width` | `4` | Border width in points. May be fractional. |
-| `active-color` | `'#e1e3e4'` | Colour of the focused window's border: `'#rrggbb'` or `'#rrggbbaa'`. |
-| `inactive-color` | `'#494d64'` | Colour of other windows' borders, same format. |
-| `order` | `'below'` | `'below'` draws the border directly below the window. `'above'` draws it above, as a ring that never covers the window's content or takes clicks. |
-| `exclude-apps` | `[]` | Bundle IDs whose windows get no border. |
-
-## `[focus-follows-mouse]`
-
-| Key | Default | Meaning |
-|---|---|---|
-| `enabled` | `false` | Focus the window under the pointer once the pointer rests on it. Only windows dinky manages take focus; panels, menus, the menu bar, the Dock and the desktop never do. Nothing happens while a mouse button is down or a menu is open, and windows that move under a still pointer never take focus. After Cmd-Tab, a Dock click, a Space change or a config reload, hover waits until the pointer moves onto another window, so a nudge of the mouse does not undo the switch. |
-| `delay-ms` | `100` | How long the pointer must rest on a window before it takes focus. `0` focuses as soon as the pointer stops. |
-| `accordion-edges` | `true` | Whether resting on the peeking edge of an accordion child focuses it. With `false`, only an accordion's front window takes focus from hover. |
-
-## `[hooks]`
-
-dinky commands run on events. Each is a command or a list of commands, empty by default. Shell goes through `exec-and-forget`; see [Scripting and SketchyBar](commands.md#scripting-and-sketchybar) for the environment it gets.
-
-| Key | Runs |
-|---|---|
-| `startup` | Once, when dinky starts, after it has read the windows and displays. |
-| `workspace-changing` | As soon as dinky starts switching a display, before the swipe lands, and again when a burst of switches changes the target. For a bar that should react at once. |
-| `workspace-changed` | Whenever a display's current workspace changes, by dinky or natively. Also when a dinky switch gives up, with the workspace the display stayed on, so whatever `workspace-changing` announced is corrected. |
-| `focus-changed` | When the focused window changes, debounced by 50 ms. |
-| `mode-changed` | When the binding mode changes. |
-
-```toml
-[hooks]
-startup = ['exec-and-forget brew services restart sketchybar']
-workspace-changing = ['exec-and-forget sketchybar --trigger workspace_changing DINKY_DISPLAY=$DINKY_DISPLAY DINKY_WORKSPACE=$DINKY_WORKSPACE']
-workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']
-```
-
-## `[[rules]]`
-
-Rules for new windows, one table per rule. When a new window matches every condition a rule sets, dinky runs the rule's commands. Every matching rule runs, in file order; for `layout floating` and `layout tiling` the last one wins.
-
-Dialogs, sheets, panels and windows that cannot be resized float without a rule. Floating windows keep their own position and size.
-
-| Key | Default | Meaning |
-|---|---|---|
-| `app-id` | none | The app's bundle ID, e.g. `'com.apple.Safari'`. |
-| `app-name` | none | Case-insensitive regex found anywhere in the app's name. |
-| `title` | none | Case-insensitive regex found anywhere in the window title. |
-| `kind` | none | `'normal'`, `'dialog'`, `'sheet'` or `'panel'`. |
-| `run` | required | A command or a list of commands, e.g. `'layout floating'`. |
-
-```toml
-[[rules]]
-app-name = 'finder'
-run = 'layout floating'
-
-[[rules]]
-app-id = 'com.apple.Music'
-run = ['layout floating', 'move-window-to-workspace 5']
-```
-
-## `[mode.<name>]`
-
-Key bindings, grouped in modes. dinky starts in `main`; the `mode <name>` command switches. Each entry maps a key combination to a command or a list of commands, run in order:
-
-```toml
-[mode.main]
-alt-1 = 'workspace 1'
-alt-shift-semicolon = 'mode service'
-
-[mode.service]
-esc = ['reload-config', 'mode main']
-```
-
-A bound key is swallowed; other keys pass through to the app. Binding the same combination twice in a mode is an error.
-
-## Key syntax
-
-Zero or more modifiers and one key, joined by `-`: `alt-shift-h`, `ctrl-left`, `alt-page-up`, `f5`.
-
-- Modifiers: `alt` (Option), `ctrl`, `cmd`, `shift`, in any order.
-- Letters `a` to `z` and digits `0` to `9`.
-- `f1` to `f20`.
-- `minus`, `equal`, `left-bracket`, `right-bracket`, `backslash`, `semicolon`, `quote`, `comma`, `period`, `slash`, `backtick`, `section`.
-- `space`, `enter`, `esc`, `backspace`, `tab`, `forward-delete`, `left`, `down`, `up`, `right`, `page-up`, `page-down`, `home`, `end`.
-- Keypad: `keypad-0` to `keypad-9`, `keypad-clear`, `keypad-decimal`, `keypad-divide`, `keypad-enter`, `keypad-equal`, `keypad-minus`, `keypad-multiply`, `keypad-plus`.
-
-Key names refer to positions on a US (qwerty) layout. Note that the default `alt-` bindings take over Option-letter combinations you might use to type special characters.
-
-## The default config
-
-This is what dinky writes on first run:
-
-```toml
-# ~/.config/dinky/dinky.toml. Saved changes take effect at once.
-# A key you leave out keeps the value shown here.
-
-start-at-login = true
-workspaces = 5                  # per display; dinky creates missing Spaces, never removes any
-default-layout = 'tiles'        # tiles | accordion
-follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
-
-[accordion]
-padding = 30                    # points the neighbours peek out by
-orientation = 'auto'            # auto: run along the container's longer side | keep
-
-[gaps]
-inner = 8                       # or { horizontal = 8, vertical = 8 }
-outer = 8                       # or { top = 8, bottom = 8, left = 8, right = 8 }
-
-# Overrides for one display: main, secondary, or part of its name as `dinky list-displays` prints it.
-# [display.main]
-# gaps.outer.top = 44
-
-[borders]
-enabled = true
-width = 4
-active-color = '#e1e3e4'        # '#rrggbb' or '#rrggbbaa'
-inactive-color = '#494d64'
-order = 'below'                 # below | above (a click-through ring over the window)
-exclude-apps = []               # bundle IDs whose windows get no border
-
-[focus-follows-mouse]
-enabled = false
-delay-ms = 100                  # how long the pointer rests on a window before it takes focus
-accordion-edges = true          # resting on a peeking accordion edge focuses that window
-
-# dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
-# [hooks]
-# startup = ['exec-and-forget brew services restart sketchybar']
-# workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']
-# focus-changed = []
-# mode-changed = []
-
-# Every rule whose conditions all match a new window runs, in order.
-[[rules]]
-app-id = 'com.apple.systempreferences'   # also: app-name, title (regexes), kind (normal|dialog|sheet|panel)
-run = 'layout floating'
-
-[mode.main]
-ctrl-left = 'workspace prev'
-ctrl-right = 'workspace next'
-alt-1 = 'workspace 1'
-alt-2 = 'workspace 2'
-alt-3 = 'workspace 3'
-alt-4 = 'workspace 4'
-alt-5 = 'workspace 5'
-alt-6 = 'workspace 6'
-alt-7 = 'workspace 7'
-alt-8 = 'workspace 8'
-alt-9 = 'workspace 9'
-alt-shift-1 = 'move-window-to-workspace 1'
-alt-shift-2 = 'move-window-to-workspace 2'
-alt-shift-3 = 'move-window-to-workspace 3'
-alt-shift-4 = 'move-window-to-workspace 4'
-alt-shift-5 = 'move-window-to-workspace 5'
-alt-shift-6 = 'move-window-to-workspace 6'
-alt-shift-7 = 'move-window-to-workspace 7'
-alt-shift-8 = 'move-window-to-workspace 8'
-alt-shift-9 = 'move-window-to-workspace 9'
-alt-tab = 'workspace-back-and-forth'
-alt-h = 'focus left'
-alt-j = 'focus down'
-alt-k = 'focus up'
-alt-l = 'focus right'
-alt-shift-h = 'move left'
-alt-shift-j = 'move down'
-alt-shift-k = 'move up'
-alt-shift-l = 'move right'
-alt-minus = 'resize smart -50'
-alt-equal = 'resize smart +50'
-alt-f = 'fullscreen'
-alt-shift-f = 'layout floating tiling'
-alt-comma = 'layout accordion'
-alt-slash = 'layout tiles'
-alt-shift-n = 'move-window-to-display next'
-alt-shift-semicolon = 'mode service'
-
-[mode.service]
-esc = ['reload-config', 'mode main']
-r = ['flatten-workspace-tree', 'mode main']
-alt-shift-h = ['join-with left', 'mode main']
-alt-shift-j = ['join-with down', 'mode main']
-alt-shift-k = ['join-with up', 'mode main']
-alt-shift-l = ['join-with right', 'mode main']
-
-```
-
-With 5 workspaces, `alt-6` to `alt-9` do nothing until you raise `workspaces`.
