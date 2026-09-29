@@ -51,18 +51,20 @@ final class GapsTests: XCTestCase {
         XCTAssertEqual(gaps.outer.bottom, 1, "the overrides layer, each one only changes what it sets")
     }
 
-    func testWorkspacesPerDisplay() throws {
+    func testWorkspaceToDisplay() throws {
         let config = try Config.parse("""
         workspaces = 4
-        [display.secondary]
-        workspaces = 1
-        [display.dell]
-        gaps.outer.top = 2
+        [workspace-to-display]
+        4 = 'secondary'
+        2 = ['dell', 'main']
         """)
-        XCTAssertEqual(config.workspaces(for: builtIn), 1, "secondary of two")
-        XCTAssertEqual(config.workspaces(for: dell), 4, "a table without workspaces keeps the general count")
-        XCTAssertEqual(config.workspaces(for: Monitor(name: "LG", isMain: false, count: 3)), 4)
-        XCTAssertThrowsError(try Config.parse("[display.main]\nworkspaces = 0\n"))
+        XCTAssertEqual(config.workspaceDisplays, [4: [.secondary], 2: [.name("dell"), .main]])
+        XCTAssertEqual(try Config.parse("").workspaceDisplays, [:])
+        assertError("[workspace-to-display]\n6 = 'main'\n", path: "workspace-to-display.6", contains: "from 1 to 5")
+        assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", contains: "not a workspace number")
+        assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", contains: "can't be empty")
+        assertError("[workspace-to-display]\n1 = 2\n", path: "workspace-to-display.1", contains: "string")
+        assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", contains: "[workspace-to-display]")
     }
 
     func testPatterns() {

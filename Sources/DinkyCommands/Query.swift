@@ -1,6 +1,5 @@
 // The list-* queries: their flags and format variables, named after AeroSpace's (MIT,
-// github.com/nikitabobko/AeroSpace). Workspaces are numbered per display, so where AeroSpace has
-// one set of workspace names, dinky's numbers repeat on each display.
+// github.com/nikitabobko/AeroSpace). Workspaces are numbered across displays, as AeroSpace names them.
 
 /// Which displays a query covers: the focused one, all, or a 1-based display number.
 public enum MonitorSpec: Equatable, Sendable {

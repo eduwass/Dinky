@@ -14,7 +14,7 @@ prints it.
 
 | Command | |
 |---|---|
-| `workspace <n\|prev\|next>` | Switch the focused display's workspace. `prev`/`next` don't wrap. |
+| `workspace <n\|prev\|next>` | Show a workspace and focus its display. `prev`/`next` step through the focused display's and don't wrap. |
 | `workspace-back-and-forth` | Switch to the previous workspace. |
 | `move-window-to-workspace <n\|prev\|next> [--follow]` | Move the focused window, and with `--follow` go too. |
 | `move-window-to-display <next\|prev> [--follow]` | Move the focused window to another display's workspace. |
@@ -37,7 +37,9 @@ prints it.
 
 </div>
 
-Workspaces are numbered per display. A full-screen app's Space has no number.
+Workspaces are numbered across displays; see
+[`[workspace-to-display]`](configuration.md#workspace-to-display). A full-screen
+app's Space has no number, nor does the Space of a display without workspaces.
 
 ## Command line
 
@@ -71,7 +73,7 @@ enable on`.
 
 The queries follow [AeroSpace](https://nikitabobko.github.io/AeroSpace/commands)'s
 names, flags and output, so most AeroSpace bar scripts work by swapping the
-command name. Workspace numbers repeat across displays.
+command name.
 
 <div class="wide-table" markdown="1">
 
@@ -93,7 +95,7 @@ Without a display flag, queries cover the focused display. Format variables:
   `window-is-fullscreen`, `app-name`, `app-bundle-id`, `app-pid`, and the
   workspace variables
 
-With two displays, `--format '%{monitor-id}-%{workspace}'` tells workspaces apart.
+`%{monitor-is-main}` tells a bar which workspaces are on the side display.
 
 ### SketchyBar
 

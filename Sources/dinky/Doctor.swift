@@ -24,7 +24,7 @@ func runDoctor(_ args: [String]) -> Int32 {
     } else {
         do {
             config = try Config.load(from: url)
-            ok("parses: \(config.workspaces) workspaces per display, \(config.modes.count) modes, \(config.rules.count) window rules")
+            ok("parses: \(config.workspaces) workspaces, \(config.modes.count) modes, \(config.rules.count) window rules")
         } catch {
             fail("\(error)")
         }
@@ -47,18 +47,20 @@ func runDoctor(_ args: [String]) -> Int32 {
         }
     }
 
-    let displays = dinky_displays()
+    // Where the workspaces go with the displays connected now; the app arranges the Spaces to match.
+    let connected = dinky_displays()
+    let displays = connected.map { d in
+        PlanDisplay(uuid: d.uuid, monitor: Monitor(name: screen(of: d.displayID)?.localizedName ?? "",
+                                                   isMain: CGDisplayIsMain(d.displayID) != 0, count: connected.count),
+                    spaces: d.spaces.filter(\.isUser).map(\.spaceID), current: d.currentSpaceID)
+    }
+    let homes = WorkspacePlan(config).homes(displays)
     for (i, display) in displays.enumerated() {
-        let user = display.spaces.filter(\.isUser).count
-        let name = screen(of: display.displayID)?.localizedName ?? ""
-        let wanted = config.workspaces(for: Monitor(name: name, isMain: CGDisplayIsMain(display.displayID) != 0,
-                                                    count: displays.count))
-        let label = name.isEmpty ? "display \(i + 1)" : "display \(i + 1) (\(name))"
-        if user < wanted {
-            ok("\(label) has \(user) of \(wanted) workspaces; the app creates the rest")
-        } else {
-            ok("\(label) has \(user) workspace\(user == 1 ? "" : "s")")
-        }
+        let label = display.monitor.name.isEmpty ? "display \(i + 1)" : "display \(i + 1) (\(display.monitor.name))"
+        let here = homes.filter { $0.value == display.uuid }.keys.sorted()
+        let spaces = "\(display.spaces.count) Space\(display.spaces.count == 1 ? "" : "s")"
+        ok(here.isEmpty ? "\(label) has \(spaces) and no workspaces"
+                        : "\(label) has \(spaces) for workspace\(here.count == 1 ? "" : "s") \(here.map(String.init).joined(separator: ", "))")
     }
 
     ok(AXIsProcessTrusted() ? "this terminal has Accessibility (the app needs its own grant)" : "this terminal has no Accessibility grant; only the app needs one")

@@ -22,7 +22,7 @@ permalink: /configuration/
 | Key | Default | |
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
-| `workspaces` | `5` | Spaces per display. Missing ones are created, none removed. |
+| `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
 | `default-layout` | `'tiles'` | `'tiles'` or `'accordion'` for new containers. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
 
@@ -40,18 +40,32 @@ permalink: /configuration/
 | `inner` | `8` | Between windows. Or `{ horizontal = 8, vertical = 6 }`. |
 | `outer` | `8` | To the screen edge. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
 
+## `[workspace-to-display]`
+
+Which display a workspace lives on, by number. A display pattern is `main`,
+`secondary` (the other one, when there are two), or part of the name from
+`dinky list-displays`. A list tries each in turn. Unlisted workspaces, and
+listed ones whose display isn't connected, live on the main display.
+
+```toml
+[workspace-to-display]
+5 = 'secondary'         # on the side display while it's connected, else a normal workspace
+4 = ['dell', 'lg']
+```
+
+When a display comes or goes, dinky moves the workspace's windows, layout
+included, to a Space on its display and removes the Space left behind. Empty
+leftover Spaces are removed; ones with windows are left alone, unnumbered. A
+display with no workspaces keeps one unnumbered Space.
+
 ## `[display.<pattern>]`
 
-Per-display `gaps` and `workspaces`. The pattern is `main`, `secondary` (when
-there are two), or part of the name from `dinky list-displays`. Name patterns
-beat `main`/`secondary`; longer names beat shorter.
+Per-display `gaps`, with the patterns above. Name patterns beat
+`main`/`secondary`; longer names beat shorter.
 
 ```toml
 [display.main]          # the display with the bar
 gaps.outer.top = 44
-
-[display."LG UltraFine"]
-workspaces = 1
 ```
 
 ## `[borders]`
@@ -134,7 +148,7 @@ The default `alt-` bindings take over Option-letter characters.
 # Every key and command: https://dinky.rodeo/configuration/
 
 start-at-login = true
-workspaces = 5                  # per display; dinky creates missing Spaces, never removes any
+workspaces = 5                  # across all displays, one native Space each
 default-layout = 'tiles'        # tiles | accordion
 follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
 
@@ -146,7 +160,12 @@ orientation = 'auto'            # auto: run along the container's longer side | 
 inner = 8                       # or { horizontal = 8, vertical = 8 }
 outer = 8                       # or { top = 8, bottom = 8, left = 8, right = 8 }
 
-# Overrides for one display: main, secondary, or part of its name as `dinky list-displays` prints it.
+# Display patterns: main, secondary, or part of a name as `dinky list-displays` prints it.
+# A workspace lives on the first display its patterns match, else on the main display.
+# [workspace-to-display]
+# 5 = 'secondary'
+
+# Overrides for one display.
 # [display.main]
 # gaps.outer.top = 44
 

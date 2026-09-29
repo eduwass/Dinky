@@ -14,7 +14,7 @@ struct Reply {
 }
 
 // Runs commands from bindings, the CLI and the menu against what exists today. Main thread only.
-// Workspace commands act on the focused display.
+// Workspaces are numbered across displays; `prev` and `next` step through the focused display's.
 enum Dispatcher {
     /// `env` is added to the environment of an `exec-and-forget`, for hooks.
     static func run(_ line: String, env: [String: String] = [:]) -> Reply {
@@ -33,10 +33,11 @@ enum Dispatcher {
             return switchWorkspace(target)
         case .workspaceBackAndForth:
             let model = AppState.shared.displays
-            guard let display = model.focusedDisplay(), let previous = model.previousWorkspace(on: display) else {
+            guard let display = model.focusedDisplay(), let previous = model.previousSpace(on: display),
+                  let n = AppState.shared.numbers.number(of: previous) else {
                 return .error("no previous workspace")
             }
-            return switchWorkspace(.number(previous + 1))
+            return switchWorkspace(.number(n))
         case .moveWindowToWorkspace(let target, let follow):
             return moveWindowToWorkspace(target, follow: follow, window: window ?? focusedWindowID())
         case .moveWindowToDisplay(let target, let follow):
@@ -98,48 +99,84 @@ enum Dispatcher {
 
     // MARK: Workspaces
 
-    /// 0-based index for a target, relative to the current Space. No wrap-around.
-    private static func index(_ target: WorkspaceTarget, current: Int) -> Int {
+    private struct Refusal: Error {
+        let reply: Reply
+        init(_ text: String) { reply = .error(text) }
+    }
+
+    /// The workspace a target names. `prev` and `next` step through the focused display's workspaces in number
+    /// order, without wrapping, from the one it shows or is switching to, so rapid requests add up.
+    private static func resolve(_ target: WorkspaceTarget) throws(Refusal) -> Int {
+        let model = AppState.shared.displays
+        let numbers = AppState.shared.numbers
+        model.reconcile()
         switch target {
-        case .number(let n): return n - 1
-        case .prev: return current - 1
-        case .next: return current + 1
+        case .number(let n):
+            guard (1...numbers.count).contains(n) else { throw Refusal("no workspace \(n), there are \(numbers.count)") }
+            return n
+        case .prev, .next:
+            guard let display = model.focusedDisplay(), let current = numbers.number(of: targetSpaceID(on: display)) else {
+                throw Refusal("not on a numbered workspace")
+            }
+            let here = numbers.workspaces(on: display)
+            guard let at = here.firstIndex(of: current) else { throw Refusal("not on a numbered workspace") }
+            let i = at + (target == .next ? 1 : -1)
+            guard here.indices.contains(i) else { throw Refusal("no \(target == .next ? "next" : "previous") workspace on this display") }
+            return here[i]
         }
     }
 
-    /// The focused display, freshly read, and its current 0-based workspace, or the one it is switching to
-    /// so that rapid `workspace next` requests add up. Nil on a full-screen Space.
-    private static func focusedWorkspace() -> (Display, Int)? {
-        let model = AppState.shared.displays
-        model.reconcile()
-        guard let display = model.focusedDisplay(),
-              let current = display.workspaces.firstIndex(of: targetSpaceID(on: display)) else { return nil }
-        return (display, current)
+    private static func switchWorkspace(_ target: WorkspaceTarget) -> Reply {
+        do {
+            return show(try resolve(target))
+        } catch {
+            return error.reply
+        }
     }
 
-    private static func switchWorkspace(_ target: WorkspaceTarget) -> Reply {
-        guard let (display, current) = focusedWorkspace() else { return .error("not on a numbered workspace") }
-        let to = index(target, current: current)
-        guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
-        guard to != current else { return .ok("already on workspace \(to + 1)") }
-        guard switchSpace(toSpaceID: display.workspaces[to], on: display) else { return .error("switch to workspace \(to + 1) failed") }
-        return .ok("workspace \(to + 1)")
+    /// Puts workspace `n` on screen on its display and gives that display focus. `landed` runs once it shows, in
+    /// place of focusing the display's front window.
+    private static func show(_ n: Int, landed: (() -> Void)? = nil) -> Reply {
+        let model = AppState.shared.displays
+        guard let space = AppState.shared.numbers.space(of: n), let display = model.display(containingSpace: space) else {
+            return .error("workspace \(n) has no Space; see `dinky doctor`")
+        }
+        // On screen and staying there; a switch still on its way is not, and takes `arrive` for when it lands.
+        let showing = display.currentSpaceID == space && targetSpaceID(on: display) == space
+        let elsewhere = model.focusedDisplay()?.uuid != display.uuid
+        if showing, !elsewhere, landed == nil { return .ok("already on workspace \(n)") }
+        let arrive = landed ?? (elsewhere ? {
+            model.reconcile()
+            guard let shown = model.displays.first(where: { $0.uuid == display.uuid }) else { return }
+            _ = focus(shown, window: AppState.shared.coordinator?.workspace(on: shown)?.focused)
+        } : nil)
+        if showing {
+            arrive?()
+            return .ok("workspace \(n)")
+        }
+        guard switchSpace(toSpaceID: space, on: display, landed: arrive) else { return .error("switch to workspace \(n) failed") }
+        return .ok("workspace \(n)")
     }
 
     private static func moveWindowToWorkspace(_ target: WorkspaceTarget, follow: Bool, window wid: WindowID) -> Reply {
-        guard let (display, current) = focusedWorkspace() else { return .error("not on a numbered workspace") }
-        let to = index(target, current: current)
-        guard display.workspaces.indices.contains(to) else { return .error("no workspace \(to + 1), there are \(display.workspaces.count)") }
+        let n: Int
+        do {
+            n = try resolve(target)
+        } catch {
+            return error.reply
+        }
         guard wid != 0 else { return .error("no focused window") }
-        guard to != current else { return .ok("window \(wid) is already on workspace \(to + 1)") }
-        let space = display.workspaces[to]
-        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(to + 1)") }
-        if let error = move(wid, to: space, arriving: "workspace \(to + 1)") { return error }
+        guard let space = AppState.shared.numbers.space(of: n) else { return .error("workspace \(n) has no Space; see `dinky doctor`") }
+        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(n)") }
+        let model = AppState.shared.displays
+        let from = model.display(ofWindow: wid)
+        if let error = move(wid, to: space, arriving: "workspace \(n)") { return error }
+        if let from, let to = model.display(containingSpace: space) { keepOffset(of: wid, from: from, to: to) }
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         // macOS activates another app when the Space left behind loses the active app's window, so focus the
-        // moved window once the display is on its Space.
-        if follow { switchSpace(toSpaceID: space, on: display) { AppState.shared.coordinator?.focus(wid) } }
-        return .ok("moved window \(wid) to workspace \(to + 1)")
+        // moved window once its workspace shows.
+        if follow { _ = show(n) { AppState.shared.coordinator?.focus(wid) } }
+        return .ok("moved window \(wid) to workspace \(n)")
     }
 
     // MARK: Layout tree
@@ -188,15 +225,21 @@ enum Dispatcher {
         let n = (i + (target == .next ? 1 : -1) + displays.count) % displays.count
         let to = displays[n]
         if let error = move(wid, to: to.currentSpaceID, arriving: "display \(n + 1)") { return error }
-        if AppState.shared.coordinator?.isFloating(wid) != false, let element = axWindow(pid: pid, wid: wid) {
-            let frame = dinky_window_info(wid).frame
-            var origin = CGPoint(x: to.frame.minX + max(0, frame.minX - from.frame.minX),
-                                 y: to.frame.minY + max(0, frame.minY - from.frame.minY))
-            AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
-        }
+        keepOffset(of: wid, from: from, to: to)
         AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
         if follow { focusWindow(pid: pid, id: wid) }
         return .ok("moved window \(wid) to display \(n + 1)")
+    }
+
+    /// A floating window moved to another display keeps its offset from the display's corner; the tree places a
+    /// tiled one.
+    private static func keepOffset(of wid: WindowID, from: Display, to: Display) {
+        guard from.uuid != to.uuid, AppState.shared.coordinator?.isFloating(wid) != false,
+              let pid = windowPID(wid), let element = axWindow(pid: pid, wid: wid) else { return }
+        let frame = dinky_window_info(wid).frame
+        var origin = CGPoint(x: to.frame.minX + max(0, frame.minX - from.frame.minX),
+                             y: to.frame.minY + max(0, frame.minY - from.frame.minY))
+        AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
     }
 
     /// Moves a window to a Space and waits for it to arrive: the bridged move is asynchronous, and callers

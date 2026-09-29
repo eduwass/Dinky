@@ -7,8 +7,11 @@ import TOMLDecoder
 
 public struct Config: Equatable {
     public var startAtLogin = true
-    /// Spaces per display. dinky creates missing ones and never removes any.
+    /// Workspaces across all displays, numbered from 1. Each is one native Space.
     public var workspaces = 5
+    /// `[workspace-to-display]`: by workspace number, the display patterns it lives on, the first that matches
+    /// a connected display winning. Other workspaces, and these when no pattern matches, live on the main display.
+    public var workspaceDisplays: [Int: [MonitorPattern]] = [:]
     /// The layout new containers start in.
     public var defaultLayout = LayoutKind.tiles
     /// Cmd-Tab and Dock clicks go through the fast switch.
@@ -68,6 +71,19 @@ public struct Config: Equatable {
         startAtLogin = try t.bool("start-at-login") ?? startAtLogin
         workspaces = try t.int("workspaces") ?? workspaces
         guard workspaces >= 1 else { throw ConfigError(path: "workspaces", "must be at least 1") }
+        if let assignments = try t.table("workspace-to-display") {
+            for key in assignments.keys {
+                guard let n = Int(key), (1...workspaces).contains(n) else {
+                    throw ConfigError(path: assignments.path(key), "'\(key)' is not a workspace number from 1 to \(workspaces)")
+                }
+                let patterns = try assignments.stringOrStrings(key)!
+                guard !patterns.isEmpty, !patterns.contains("") else {
+                    throw ConfigError(path: assignments.path(key), "a display pattern can't be empty")
+                }
+                workspaceDisplays[n] = patterns.map(MonitorPattern.init)
+            }
+            try assignments.done()
+        }
         defaultLayout = try t.choice("default-layout") ?? defaultLayout
         followAppActivation = try t.bool("follow-app-activation") ?? followAppActivation
         accordion = try t.table("accordion").map(Accordion.init) ?? accordion

@@ -26,6 +26,8 @@ final class AppState {
         model.start()
         return model
     }()
+    /// Which Space each workspace is, arranged by the app once tiling runs.
+    let numbers = WorkspaceNumbers()
     /// Tiling and borders, started by the app once Accessibility is granted.
     private(set) var coordinator: Coordinator?
     /// The journal of original frames that disable, quit and `dinky recover` restore.
@@ -58,6 +60,9 @@ final class AppState {
         let coordinator = Coordinator(displays: displays, config: config)
         self.coordinator = coordinator
         coordinator.start()
+        // Once the windows are known, so each workspace's windows move with it, and before the hooks, which
+        // report workspace numbers.
+        numbers.arrange()
         hooks.start()
         recovery.start(model: coordinator.model)
         hoverFocus.update(config: config.focusFollowsMouse)
@@ -93,10 +98,10 @@ final class AppState {
             self.config = config
             configError = nil
             hotkeys.load(modes: config.modes)
-            // At launch the app creates the Spaces itself, before the coordinator starts.
+            // At launch the app arranges the workspaces itself, once the coordinator has started.
             if let coordinator {
-                ensureWorkspaceCount()
                 coordinator.update(config: config)
+                numbers.arrange()
                 hoverFocus.update(config: config.focusFollowsMouse)
             }
         case .failure(let error):

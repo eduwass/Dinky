@@ -14,6 +14,8 @@ final class Hooks {
         let state = AppState.shared
         for display in state.displays.displays { workspaces[display.uuid] = number(display) }
         state.displays.observe { [weak self] in self?.displaysChanged($0) }
+        // Arranging can renumber what a display shows without a Space change.
+        state.numbers.observe { [weak self] in self?.displaysChanged(AppState.shared.displays) }
         SpaceSwitcher.shared.onTarget = { [weak self] uuid, target in self?.switchTargeted(uuid, target) }
         SpaceSwitcher.shared.onGiveUp = { [weak self] uuid in self?.switchGaveUp(uuid) }
         state.coordinator?.onFocusChange = { [weak self] in self?.focusChanged() }
@@ -42,7 +44,7 @@ final class Hooks {
     private func switchTargeted(_ uuid: String, _ target: UInt64) {
         let displays = AppState.shared.displays.displays
         guard let i = displays.firstIndex(where: { $0.uuid == uuid }) else { return }
-        let workspace = displays[i].workspaces.firstIndex(of: target).map { "\($0 + 1)" } ?? ""
+        let workspace = AppState.shared.numbers.label(of: target)
         runWorkspaceHooks(AppState.shared.config.hooks.workspaceChanging, workspace: workspace, previous: number(displays[i]), display: i)
     }
 
@@ -71,7 +73,7 @@ final class Hooks {
     }
 
     private func number(_ display: Display) -> String {
-        display.currentWorkspace.map { "\($0 + 1)" } ?? ""
+        AppState.shared.numbers.label(of: display.currentSpaceID)
     }
 }
 

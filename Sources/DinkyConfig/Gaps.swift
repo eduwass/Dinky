@@ -1,4 +1,5 @@
-// Gaps in points, and the `[display.<pattern>]` tables that override them for one display.
+// Gaps in points, the `[display.<pattern>]` tables that override them for one display, and the display
+// patterns those tables and `[workspace-to-display]` use.
 
 /// The gap between side-by-side windows (`horizontal`) and between stacked ones (`vertical`).
 public struct Inner: Equatable {
@@ -111,15 +112,15 @@ public enum MonitorPattern: Equatable {
 public struct DisplayOverride: Equatable {
     public var pattern: MonitorPattern
     public var gaps = GapsPatch()
-    /// Spaces on this display in place of the general `workspaces`, nil to keep it.
-    public var workspaces: Int?
 
     init(_ pattern: String, _ t: Table) throws {
         guard !pattern.isEmpty else { throw ConfigError(path: t.path, "a display pattern can't be empty") }
         self.pattern = MonitorPattern(pattern)
         gaps = try t.table("gaps").map(GapsPatch.init) ?? gaps
-        workspaces = try t.int("workspaces")
-        if let workspaces, workspaces < 1 { throw ConfigError(path: t.path("workspaces"), "must be at least 1") }
+        if try t.int("workspaces") != nil {
+            throw ConfigError(path: t.path("workspaces"),
+                              "workspaces are numbered across displays now; put one on a display with [workspace-to-display]")
+        }
         try t.done()
     }
 }
@@ -137,10 +138,5 @@ extension Config {
     /// The gaps on `monitor`: the general ones, with the overrides of every matching display table applied.
     public func gaps(for monitor: Monitor) -> Gaps {
         overrides(for: monitor).reduce(gaps) { $0.applying($1.gaps) }
-    }
-
-    /// How many workspaces `monitor` gets: the most specific matching display table's, else `workspaces`.
-    public func workspaces(for monitor: Monitor) -> Int {
-        overrides(for: monitor).reduce(workspaces) { $1.workspaces ?? $0 }
     }
 }

@@ -12,7 +12,8 @@ extension Command {
 
     public static let all: [Doc] = [
         Doc(syntax: "workspace <number|prev|next>",
-            description: "Switch the focused display to a workspace (a native Space), numbered from 1."),
+            description: "Show a workspace (a native Space), numbered from 1 across displays, and focus its display. "
+                + "prev and next step through the focused display's workspaces."),
         Doc(syntax: "workspace-back-and-forth",
             description: "Switch to the workspace that was focused before the current one."),
         Doc(syntax: "move-window-to-workspace <number|prev|next> [--follow]",
@@ -56,8 +57,8 @@ extension Command {
         Doc(syntax: "enable <on|off|toggle>",
             description: "Turn dinky's key bindings and app-activation following on or off."),
         Doc(syntax: "list-workspaces [--all|--focused|--monitor <focused|all|n>...] [--visible [no]] [--empty [no]] [--format <format>]",
-            description: "Print workspace numbers, one per line, of the focused display by default. --all covers every display, "
-                + "so numbers repeat unless --format adds %{monitor-id}. --focused prints the focused workspace. "
+            description: "Print workspace numbers, one per line, of the focused display by default. --all covers every display. "
+                + "--focused prints the focused workspace. "
                 + "Format variables: " + vars(WorkspaceQuery.variables) + "."),
         Doc(syntax: "list-windows [--all|--focused|--monitor <focused|all|n>...] [--workspace <focused|visible|n>...] "
                 + "[--app-bundle-id <id>] [--format <format>]",

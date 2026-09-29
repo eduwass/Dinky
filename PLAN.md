@@ -8,7 +8,7 @@ Agreed 25 September 2026. Work is tracked with `tk` in `.tickets/`; `tk ready` l
 
 | Area | Decision |
 |---|---|
-| Workspaces | Native Spaces, numbered 1..N per display. Config says how many; dinky creates missing ones on start and never removes any. |
+| Workspaces | Native Spaces, numbered 1..N across displays. `[workspace-to-display]` puts some on other displays, AeroSpace style. dinky ties each workspace to a Space ID and arranges the Spaces (create, move windows, remove empty ones) at launch, on reload and when displays change. |
 | Displays | Multi-display from the start. Each display has its own Spaces and its own layout trees. Bindings act on the focused display. Windows can be moved between displays. |
 | New windows | Tiled automatically as they appear. Sheets, dialogs, utility panels and per-app rules float. |
 | Layouts | Tiles with widest-axis insertion, stable split axes. Accordion as a container mode, AeroSpace style: children overlap, neighbours peek out by `accordion-padding`. |

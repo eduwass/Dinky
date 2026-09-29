@@ -165,7 +165,7 @@ No option or dictionary key is documented. The values follow bobrwm (below): `ty
 | exported `SLSSpaceCreate(cid, 0, values)` | bare probe, and AppKit probe | returns 0, nothing created |
 | `SLSBridgedSpaceDestroyOperation` via `-performWithWMBridgeDelegate`, and exported `SLSSpaceDestroy` | bare probe, on Spaces 23 and 32 | nothing removed (return 0) |
 
-So the working form is the bridged op, sent from a process with AppKit loaded. dinky already links AppKit. Removing a Space from outside did not work, not even with the original creator gone. That is fine: removal is out of v1. The test Spaces were removed with Mission Control's own close button.
+So the working form is the bridged op, sent from a process with AppKit loaded. dinky already links AppKit. Removing a Space from a bare process did not work, not even with the original creator gone. From a process with AppKit loaded it does; see "Removing Spaces" below. The test Spaces were removed with Mission Control's own close button.
 
 ### Mission Control and the Dock
 
@@ -185,6 +185,23 @@ Use it. `dinky_create_space(displayUUID)` in `Sources/DinkyPrivate/spaces.m` is 
 - **Host with SIP on:** not tested, per the brief. Nothing on this path touches the Dock, and the call is a plain client-to-WindowServer MIG call, so SIP should not matter. Confirm on the host before relying on it; it is a one-line `dinky spaces create`.
 - **Multi-display:** not tested, since the VM has one display. `--display <uuid>` goes into `Display Identifier`, which is the only way the target display is chosen.
 - **The exported `SLSSpaceCreate` does not work** on this build. Do not replace the dispatcher lookup with it.
+
+## Removing Spaces, 29 September: works with AppKit loaded
+
+The earlier probe tried removal only from a bare Foundation process. A probe that loads AppKit (`[NSApplication sharedApplication]`, `NSScreen`), creates a Space with `dinky_create_space` and then removes it gives:
+
+| Call | Result |
+|---|---|
+| `SLSBridgedSpaceDestroyOperation initWithSpaceID:` then `-performWithWMBridgeDelegate` | removed at once. The delegate is AppKit's `NSWMWindowCoordinator`, which is why a bare process gets nothing |
+| the same operation through the asynchronous dispatcher `move.m` uses | removed at once |
+| `-invokeFallback` directly | nothing removed |
+| exported `SLSSpaceDestroy(cid, sid)` | returns 0, nothing removed |
+
+Also checked in the VM (26A5416b, SIP off): a Space created by another, exited process is removed; a Space with a window on it is removed and the window moves to the display's current Space, as with Mission Control's close button; removing the current Space drops the display to its first Space. The Dock's `com.apple.spaces` preferences agree afterwards, a `killall Dock` brings nothing back, and Mission Control shows no phantom desktop.
+
+On the host (27.0, **SIP on**, two displays) a test Space created on the secondary display was removed the same way and left nothing behind in `com.apple.spaces`.
+
+`dinky_destroy_space` in `Sources/DinkyPrivate/spaces.m` uses `-performWithWMBridgeDelegate`. Workspace arranging (`Sources/dinky/WorkspaceNumbers.swift`) calls it for empty Spaces no workspace is on, after moving any workspace's windows away, and switches a display to one of its workspaces before removing the Space it shows.
 
 ## Fuzzing, 26 September
 

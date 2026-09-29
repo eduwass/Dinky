@@ -30,12 +30,10 @@ struct Display: Equatable {
     let isMain: Bool
     /// Every Space in Mission Control order, full-screen ones included. Swipes step over all of them.
     let spaces: [UInt64]
-    /// User Spaces only: workspace N is `workspaces[N - 1]`. Full-screen Spaces are not numbered.
-    let workspaces: [UInt64]
+    /// User Spaces only, in Mission Control order; full-screen Spaces are left out. Which workspace each is,
+    /// if any, is `WorkspaceNumbers`'s business.
+    let userSpaces: [UInt64]
     let currentSpaceID: UInt64
-
-    /// 0-based workspace index of the current Space, nil on a full-screen Space.
-    var currentWorkspace: Int? { workspaces.firstIndex(of: currentSpaceID) }
 }
 
 // Displays, their Spaces, the current and previous Space per display, and which display has focus.
@@ -44,6 +42,8 @@ final class DisplayModel {
     private(set) var displays: [Display] = []
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
     private var previousSpaceIDs: [String: UInt64] = [:]
+    /// The Space each display last settled on: a swipe passes through the Spaces between, which don't count.
+    private var settledSpaceIDs: [String: UInt64] = [:]
     private var observers: [(DisplayModel) -> Void] = []
     /// The UUID of a display `focus-monitor` focused without a window to focus there. It stands in for the
     /// focused window's display until focus next changes.
@@ -71,14 +71,18 @@ final class DisplayModel {
     /// Re-reads every display from WindowServer. Records previous Spaces and publishes if anything changed.
     func reconcile() {
         let fresh = readDisplays()
-        guard fresh != displays else { return }
+        // Also when nothing else changed: a swipe that gave up settles where it already was.
         for display in fresh {
-            if let old = displays.first(where: { $0.uuid == display.uuid }), old.currentSpaceID != display.currentSpaceID {
-                previousSpaceIDs[display.uuid] = old.currentSpaceID
+            if let target = SpaceSwitcher.shared.target(on: display.uuid), target != display.currentSpaceID { continue }
+            if let settled = settledSpaceIDs[display.uuid], settled != display.currentSpaceID {
+                previousSpaceIDs[display.uuid] = settled
             }
+            settledSpaceIDs[display.uuid] = display.currentSpaceID
         }
+        guard fresh != displays else { return }
         // A disconnected display takes its history with it.
         previousSpaceIDs = previousSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
+        settledSpaceIDs = settledSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
         displays = fresh
         observers.forEach { $0(self) }
     }
@@ -112,9 +116,9 @@ final class DisplayModel {
         spaceID == 0 ? nil : displays.first { $0.spaces.contains(spaceID) }
     }
 
-    /// 0-based workspace index of the display's previous Space, if it is still a numbered workspace.
-    func previousWorkspace(on display: Display) -> Int? {
-        previousSpaceIDs[display.uuid].flatMap { display.workspaces.firstIndex(of: $0) }
+    /// The Space the display was on before its current one.
+    func previousSpace(on display: Display) -> UInt64? {
+        previousSpaceIDs[display.uuid]
     }
 
     private func readDisplays() -> [Display] {
@@ -124,7 +128,7 @@ final class DisplayModel {
             return Display(uuid: d.uuid, id: d.displayID, frame: CGDisplayBounds(d.displayID),
                            isMain: CGDisplayIsMain(d.displayID) != 0,
                            spaces: d.spaces.map(\.spaceID),
-                           workspaces: d.spaces.filter(\.isUser).map(\.spaceID),
+                           userSpaces: d.spaces.filter(\.isUser).map(\.spaceID),
                            currentSpaceID: d.currentSpaceID)
         }
     }

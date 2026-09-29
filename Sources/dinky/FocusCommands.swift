@@ -66,7 +66,7 @@ extension Dispatcher {
     }
 
     /// Focuses `window`, or, with none, makes `display` the focused one until focus next changes.
-    private static func focus(_ display: Display, window: WindowID?) -> Reply {
+    static func focus(_ display: Display, window: WindowID?) -> Reply {
         if let window { return focus(window: window) }
         let model = AppState.shared.displays
         model.focusOverride = display.uuid

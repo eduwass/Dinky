@@ -176,10 +176,9 @@ private func follow(_ pid: pid_t, name: String) {
     guard space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else {
         return log("activate \(name): not followed, already on Space \(space)")
     }
-    let spaces = display.spaces
-    let text = String(format: "activate %@: followed %d -> %d on %@", name,
-                      (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1,
-                      display.name.isEmpty ? "display \(display.id)" : display.name)
+    let numbers = AppState.shared.numbers
+    let text = "activate \(name): followed workspace \(numbers.label(of: display.currentSpaceID)) -> \(numbers.label(of: space))"
+        + " on \(display.name.isEmpty ? "display \(display.id)" : display.name)"
     log(text)
     noteFollow(text)
 }

@@ -9,12 +9,14 @@ extension Coordinator {
     func debugState() -> String {
         let displays = AppState.shared.displays
         displays.reconcile()
+        let numbers = AppState.shared.numbers.binding
         let state: [String: Any] = [
             "enabled": enabled,
             "focused": focusedWindow,
             "displays": displays.displays.map { d in
-                ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "workspaces": d.workspaces]
+                ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces]
             },
+            "workspaces": Dictionary(uniqueKeysWithValues: numbers.map { ("\($0.key)", $0.value) }),
             "trees": workspaces.map { key, workspace in
                 let layout = workspace.layout()
                 return [

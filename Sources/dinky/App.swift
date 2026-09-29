@@ -53,9 +53,9 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.menu?.delegate = self
         _ = AppState.shared.hotkeys.start()
         installActivationFollower()
-        ensureWorkspaceCount()
         AppState.shared.startCoordinator()
-        followDisplayConnections()
+        AppState.shared.numbers.start()
+        AppState.shared.numbers.observe { [weak self] in self?.refresh() }
         // After the display model's own subscription, so it has read the new Space.
         EventHub.shared.subscribe { [weak self] event in
             if event.kind == .spaceChange { self?.refresh() }
@@ -68,24 +68,10 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         fflush(stdout)
     }
 
-    /// A display plugged in after launch gets its missing workspaces too. The Spaces of a new display take
-    /// a moment to settle in WindowServer, so this waits a second before counting.
-    private func followDisplayConnections() {
-        var known = Set(AppState.shared.displays.displays.map(\.uuid))
-        AppState.shared.displays.observe { model in
-            let now = Set(model.displays.map(\.uuid))
-            let connected = now.subtracting(known)
-            known = now
-            guard !connected.isEmpty else { return }
-            print("displays: connected \(connected.sorted()), checking workspaces")
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1) { ensureWorkspaceCount() }
-        }
-    }
-
     private func refresh() {
         let state = AppState.shared
-        let workspace = state.displays.focusedDisplay()?.currentWorkspace
-        statusItem.button?.title = (workspace.map { "\($0 + 1)" } ?? "?") + (state.configError == nil ? "" : "!")
+        let workspace = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
+        statusItem.button?.title = (workspace.map { "\($0)" } ?? "?") + (state.configError == nil ? "" : "!")
         statusItem.button?.appearsDisabled = !state.enabled
     }
 
@@ -93,10 +79,9 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let state = AppState.shared
-        let display = state.displays.focusedDisplay()
-        let count = display?.workspaces.count ?? 0
-        let current = display?.currentWorkspace
-        menu.addItem(withTitle: "Space \(current.map { "\($0 + 1)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
+        let count = state.numbers.count
+        let current = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
+        menu.addItem(withTitle: "Workspace \(current.map { "\($0)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
         if let error = state.configError {
             menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "")
         }
@@ -105,11 +90,11 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let go = NSMenu()
         let moveTo = NSMenu()
         let moveFollow = NSMenu()
-        for i in 0..<count {
-            let title = "Workspace \(i + 1)" + (i == current ? " (current)" : "")
-            go.addItem(item(title, "workspace \(i + 1)", enabled: i != current))
-            moveTo.addItem(item(title, "move-window-to-workspace \(i + 1)", enabled: i != current))
-            moveFollow.addItem(item(title, "move-window-to-workspace \(i + 1) --follow", enabled: i != current))
+        for n in 1...max(count, 1) {
+            let title = "Workspace \(n)" + (n == current ? " (current)" : "")
+            go.addItem(item(title, "workspace \(n)", enabled: n != current))
+            moveTo.addItem(item(title, "move-window-to-workspace \(n)", enabled: n != current))
+            moveFollow.addItem(item(title, "move-window-to-workspace \(n) --follow", enabled: n != current))
         }
         menu.addItem(submenu("Go to Workspace", go))
         menu.addItem(submenu("Move Window to Workspace", moveTo))

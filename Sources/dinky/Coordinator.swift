@@ -10,8 +10,8 @@ struct SpaceKey: Hashable {
     let space: UInt64
 }
 
-/// What the coordinator knows about a window it has classified. `space` is nil off the numbered
-/// workspaces (a native full-screen Space), where nothing is tiled.
+/// What the coordinator knows about a window it has classified. `space` is nil off the user Spaces
+/// (on a native full-screen Space), where nothing is tiled.
 struct Placement {
     let floating: Bool
     var space: SpaceKey?
@@ -123,8 +123,13 @@ final class Coordinator {
         flush()
     }
 
-    /// Bounds and gaps of every tree from its display, which can have moved, resized or become main.
+    /// Bounds and gaps of every tree from its display, which can have moved, resized or become main. A tree whose
+    /// Space macOS moved to another display, as it does with a disconnected display's Spaces, goes along.
     private func fitToDisplays() {
+        for key in workspaces.keys {
+            guard let display = displays.display(containingSpace: key.space), display.uuid != key.display else { continue }
+            rekey(key, to: SpaceKey(display: display.uuid, space: key.space))
+        }
         for display in displays.displays {
             let gaps = gaps(on: display)
             for key in workspaces.keys where key.display == display.uuid {
@@ -132,6 +137,24 @@ final class Coordinator {
                 workspaces[key]!.gaps = gaps
             }
         }
+    }
+
+    /// Carries a Space's tree to another Space, before its windows are moved there, so they arrive in the layout
+    /// they had. Kept when the other Space already has a tree with windows.
+    func moveTree(from: UInt64, to: UInt64) {
+        guard let old = workspaces.keys.first(where: { $0.space == from }),
+              let display = displays.display(containingSpace: to) else { return }
+        rekey(old, to: SpaceKey(display: display.uuid, space: to))
+    }
+
+    private func rekey(_ old: SpaceKey, to new: SpaceKey) {
+        guard old != new, workspaces[new]?.windows.isEmpty != false, var tree = workspaces.removeValue(forKey: old) else { return }
+        if let display = displays.displays.first(where: { $0.uuid == new.display }) {
+            tree.bounds = display.visibleArea
+            tree.gaps = gaps(on: display)
+        }
+        workspaces[new] = tree
+        for (id, placement) in placements where placement.space == old { placements[id]!.space = new }
     }
 
     private func gaps(on display: Display) -> DinkyLayout.Gaps {
@@ -195,10 +218,10 @@ final class Coordinator {
         edit(key) { $0.focus(id) }
     }
 
-    /// The tree of a numbered workspace, created on first use. Nil for Spaces dinky does not tile.
+    /// The tree of a user Space, numbered workspace or not, created on first use. Nil for full-screen Spaces.
     private func key(of window: Window) -> SpaceKey? {
         guard let display = displays.display(containingSpace: window.spaceID),
-              display.workspaces.contains(window.spaceID) else { return nil }
+              display.userSpaces.contains(window.spaceID) else { return nil }
         let key = SpaceKey(display: display.uuid, space: window.spaceID)
         if workspaces[key] == nil {
             workspaces[key] = Workspace(bounds: display.visibleArea, gaps: gaps(on: display),

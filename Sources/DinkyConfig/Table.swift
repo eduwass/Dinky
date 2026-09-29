@@ -57,6 +57,15 @@ final class Table {
         return strings
     }
 
+    /// A string or a list of them, e.g. display patterns.
+    func stringOrStrings(_ key: String) throws -> [String]? {
+        guard use(key) else { return nil }
+        guard let strings = stringArray(key) ?? (try? string(key)).map({ [$0] }) else {
+            throw ConfigError(path: path(key), "expected a string or a list of strings")
+        }
+        return strings
+    }
+
     func table(_ key: String) throws -> Table? {
         guard use(key) else { return nil }
         guard let nested = try? table.table(forKey: key) else { throw ConfigError(path: path(key), "expected a table") }

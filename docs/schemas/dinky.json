@@ -15,7 +15,18 @@
       "type": "integer",
       "minimum": 1,
       "default": 5,
-      "description": "Spaces per display. dinky creates missing Spaces and never removes any."
+      "description": "Workspaces across all displays, numbered from 1, one native Space each. dinky creates and removes Spaces to match."
+    },
+    "workspace-to-display": {
+      "type": "object",
+      "description": "By workspace number, the display it lives on: a pattern (main, secondary, or a case-insensitive part of the display's name as `dinky list-displays` prints it) or a list of them, the first that matches a connected display winning. Other workspaces, and these when no pattern matches, live on the main display.",
+      "propertyNames": { "pattern": "^[1-9][0-9]*$" },
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "string", "minLength": 1 },
+          { "type": "array", "items": { "type": "string", "minLength": 1 }, "minItems": 1 }
+        ]
+      }
     },
     "default-layout": {
       "type": "string",
@@ -55,8 +66,7 @@
         "type": "object",
         "additionalProperties": false,
         "properties": {
-          "gaps": { "$ref": "#/definitions/gaps" },
-          "workspaces": { "type": "integer", "minimum": 1, "description": "Spaces on this display in place of the general workspaces. dinky creates missing ones and never removes any." }
+          "gaps": { "$ref": "#/definitions/gaps" }
         }
       }
     },

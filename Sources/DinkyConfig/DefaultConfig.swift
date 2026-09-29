@@ -9,7 +9,7 @@ extension Config {
     # Every key and command: https://dinky.rodeo/configuration/
 
     start-at-login = true
-    workspaces = 5                  # per display; dinky creates missing Spaces, never removes any
+    workspaces = 5                  # across all displays, one native Space each
     default-layout = 'tiles'        # tiles | accordion
     follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
 
@@ -21,7 +21,12 @@ extension Config {
     inner = 8                       # or { horizontal = 8, vertical = 8 }
     outer = 8                       # or { top = 8, bottom = 8, left = 8, right = 8 }
 
-    # Overrides for one display: main, secondary, or part of its name as `dinky list-displays` prints it.
+    # Display patterns: main, secondary, or part of a name as `dinky list-displays` prints it.
+    # A workspace lives on the first display its patterns match, else on the main display.
+    # [workspace-to-display]
+    # 5 = 'secondary'
+
+    # Overrides for one display.
     # [display.main]
     # gaps.outer.top = 44
 
