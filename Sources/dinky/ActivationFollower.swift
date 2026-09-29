@@ -86,8 +86,11 @@ func installActivationFollower() {
         let previous = activePID
         activePID = app.processIdentifier
         activations += 1
-        guard followEnabled, uptime() >= pausedUntil, !isArrivalActivation() else { return }
-        activated(app.processIdentifier, name: app.localizedName ?? "?", previous: previous)
+        let name = app.localizedName ?? "?"
+        guard followEnabled else { return }
+        guard uptime() >= pausedUntil else { return log("activate \(name): not followed, following is paused") }
+        guard !isArrivalActivation() else { return log("activate \(name): not followed, macOS activated it on arrival") }
+        activated(app.processIdentifier, name: name, previous: previous)
     }
 }
 
@@ -102,21 +105,30 @@ private func isArrivalActivation() -> Bool {
 // forward. Otherwise waits for one to appear there, then follows the app unless the activation was macOS
 // replacing an app that went away, or something else happened meanwhile.
 private func activated(_ pid: pid_t, name: String, previous: pid_t) {
-    guard let here = AppState.shared.displays.focusedDisplay()?.currentSpaceID,
-          !windowSpaces(of: pid).contains(here) else { return }
+    guard let here = AppState.shared.displays.focusedDisplay()?.currentSpaceID else {
+        return log("activate \(name): not followed, no focused display")
+    }
+    guard !windowSpaces(of: pid).contains(here) else { return log("activate \(name): stayed, it has a window here") }
     let activatedAt = uptime()
     let activation = activations
     DispatchQueue.main.asyncAfter(deadline: .now() + .nanoseconds(Int(windowGrace))) {
-        guard activation == activations, lastSpaceChangeAt < activatedAt else { return }
-        if windowSpaces(of: pid).contains(here) {
-            print("\(stamp()) activate \(name): stayed, its new window opened here")
+        if activation != activations {
+            log("activate \(name): not followed, another app was activated")
+        } else if lastSpaceChangeAt >= activatedAt {
+            log("activate \(name): not followed, the Space changed meanwhile")
+        } else if windowSpaces(of: pid).contains(here) {
+            log("activate \(name): stayed, its new window opened here")
         } else if lastGone.pid == previous, lastGone.at + goneWindow > activatedAt, !hasWindowOnScreen(previous) {
-            print("\(stamp()) activate \(name): not followed, macOS replaced the app that went away")
+            log("activate \(name): not followed, macOS replaced the app that went away")
         } else {
             follow(pid, name: name)
         }
-        fflush(stdout)
     }
+}
+
+private func log(_ message: String) {
+    print("\(stamp()) \(message)")
+    fflush(stdout)
 }
 
 // Remembers a follow, and pauses following when they come too fast to be the user's doing.
@@ -141,24 +153,33 @@ private func hasWindowOnScreen(_ pid: pid_t) -> Bool {
     !normalWindows(of: pid, [.optionOnScreenOnly]).isEmpty
 }
 
+// Only the windows the window model tracks as normal count, so an app's hidden helper windows, which can sit
+// on any Space, don't. The window server's list supplies the front-to-back order.
 private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UInt32] {
+    let known = AppState.shared.coordinator?.model.windows ?? [:]
     let info = CGWindowListCopyWindowInfo(options, kCGNullWindowID) as? [[String: Any]] ?? []
     return info.compactMap { w in
-        guard w[kCGWindowOwnerPID as String] as? pid_t == pid, w[kCGWindowLayer as String] as? Int == 0 else { return nil }
-        return w[kCGWindowNumber as String] as? UInt32
+        guard w[kCGWindowOwnerPID as String] as? pid_t == pid, w[kCGWindowLayer as String] as? Int == 0,
+              let id = w[kCGWindowNumber as String] as? UInt32, known[id]?.isNormal == true else { return nil }
+        return id
     }
 }
 
 // Switches to the Space of the app's frontmost window.
 private func follow(_ pid: pid_t, name: String) {
     let model = AppState.shared.displays
-    guard uptime() >= pausedUntil,
-          let (space, display) = windowSpaces(of: pid).lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first,
-          space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else { return }
+    guard uptime() >= pausedUntil else { return log("activate \(name): not followed, following is paused") }
+    let windowSpaceIDs = windowSpaces(of: pid)
+    guard let (space, display) = windowSpaceIDs.lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first else {
+        return log("activate \(name): not followed, no display has its windows' Spaces \(windowSpaceIDs)")
+    }
+    guard space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else {
+        return log("activate \(name): not followed, already on Space \(space)")
+    }
     let spaces = display.spaces
     let text = String(format: "activate %@: followed %d -> %d on %@", name,
                       (spaces.firstIndex(of: display.currentSpaceID) ?? -1) + 1, (spaces.firstIndex(of: space) ?? -1) + 1,
                       display.name.isEmpty ? "display \(display.id)" : display.name)
-    print("\(stamp()) \(text)")
+    log(text)
     noteFollow(text)
 }
