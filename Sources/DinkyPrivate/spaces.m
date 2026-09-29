@@ -65,3 +65,26 @@ uint64_t dinky_create_space(CFStringRef displayUUID)
     if (spaceID == 0) fputs("spaces: create returned Space ID 0\n", stderr);
     return spaceID;
 }
+
+// -performWithWMBridgeDelegate hands the operation to AppKit's NSWMWindowCoordinator, which only exists in a
+// process with AppKit loaded; from a bare process nothing is removed. See RESULTS.md, "Removing Spaces".
+@protocol DinkyBridgedSpaceDestroyOperation <NSObject>
+- (instancetype)initWithSpaceID:(uint64_t)spaceID;
+- (id)performWithWMBridgeDelegate;
+@end
+
+bool dinky_destroy_space(uint64_t spaceID)
+{
+    Class cls = objc_getClass("SLSBridgedSpaceDestroyOperation");
+    if (!cls) {
+        fputs("spaces: class SLSBridgedSpaceDestroyOperation not found\n", stderr);
+        return false;
+    }
+    id operation = [(id<DinkyBridgedSpaceDestroyOperation>)[cls alloc] initWithSpaceID:spaceID];
+    if (![operation respondsToSelector:@selector(performWithWMBridgeDelegate)]) {
+        fputs("spaces: SLSBridgedSpaceDestroyOperation has no -performWithWMBridgeDelegate\n", stderr);
+        return false;
+    }
+    [(id<DinkyBridgedSpaceDestroyOperation>)operation performWithWMBridgeDelegate];
+    return true;
+}
