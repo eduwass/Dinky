@@ -32,6 +32,7 @@ fuzz seed="1" steps="150": build
 package version:
     scripts/package-release.sh {{quote(version)}}
 
-# Test, package, tag and publish a GitHub release from a clean, pushed main.
-release version:
+# Prepare, test, package, tag and publish a GitHub release from a clean, pushed main. The version defaults
+# to the latest tag plus 0.1.
+release version="":
     scripts/release.sh {{quote(version)}}
