@@ -44,6 +44,22 @@ extension Workspace {
     public mutating func move(_ direction: Direction) -> Bool {
         fullscreen = nil
         guard let focused, let path = root.path(of: focused) else { return false }
+        if case .fixed = algorithm, isFixedTree {
+            let (column, row) = switch direction {
+            case .left: (path[0] - 1, path[1])
+            case .right: (path[0] + 1, path[1])
+            case .up: (path[0], path[1] - 1)
+            case .down: (path[0], path[1] + 1)
+            }
+            guard root.children.indices.contains(column), root.container(at: [column]).children.indices.contains(row) else { return false }
+            let target = [column, row]
+            if let other = root.node(at: target).windows.first { return swap(focused, other) }
+            removeFixedWindow(at: path)
+            root.modify(at: [column]) { $0.replace(at: row, with: .window(focused)) }
+            trimEmptyOverflow()
+            focus(focused)
+            return true
+        }
         let axis = direction.orientation, forward = direction.isForward
         let parentPath = Array(path.dropLast()), index = path.last!
         let parent = root.container(at: parentPath)

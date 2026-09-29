@@ -81,10 +81,9 @@ final class Coordinator {
         } else {
             borders = nil
         }
-        for key in workspaces.keys {
-            workspaces[key]!.accordionPadding = CGFloat(config.accordion.padding)
-            workspaces[key]!.autoOrientAccordions = config.accordion.orientation == .auto
-        }
+        configureWorkspaces()
+        // A workspace switched to/from floating must release/acquire its existing windows too.
+        for window in model.windows.values { track(window) }
         fitToDisplays()
         dirty.formUnion(workspaces.keys)
         flush()
@@ -116,6 +115,7 @@ final class Coordinator {
     /// (so a window dragged to another Space stays there), and re-applies every tree on screen. The model
     /// publishes every window it re-reads, so `handle` tracks and forgets them.
     func reconcile() {
+        configureWorkspaces()
         model.reconcile()
         fitToDisplays()
         syncFocus()
@@ -157,8 +157,34 @@ final class Coordinator {
         for (id, placement) in placements where placement.space == old { placements[id]!.space = new }
     }
 
+    /// Resolve layout settings by a Space's current numbered position, which can change when Spaces are reordered.
+    private func configureWorkspaces() {
+        for key in workspaces.keys {
+            workspaces[key]!.accordionPadding = CGFloat(config.accordion.padding)
+            workspaces[key]!.autoOrientAccordions = config.accordion.orientation == .auto
+            let mode: LayoutMode = layout(for: key.space) == .accordion ? .accordion : .tiles
+            workspaces[key]!.setAlgorithm(algorithm(for: key.space), mode: mode)
+        }
+    }
+
     private func gaps(on display: Display) -> DinkyLayout.Gaps {
         DinkyLayout.Gaps(config.gaps(for: displays.monitor(display)))
+    }
+
+    private func layout(for space: UInt64) -> LayoutKind {
+        AppState.shared.numbers.number(of: space).map { config.layout(forWorkspace: $0) } ?? config.defaultLayout
+    }
+
+    private func algorithm(for space: UInt64) -> TilingAlgorithm {
+        guard layout(for: space) == .fixed else { return .dwindle }
+        let number = AppState.shared.numbers.number(of: space)
+        let expand: FixedExpansion = switch number.map({ config.expansion(forWorkspace: $0) }) ?? .columns {
+        case .rows: .rows
+        case .columns: .columns
+        case .accordion: .accordion
+        }
+        return .fixed(rows: number.map { config.fixedRows(forWorkspace: $0) } ?? 1,
+                      columns: number.map { config.fixedColumns(forWorkspace: $0) } ?? 1, expand: expand)
     }
 
     /// Classifies a window the first time it is on screen, then keeps it in the tree of its current Space
@@ -222,12 +248,16 @@ final class Coordinator {
     private func key(of window: Window) -> SpaceKey? {
         guard let display = displays.display(containingSpace: window.spaceID),
               display.userSpaces.contains(window.spaceID) else { return nil }
+        let number = AppState.shared.numbers.number(of: window.spaceID)
+        guard number.map({ config.tiling(forWorkspace: $0) }) ?? config.defaultTiling else { return nil }
+        let layout = layout(for: window.spaceID)
         let key = SpaceKey(display: display.uuid, space: window.spaceID)
         if workspaces[key] == nil {
             workspaces[key] = Workspace(bounds: display.visibleArea, gaps: gaps(on: display),
                                         accordionPadding: CGFloat(config.accordion.padding),
                                         autoOrientAccordions: config.accordion.orientation == .auto,
-                                        mode: config.defaultLayout == .accordion ? .accordion : .tiles)
+                                        mode: layout == .accordion ? .accordion : .tiles,
+                                        algorithm: algorithm(for: window.spaceID))
         }
         return key
     }

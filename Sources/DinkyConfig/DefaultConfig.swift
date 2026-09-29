@@ -10,8 +10,19 @@ extension Config {
 
     start-at-login = true
     workspaces = 5                  # across all displays, one native Space each
-    default-layout = 'tiles'        # tiles | accordion
+    default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed
+    default-tiling = true           # false leaves workspaces untiled unless overridden
     follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
+
+    # Example: only tile workspace 2 in a fixed 2x3 template.
+    # Empty cells stay empty; a seventh window adds a column by default.
+    # default-tiling = false
+    # [workspace.2]
+    # tiling = true
+    # layout = 'fixed'
+    # columns = 2
+    # rows = 3
+    # expand = 'columns'           # columns | rows | accordion (overflow in last cell)
 
     [accordion]
     padding = 30                    # points the neighbours peek out by

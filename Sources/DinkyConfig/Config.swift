@@ -12,8 +12,12 @@ public struct Config: Equatable {
     /// `[workspace-to-display]`: by workspace number, the display patterns it lives on, the first that matches
     /// a connected display winning. Other workspaces, and these when no pattern matches, live on the main display.
     public var workspaceDisplays: [Int: [MonitorPattern]] = [:]
-    /// The layout new containers start in.
+    /// Workspace layout, with 'tiles' retained as the old name for dwindle.
     public var defaultLayout = LayoutKind.tiles
+    /// Whether dinky tiles numbered workspaces unless overridden.
+    public var defaultTiling = true
+    /// Workspace numbers (1-based) with their own tiling settings.
+    public var workspaceLayouts: [Int: WorkspaceLayout] = [:]
     /// Cmd-Tab and Dock clicks go through the fast switch.
     public var followAppActivation = true
     public var accordion = Accordion()
@@ -85,6 +89,21 @@ public struct Config: Equatable {
             try assignments.done()
         }
         defaultLayout = try t.choice("default-layout") ?? defaultLayout
+        defaultTiling = try t.bool("default-tiling") ?? defaultTiling
+        if let workspacesTable = try t.table("workspace") {
+            for number in workspacesTable.keys {
+                guard let index = Int(number), index > 0, String(index) == number else {
+                    throw ConfigError(path: workspacesTable.path(number), "expected a positive workspace number")
+                }
+                let settings = try WorkspaceLayout(workspacesTable.table(number)!)
+                if (settings.columns != nil || settings.rows != nil || settings.expand != nil)
+                    && (settings.layout ?? defaultLayout) != .fixed {
+                    let key = settings.columns != nil ? "columns" : settings.rows != nil ? "rows" : "expand"
+                    throw ConfigError(path: workspacesTable.path("\(number).\(key)"), "only valid for a fixed layout")
+                }
+                workspaceLayouts[index] = settings
+            }
+        }
         followAppActivation = try t.bool("follow-app-activation") ?? followAppActivation
         accordion = try t.table("accordion").map(Accordion.init) ?? accordion
         gaps = try t.table("gaps").map { try gaps.applying(GapsPatch($0)) } ?? gaps
@@ -107,7 +126,53 @@ public struct Config: Equatable {
 }
 
 public enum LayoutKind: String, CaseIterable {
-    case tiles, accordion
+    case tiles, dwindle, accordion, fixed
+}
+
+public enum ExpansionKind: String, CaseIterable {
+    case rows, columns, accordion
+}
+
+/// A `[workspace.N]` override. Omitted keys inherit the top-level settings.
+public struct WorkspaceLayout: Equatable {
+    public var tiling: Bool?
+    public var layout: LayoutKind?
+    public var columns: Int?
+    public var rows: Int?
+    public var expand: ExpansionKind?
+
+    init(_ t: Table) throws {
+        tiling = try t.bool("tiling")
+        layout = try t.choice("layout")
+        columns = try t.int("columns")
+        rows = try t.int("rows")
+        expand = try t.choice("expand")
+        if let columns, columns < 1 { throw ConfigError(path: t.path("columns"), "must be at least 1") }
+        if let rows, rows < 1 { throw ConfigError(path: t.path("rows"), "must be at least 1") }
+        try t.done()
+    }
+}
+
+extension Config {
+    public func tiling(forWorkspace number: Int) -> Bool {
+        workspaceLayouts[number]?.tiling ?? defaultTiling
+    }
+
+    public func layout(forWorkspace number: Int) -> LayoutKind {
+        workspaceLayouts[number]?.layout ?? defaultLayout
+    }
+
+    public func fixedRows(forWorkspace number: Int) -> Int {
+        workspaceLayouts[number]?.rows ?? 1
+    }
+
+    public func fixedColumns(forWorkspace number: Int) -> Int {
+        workspaceLayouts[number]?.columns ?? 1
+    }
+
+    public func expansion(forWorkspace number: Int) -> ExpansionKind {
+        workspaceLayouts[number]?.expand ?? .columns
+    }
 }
 
 /// What a container's orientation becomes when it switches to accordion: `auto`, following its longer side,

@@ -26,14 +26,13 @@ extension Workspace {
     /// difference from its neighbour on the `edge` side, or from both neighbours when `edge` is nil.
     private mutating func resize(_ id: WindowID, by delta: CGFloat, along axis: Orientation, edge: Direction?) -> Bool {
         guard var path = root.path(of: id) else { return false }
-        let frames = tiledLayout().frames
         while let index = path.popLast() {
             let parent = root.container(at: path)
             let sides = edge.map { [$0.isForward ? index + 1 : index - 1] } ?? [index - 1, index + 1]
             let neighbours = sides.filter { parent.children.indices.contains($0) }
             guard parent.mode == .tiles, !neighbours.isEmpty, axisOfContainer(at: path) == axis else { continue }
-            // The container's laid-out rectangle is its windows' frames together.
-            let rect = Node.container(parent).windows.compactMap { frames[$0] }.reduce(CGRect.null) { $0.union($1) }
+            // Empty cells are part of the container's extent, even though they have no window frames.
+            let rect = root.rect(at: path, in: gaps.inset(bounds))
             let gap = gaps.inner(axis)
             let available = (axis == .horizontal ? rect.width : rect.height) - gap * CGFloat(parent.children.count - 1)
             // A share may shrink to the larger of `minimumRatio` and its minimum size, unless it is already below.

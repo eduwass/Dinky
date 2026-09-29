@@ -1,5 +1,15 @@
 import CoreGraphics
 
+/// How new windows are placed in a workspace.
+public enum TilingAlgorithm: Equatable, Sendable {
+    case dwindle
+    case fixed(rows: Int, columns: Int, expand: FixedExpansion)
+}
+
+public enum FixedExpansion: Equatable, Sendable {
+    case rows, columns, accordion
+}
+
 /// One Space's tiling state: the tree, focus, fullscreen and the geometry settings used to lay it out.
 public struct Workspace: Equatable, Sendable {
     /// The Space's visible rect, top-left origin.
@@ -9,6 +19,8 @@ public struct Workspace: Equatable, Sendable {
     /// Whether a container switching to accordion follows its longer side (`auto`), unless a `layout` command
     /// chose its orientation.
     public var autoOrientAccordions: Bool
+    public private(set) var algorithm: TilingAlgorithm
+    private var configuredMode: LayoutMode
     /// The tree. The root is always a container, possibly empty.
     public internal(set) var root: Container
     /// The focused window, if any.
@@ -21,12 +33,20 @@ public struct Workspace: Equatable, Sendable {
     /// An empty workspace whose root uses `mode`. An accordion root with `autoOrientAccordions` starts `auto`,
     /// as a container switched to accordion would, so it runs top to bottom on a tall display.
     public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, autoOrientAccordions: Bool = false,
-                mode: LayoutMode = .tiles) {
+                mode: LayoutMode = .tiles, algorithm: TilingAlgorithm = .dwindle) {
         self.bounds = bounds
         self.gaps = gaps
         self.accordionPadding = accordionPadding
         self.autoOrientAccordions = autoOrientAccordions
-        self.root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal, mode)
+        self.algorithm = algorithm
+        self.configuredMode = algorithm == .dwindle ? mode : .tiles
+        switch algorithm {
+        case .dwindle:
+            root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal, mode)
+        case .fixed(let rows, let columns, _):
+            precondition(rows > 0 && columns > 0)
+            root = Self.fixedRoot(rows: rows, columns: columns)
+        }
     }
 
     /// All windows in tree order.
@@ -35,10 +55,16 @@ public struct Workspace: Equatable, Sendable {
     /// Whether the window is tiled here.
     public func contains(_ id: WindowID) -> Bool { root.path(of: id) != nil }
 
-    /// Insert a window beside the focused one and focus it. The focused leaf is split along its longer side
-    /// (a square splits side by side); if its parent already runs that way, or is an accordion, it joins as a sibling.
+    /// Insert a window and focus it. Fixed workspaces fill empty cells before expanding. If a tree command
+    /// has changed the template structure, use the focused-leaf split instead of discarding the edits.
     public mutating func insert(_ id: WindowID) {
         guard !contains(id) else { return }
+        if case .fixed(let rows, let columns, _) = algorithm, windows.isEmpty, !isFixedTree {
+            root = Self.fixedRoot(rows: rows, columns: columns)
+        }
+        if case .fixed(_, _, let expansion) = algorithm, insertIntoFixed(id, expand: expansion) {
+            return focus(id)
+        }
         guard let focused, let path = root.path(of: focused) else {
             root.insert(.window(id), at: root.children.count)
             return focus(id)
@@ -62,12 +88,135 @@ public struct Workspace: Equatable, Sendable {
     /// If it was focused, focus moves to the window that took its place.
     public mutating func remove(_ id: WindowID) {
         guard let path = root.path(of: id) else { return }
-        root.modify(at: Array(path.dropLast())) { $0.remove(at: path.last!) }
-        normalize()
+        if case .fixed = algorithm, isFixedTree {
+            removeFixedWindow(at: path)
+            trimEmptyOverflow()
+        } else {
+            root.modify(at: Array(path.dropLast())) { $0.remove(at: path.last!) }
+            normalize()
+        }
+        if windows.isEmpty, case .fixed(let rows, let columns, _) = algorithm {
+            root = Self.fixedRoot(rows: rows, columns: columns)
+        }
         if fullscreen == id { fullscreen = nil }
         if focused == id {
             focused = nil
-            if let next = root.mostRecentWindow { focus(next) }
+            if let next = root.mostRecentWindow ?? windows.first { focus(next) }
+        }
+    }
+
+    static var emptyCell: Node { .container(Container(.horizontal)) }
+
+    mutating func removeFixedWindow(at path: [Int]) {
+        let cell = Array(path.prefix(2))
+        if path.count == 3, case .container(let stack) = root.node(at: cell) {
+            root.modify(at: cell) { $0.remove(at: path[2]) }
+            if stack.children.count == 2, case .container(let remaining) = root.node(at: cell) {
+                root.modify(at: [cell[0]]) { $0.replace(at: cell[1], with: remaining.children[0]) }
+            }
+        } else {
+            root.modify(at: [cell[0]]) { $0.replace(at: cell[1], with: Self.emptyCell) }
+        }
+    }
+
+    /// Reserved cells stay; trailing rows or columns created by overflow disappear once empty.
+    mutating func trimEmptyOverflow() {
+        guard case .fixed(let reservedRows, let reservedColumns, let expand) = algorithm else { return }
+        switch expand {
+        case .columns:
+            while root.children.count > reservedColumns, root.children.last!.windows.isEmpty {
+                root.remove(at: root.children.count - 1)
+            }
+        case .rows:
+            while root.container(at: [0]).children.count > reservedRows {
+                let last = root.container(at: [0]).children.count - 1
+                guard root.children.indices.allSatisfy({ root.node(at: [$0, last]).windows.isEmpty }) else { break }
+                for column in root.children.indices { root.modify(at: [column]) { $0.remove(at: last) } }
+            }
+        case .accordion: break
+        }
+    }
+
+    private static func fixedColumn(rows: Int) -> Node {
+        .container(Container(.vertical, .tiles, (0..<rows).map { _ in emptyCell }))
+    }
+
+    private static func fixedRoot(rows: Int, columns: Int) -> Container {
+        Container(.horizontal, .tiles, (0..<columns).map { _ in fixedColumn(rows: rows) })
+    }
+
+    /// Recognize the template in the tree. A manual tree command may break this shape; it must not be
+    /// silently undone just because another window appeared.
+    var isFixedTree: Bool {
+        guard root.orientation == .horizontal, root.mode == .tiles,
+              let first = root.children.first, case .container(let firstColumn) = first,
+              !firstColumn.children.isEmpty else { return false }
+        return root.children.allSatisfy { node in
+            guard case .container(let column) = node, column.orientation == .vertical,
+                  column.mode == .tiles, column.children.count == firstColumn.children.count else { return false }
+            return column.children.allSatisfy { cell in
+                switch cell {
+                case .window: true
+                case .container(let c): c.children.isEmpty || (c.mode == .accordion
+                    && c.children.allSatisfy { if case .window = $0 { true } else { false } })
+                }
+            }
+        }
+    }
+
+    /// Fill the first hole in row-major order, or add a row/column, or stack in the last cell.
+    private mutating func insertIntoFixed(_ id: WindowID, expand: FixedExpansion) -> Bool {
+        guard isFixedTree else { return false }
+        let rows = root.container(at: [0]).children.count
+        let columns = root.children.count
+        for row in 0..<rows {
+            for column in 0..<columns where root.node(at: [column, row]).windows.isEmpty {
+                root.modify(at: [column]) { $0.replace(at: row, with: .window(id)) }
+                return true
+            }
+        }
+        switch expand {
+        case .columns:
+            root.insert(Self.fixedColumn(rows: rows), at: columns)
+            root.modify(at: [columns]) { $0.replace(at: 0, with: .window(id)) }
+        case .rows:
+            for column in 0..<columns { root.modify(at: [column]) { $0.insert(Self.emptyCell, at: rows) } }
+            root.modify(at: [0]) { $0.replace(at: rows, with: .window(id)) }
+        case .accordion:
+            let cell = [columns - 1, rows - 1]
+            switch root.node(at: cell) {
+            case .window(let existing):
+                root.modify(at: [cell[0]]) { $0.replace(at: cell[1], with: .container(Container(.horizontal, .accordion, [.window(existing), .window(id)]))) }
+            case .container:
+                root.modify(at: cell) { $0.insert(.window(id), at: $0.children.count) }
+            }
+        }
+        return true
+    }
+
+    private var fixedWindows: [WindowID] {
+        let rows = root.container(at: [0]).children.count
+        return (0..<rows).flatMap { row in
+            root.children.indices.flatMap { root.node(at: [$0, row]).windows }
+        }
+    }
+
+    /// Switch algorithms. Changing the template deliberately rearranges the existing windows once.
+    public mutating func setAlgorithm(_ new: TilingAlgorithm, mode: LayoutMode = .tiles) {
+        let newMode: LayoutMode = new == .dwindle ? mode : .tiles
+        guard algorithm != new || configuredMode != newMode else { return }
+        let ids = isFixedTree ? fixedWindows : windows
+        algorithm = new
+        configuredMode = newMode
+        switch new {
+        case .dwindle:
+            root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal,
+                             mode, ids.map(Node.window))
+            if let focused { focus(focused) }
+        case .fixed(let rows, let columns, let expand):
+            root = Self.fixedRoot(rows: rows, columns: columns)
+            for id in ids { _ = insertIntoFixed(id, expand: expand) }
+            if let focused { focus(focused) }
         }
     }
 
@@ -114,6 +263,27 @@ public struct Workspace: Equatable, Sendable {
     /// The window snapped to the `side` edge: containers along that axis give their first or last child,
     /// the others their most recently focused one. Adapted from AeroSpace's findLeafWindowRecursive(snappedTo:).
     public func edgeWindow(_ side: Direction) -> WindowID? {
+        if case .fixed = algorithm, isFixedTree {
+            // A boundary cell may be empty. Find the outermost occupied one instead of descending into a hole.
+            let frames = tiledLayout().frames
+            let focusedFrame = focused.flatMap { frames[$0] }
+            func rank(_ frame: CGRect) -> (CGFloat, CGFloat) {
+                let edge: CGFloat = switch side {
+                case .left: frame.minX
+                case .right: -frame.maxX
+                case .up: frame.minY
+                case .down: -frame.maxY
+                }
+                let across = side.orientation == .horizontal
+                    ? abs(frame.midY - (focusedFrame?.midY ?? bounds.midY))
+                    : abs(frame.midX - (focusedFrame?.midX ?? bounds.midX))
+                return (edge, across)
+            }
+            return frames.keys.min { a, b in
+                let first = rank(frames[a]!), second = rank(frames[b]!)
+                return first == second ? a < b : first < second
+            }
+        }
         var container = root, rect = gaps.inset(bounds)
         while !container.children.isEmpty {
             let index = container.axis(in: rect) != side.orientation ? container.activeIndex

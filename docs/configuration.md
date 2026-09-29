@@ -23,8 +23,47 @@ permalink: /configuration/
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
 | `workspaces` | `5` | Workspaces across all displays, one native Space each. dinky creates and removes Spaces to match. |
-| `default-layout` | `'tiles'` | `'tiles'` or `'accordion'` for new containers. |
+| `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, or `'fixed'`. |
+| `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
+
+## `[workspace.<number>]`
+
+Override `default-tiling` or `default-layout` for a globally numbered
+workspace. `layout = 'fixed'` reserves every cell in its template from the start.
+`rows` and `columns` each default to `1`; with two columns and three rows, one
+window occupies one sixth of the workspace, and an empty cell stays empty when
+another window closes. New windows fill holes first, left to right, top to bottom.
+
+When all cells are occupied, `expand` chooses what happens next: `'columns'`
+(default) adds a column, `'rows'` adds a row, or `'accordion'` stacks overflow
+windows in the last cell. Expansion resizes existing cells but does not rearrange
+their positions. An overflow row or column disappears once empty; reserved
+template cells remain. A tree command can still edit the layout; if it changes the
+template structure, new windows split the focused tile instead of resetting
+those edits. Changing template settings in the config rebuilds the tree once.
+
+For example, to tile only workspace 2 (and send new Ghostty windows there using a rule):
+
+```toml
+default-tiling = false
+
+[workspace.2]
+tiling = true
+layout = 'fixed'
+columns = 2
+rows = 3
+# expand = 'columns' # or 'rows' or 'accordion'
+
+[[rules]]
+app-id = 'com.mitchellh.ghostty'
+run = 'move-window-to-workspace 2'
+```
+
+`rows`, `columns`, and `expand` apply only to a fixed layout. `layout = 'accordion'`
+remains available; conceptually it resembles a 1×1 fixed template with accordion
+overflow, but keeps the existing accordion orientation behavior. Workspace
+numbering starts at 1.
 
 ## `[accordion]`
 
@@ -149,8 +188,11 @@ The default `alt-` bindings take over Option-letter characters.
 
 start-at-login = true
 workspaces = 5                  # across all displays, one native Space each
-default-layout = 'tiles'        # tiles | accordion
+default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed
+default-tiling = true
 follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
+
+# Example: default-tiling = false; [workspace.2] tiling = true; layout = 'fixed'; columns = 2; rows = 3
 
 [accordion]
 padding = 30                    # points the neighbours peek out by

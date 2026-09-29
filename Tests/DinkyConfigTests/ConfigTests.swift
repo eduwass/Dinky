@@ -8,6 +8,7 @@ final class ConfigTests: XCTestCase {
         XCTAssertTrue(config.startAtLogin)
         XCTAssertEqual(config.workspaces, 5)
         XCTAssertEqual(config.defaultLayout, .tiles)
+        XCTAssertTrue(config.defaultTiling)
         XCTAssertTrue(config.followAppActivation)
         XCTAssertEqual(config.accordion.padding, 30)
         XCTAssertEqual(config.accordion.orientation, .auto)
@@ -56,7 +57,43 @@ final class ConfigTests: XCTestCase {
         XCTAssertEqual(config.defaultLayout, .accordion)
         XCTAssertFalse(config.followAppActivation)
         assertError("workspaces = 0\n", path: "workspaces", line: 1, contains: "at least 1")
-        assertError("default-layout = 'stack'\n", path: "default-layout", line: 1, contains: "'tiles', 'accordion'")
+        assertError("default-layout = 'stack'\n", path: "default-layout", line: 1, contains: "'tiles', 'dwindle', 'accordion', 'fixed'")
+    }
+
+    func testWorkspaceLayouts() throws {
+        let config = try Config.parse("""
+        default-tiling = false
+        [workspace.2]
+        tiling = true
+        layout = 'fixed'
+        columns = 2
+        rows = 3
+        expand = 'accordion'
+        [workspace.3]
+        layout = 'accordion'
+        """)
+        XCTAssertFalse(config.tiling(forWorkspace: 1))
+        XCTAssertTrue(config.tiling(forWorkspace: 2))
+        XCTAssertEqual(config.layout(forWorkspace: 2), .fixed)
+        XCTAssertEqual(config.fixedColumns(forWorkspace: 2), 2)
+        XCTAssertEqual(config.fixedRows(forWorkspace: 2), 3)
+        XCTAssertEqual(config.expansion(forWorkspace: 2), .accordion)
+        XCTAssertEqual(config.layout(forWorkspace: 3), .accordion)
+        XCTAssertEqual(config.fixedRows(forWorkspace: 3), 1)
+        XCTAssertEqual(config.fixedColumns(forWorkspace: 3), 1)
+        XCTAssertEqual(config.expansion(forWorkspace: 3), .columns)
+        assertError("[workspace.0]\nlayout = 'fixed'\n", path: "workspace.0", line: 1, contains: "positive workspace number")
+        assertError("[workspace.2]\nlayout = 'fixed'\ncolumns = 0\n", path: "workspace.2.columns", line: 3, contains: "at least 1")
+        assertError("[workspace.2]\nlayout = 'fixed'\nrows = 0\n", path: "workspace.2.rows", line: 3, contains: "at least 1")
+        assertError("[workspace.2]\nlayout = 'dwindle'\ncolumns = 2\n", path: "workspace.2.columns", line: 3, contains: "only valid")
+        assertError("[workspace.2]\ncolumns = 2\n", path: "workspace.2.columns", line: 2, contains: "only valid")
+        let inherited = try Config.parse("default-layout = 'fixed'\n[workspace.2]\ncolumns = 3\n")
+        XCTAssertEqual(inherited.fixedColumns(forWorkspace: 2), 3)
+        XCTAssertEqual(inherited.fixedRows(forWorkspace: 2), 1)
+        let oneByOne = try Config.parse("[workspace.2]\nlayout = 'fixed'\n")
+        XCTAssertEqual(oneByOne.fixedColumns(forWorkspace: 2), 1)
+        XCTAssertEqual(oneByOne.fixedRows(forWorkspace: 2), 1)
+        assertError("[workspace.2]\nlayout = 'fixed'\nexpand = 'diagonal'\n", path: "workspace.2.expand", line: 3, contains: "'rows', 'columns', 'accordion'")
     }
 
     func testUnknownTopLevelKeyFails() {

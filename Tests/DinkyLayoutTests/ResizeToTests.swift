@@ -86,6 +86,18 @@ final class ResizeToTests: XCTestCase {
         XCTAssertFalse(one.resize(1, to: CGSize(width: 700, height: 400)))
     }
 
+    func testFixedLayoutDragIncludesEmptyCellsInItsExtent() {
+        var horizontal = Workspace(bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .columns))
+        horizontal.insert(1)
+        XCTAssertTrue(horizontal.resize(1, to: CGSize(width: 600, height: 900), moving: [.right]))
+        XCTAssertEqual(horizontal.layout().frames[1]?.width, 600)
+
+        var vertical = Workspace(bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 3, columns: 1, expand: .rows))
+        vertical.insert(1)
+        XCTAssertTrue(vertical.resize(1, to: CGSize(width: 1000, height: 400), moving: [.down]))
+        XCTAssertEqual(vertical.layout().frames[1]?.height, 400)
+    }
+
     func testLayoutReproducesTheRequestedSizeWithGaps() {
         var ws = grid()
         ws.gaps = Gaps(all: 10)

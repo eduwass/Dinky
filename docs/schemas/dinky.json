@@ -30,9 +30,28 @@
     },
     "default-layout": {
       "type": "string",
-      "enum": ["tiles", "accordion"],
+      "enum": ["tiles", "dwindle", "accordion", "fixed"],
       "default": "tiles",
-      "description": "The layout new containers start in."
+      "description": "Workspace layout. tiles is the original name for dwindle."
+    },
+    "default-tiling": { "type": "boolean", "default": true, "description": "Whether dinky tiles numbered workspaces by default." },
+    "workspace": {
+      "type": "object",
+      "description": "Tiling overrides for numbered workspaces on every display (1-based).",
+      "propertyNames": { "pattern": "^[1-9][0-9]*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "tiling": { "type": "boolean" },
+          "layout": { "type": "string", "enum": ["tiles", "dwindle", "accordion", "fixed"] },
+          "columns": { "type": "integer", "minimum": 1, "default": 1, "description": "Reserved columns for a fixed layout." },
+          "rows": { "type": "integer", "minimum": 1, "default": 1, "description": "Reserved rows for a fixed layout." },
+          "expand": { "type": "string", "enum": ["columns", "rows", "accordion"], "default": "columns", "description": "Where overflow windows go when every fixed cell is full." }
+        },
+        "if": { "required": ["layout"], "properties": { "layout": { "enum": ["tiles", "dwindle", "accordion"] } } },
+        "then": { "not": { "anyOf": [ { "required": ["columns"] }, { "required": ["rows"] }, { "required": ["expand"] } ] } }
+      }
     },
     "follow-app-activation": {
       "type": "boolean",
