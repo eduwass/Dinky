@@ -82,6 +82,20 @@ final class SwapAndMoveTests: XCTestCase {
         XCTAssertEqual(shape(ws.root), "h[1 v[2 3]]")
     }
 
+    func testMovePastARootAccordionEdgeLeavesItForATile() {
+        var ws = workspace(3, mode: .accordion)
+        XCTAssertTrue(ws.move(.right))
+        XCTAssertEqual(shape(ws.root), "h[ah[1 2] 3]")
+        XCTAssertTrue(ws.move(.left), "moving back enters the accordion at its near edge")
+        XCTAssertEqual(shape(ws.root), "ah[1 2 3]")
+    }
+
+    func testMoveAtTheEdgeOfALoneAccordionWindowDoesNothing() {
+        var ws = workspace(1, mode: .accordion)
+        XCTAssertFalse(ws.move(.right))
+        XCTAssertEqual(shape(ws.root), "ah[1]")
+    }
+
     func testMoveAcrossRootWrapsIt() {
         var ws = workspace(2)
         ws.focus(1)
