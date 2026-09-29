@@ -45,7 +45,7 @@ extension Command {
         Doc(syntax: "fullscreen",
             description: "Toggle the focused window filling the workspace. The tree is kept."),
         Doc(syntax: "flatten-workspace-tree",
-            description: "Put every window on the workspace back into one flat container."),
+            description: "Put every window on the workspace back into its configured layout, undoing tree edits."),
         Doc(syntax: "balance-sizes",
             description: "Give every window on the focused workspace an equal share of its container."),
         Doc(syntax: "retile",

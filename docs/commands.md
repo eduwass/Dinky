@@ -25,7 +25,7 @@ prints it.
 | `resize <smart\|width\|height> <+n\|-n>` | Resize by n points. |
 | `layout <tiles\|accordion\|horizontal\|vertical\|auto\|h_tiles\|v_tiles\|h_accordion\|v_accordion\|floating\|tiling>...` | Set the container's layout, or float/tile the window. Given several, applies the first that isn't current, so `layout floating tiling` toggles. |
 | `fullscreen` | Toggle filling the workspace (not macOS full screen). |
-| `flatten-workspace-tree` | Put every window back in one container. |
+| `flatten-workspace-tree` | Put every window back into the workspace's configured layout. |
 | `balance-sizes` | Give every window an equal share. |
 | `retile` | Re-read windows and re-apply every layout. |
 | `mode <name>` | Switch binding mode. |

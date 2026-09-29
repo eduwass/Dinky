@@ -165,7 +165,8 @@ final class FixedLayoutTests: XCTestCase {
     func testEmptyEditedTreeRestoresTheFixedTemplate() {
         var ws = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 3, columns: 2, expand: .columns))
         ws.insert(1)
-        ws.flatten()
+        ws.setMode(.accordion)
+        XCTAssertFalse(ws.isFixedTree)
         ws.remove(1)
         ws.insert(2)
         XCTAssertEqual(ws.layout().frames[2], rect(0, 0, 600, 300))
@@ -240,6 +241,29 @@ final class FlattenAndModeTests: XCTestCase {
         XCTAssertEqual(shape(ws.root), "h[1 2 3 4 5]")
         assertRatios(ws.root.ratios, Array(repeating: 0.2, count: 5))
         XCTAssertEqual(ws.focused, 5)
+    }
+
+    func testFlattenRestoresTheConfiguredAccordion() {
+        var ws = workspace(3, mode: .accordion)
+        ws.focus(2)
+        ws.setMode(.tiles)
+        ws.join(.right)
+        ws.flatten()
+        XCTAssertEqual(shape(ws.root), "ah[1 2 3]")
+        XCTAssertEqual(ws.focused, 2)
+    }
+
+    func testFlattenRestoresTheFixedTemplate() {
+        var ws = Workspace(bounds: rect(0, 0, 1200, 600), algorithm: .fixed(rows: 1, columns: 3, expand: .columns))
+        for id in 1...3 { ws.insert(WindowID(id)) }
+        ws.focus(3)
+        ws.join(.left)
+        XCTAssertFalse(ws.isFixedTree)
+        ws.flatten()
+        XCTAssertTrue(ws.isFixedTree)
+        XCTAssertEqual(ws.layout().frames[1], rect(0, 0, 400, 600))
+        XCTAssertEqual(ws.layout().frames[3], rect(800, 0, 400, 600))
+        XCTAssertEqual(ws.focused, 3)
     }
 
     func testSetModeChangesFocusedParent() {

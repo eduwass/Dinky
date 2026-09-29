@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `flatten-workspace-tree` puts windows back into the workspace's configured layout: a fixed grid gets its cells back, an accordion workspace becomes an accordion again.
+
 ## 0.4
 
 **Upgrading:** workspaces are now numbered across all displays. `workspaces` is the total rather than a count per display, and `workspaces` inside `[display.<pattern>]` is now a config error. Use `[workspace-to-display]` to put a workspace on a particular display.

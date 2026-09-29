@@ -205,19 +205,23 @@ public struct Workspace: Equatable, Sendable {
     public mutating func setAlgorithm(_ new: TilingAlgorithm, mode: LayoutMode = .tiles) {
         let newMode: LayoutMode = new == .dwindle ? mode : .tiles
         guard algorithm != new || configuredMode != newMode else { return }
-        let ids = isFixedTree ? fixedWindows : windows
         algorithm = new
         configuredMode = newMode
-        switch new {
+        rebuild()
+    }
+
+    /// Lay the windows out afresh in the configured layout, keeping their order and focus.
+    private mutating func rebuild() {
+        let ids = isFixedTree ? fixedWindows : windows
+        switch algorithm {
         case .dwindle:
-            root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal,
-                             mode, ids.map(Node.window))
-            if let focused { focus(focused) }
+            root = Container(configuredMode == .accordion && autoOrientAccordions ? .auto : .horizontal,
+                             configuredMode, ids.map(Node.window))
         case .fixed(let rows, let columns, let expand):
             root = Self.fixedRoot(rows: rows, columns: columns)
             for id in ids { _ = insertIntoFixed(id, expand: expand) }
-            if let focused { focus(focused) }
         }
+        if let focused { focus(focused) }
     }
 
     /// Put `new` in `old`'s place, keeping its size, focus and fullscreen: another tab of the same native tab group
@@ -230,12 +234,10 @@ public struct Workspace: Equatable, Sendable {
         minimumSizes[old] = nil
     }
 
-    /// Collapse all nesting into the root, keeping window order, with equal ratios.
+    /// Undo every tree edit: the windows go back into the configured layout, in order, with equal ratios.
     public mutating func flatten() {
         fullscreen = nil
-        let windows = windows
-        root = Container(root.orientation, root.mode, windows.map(Node.window))
-        if let focused { focus(focused) }
+        rebuild()
     }
 
     /// Focus a window and mark it most recent along its path, so accordions show it on top.
