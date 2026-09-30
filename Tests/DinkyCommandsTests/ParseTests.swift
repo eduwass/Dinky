@@ -98,8 +98,29 @@ struct ParseTests {
         #expect(Set(Command.all.map(\.name)).count == Command.all.count)
     }
 
+    /// One line that parses, per documented command.
+    private static let knownGood = [
+        "workspace 1", "workspace-back-and-forth", "move-window-to-workspace 2 --follow", "move-window-to-display next",
+        "focus left", "focus-monitor next", "move left", "join-with left", "resize smart +10", "layout tiles",
+        "fullscreen", "flatten-workspace-tree", "balance-sizes", "retile", "mode main", "reload-config", "enable on",
+        "list-workspaces", "list-windows", "list-monitors", "list-displays", "debug-state", "exec-and-forget true",
+    ]
+
+    @Test func `Known-good lines cover exactly the documented names`() {
+        let names = Self.knownGood.map { String($0.prefix { $0 != " " }) }
+        #expect(names.count == Self.knownGood.count, "a name has two known-good lines")
+        #expect(Set(names) == Set(Command.all.map(\.name)))
+    }
+
+    @Test(arguments: Command.all.map(\.name))
+    func `Every documented name parses`(name: String) throws {
+        let line = try #require(Self.knownGood.first { $0.hasPrefix(name + " ") || $0 == name }, "no known-good line")
+        #expect(Command.words(line).first == name)
+        #expect(throws: Never.self) { try parse(line) }
+    }
+
     @Test(arguments: Command.all.map(\.name).filter { $0 != "exec-and-forget" })
-    func `Every documented name parses something`(name: String) {
+    func `Every documented name rejects extra words`(name: String) {
         #expect(throws: (any Error).self) { try parse("\(name) bogus extra words") }
     }
 }

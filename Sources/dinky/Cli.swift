@@ -10,6 +10,11 @@ func runCli(_ args: [String]) -> Int32 {
         fputs("dinky: \(error)\n", stderr)
         return 1
     }
+    return sendAndPrint(line)
+}
+
+/// Sends a line to the running app and prints its reply: the exit status is 0 when it succeeded.
+func sendAndPrint(_ line: String) -> Int32 {
     guard let reply = sendToApp(line) else {
         fputs("dinky: app is not running (\(socketPath))\n", stderr)
         return 1

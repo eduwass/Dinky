@@ -206,11 +206,4 @@ final class Recovery {
 }
 
 /// `dinky recover`: asks the running app to restore the windows a crashed session left tiled.
-func runRecover() -> Int32 {
-    guard let reply = sendToApp("recover") else {
-        fputs("dinky: app is not running (\(socketPath))\n", stderr)
-        return 1
-    }
-    if !reply.text.isEmpty { fputs(reply.text + "\n", reply.ok ? stdout : stderr) }
-    return reply.ok ? 0 : 1
-}
+func runRecover() -> Int32 { sendAndPrint("recover") }

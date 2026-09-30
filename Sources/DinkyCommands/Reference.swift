@@ -1,5 +1,6 @@
 // The command reference: one line of syntax and one of description per command, in the order a user
-// would look for them. Parse errors quote the syntax from here, and the docs are generated from it.
+// would look for them. This list owns the set of command names and their syntax: parse errors quote it and
+// `dinky help` prints it. docs/commands.md owns the prose, and DocsTests holds its table to these names.
 
 extension Command {
     public struct Doc: Equatable, Sendable {
@@ -55,7 +56,7 @@ extension Command {
         Doc(syntax: "reload-config",
             description: "Reload ~/.config/dinky/dinky.toml. On an error the previous config stays."),
         Doc(syntax: "enable <on|off|toggle>",
-            description: "Turn dinky's key bindings and app-activation following on or off."),
+            description: "Turn dinky on or off. Off stops tiling and restores every window to its original frame and Space."),
         Doc(syntax: "list-workspaces [--all|--focused|--monitor <focused|all|n>...] [--visible [no]] [--empty [no]] [--format <format>]",
             description: "Print workspace numbers, one per line, of the focused display by default. --all covers every display. "
                 + "--focused prints the focused workspace. "
