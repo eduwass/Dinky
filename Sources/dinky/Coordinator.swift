@@ -11,8 +11,8 @@ struct Placement {
     var space: UInt64?
 }
 
-// The serialized owner of layout state: one Workspace per Space, keyed by Space ID, fed by the window and display models,
-// applied through the frame applier. Every change marks the trees it touched dirty; `flush` applies the
+// The serialized owner of layout state: one Workspace per Space, keyed by Space ID, fed by the window and
+// display models, applied through the frame applier. Every change marks the trees it touched dirty; `flush` applies the
 // dirty trees that are on screen. Main thread only.
 final class Coordinator {
     let model = WindowModel()

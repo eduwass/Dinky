@@ -324,8 +324,6 @@ public struct Workspace: Equatable, Sendable {
     }
 
     /// The rectangle the container at `path` is laid out in, gaps and minimum sizes applied.
-    func rect(at path: [Int]) -> CGRect { rect(at: path, in: tiledLayout()) }
-
     func rect(at path: [Int], in layout: Layout) -> CGRect {
         layout.containerRects[path] ?? gaps.inset(bounds)
     }

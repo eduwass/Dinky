@@ -39,7 +39,8 @@ final class Recovery {
     private var applier: FrameApplier!
 
     /// Carries over a crashed session's journal, then journals windows as the model sees them, so each frame is
-    /// the one the model read before dinky wrote any. Restores write through the coordinator's applier, so there is one owner of the minimum sizes it learns.
+    /// the one the model read before dinky wrote any. Restores write through the coordinator's applier, so the
+    /// minimum sizes it learns have one owner.
     func start(model: WindowModel, applier: FrameApplier) {
         self.model = model
         self.applier = applier
