@@ -244,7 +244,7 @@ public struct FocusFollowsMouse: Equatable {
 public struct Animations: Equatable {
     public var enabled = true
     /// Roughly how long a window takes to reach its tile. 0 jumps, as with animations off.
-    public var durationMs = 50
+    public var durationMs = 150
 
     public init() {}
 

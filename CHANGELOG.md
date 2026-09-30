@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+### Motion
+
+- Windows take about 150 ms to glide to their tiles by default, up from 50. Set `[animations] duration-ms` to change it.
+
 ### Fixes
 
 - The minimum sizes dinky learns for an app are kept across quits and `enable off`; restoring windows no longer overwrites them with the ones from launch.

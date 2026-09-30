@@ -131,7 +131,7 @@ gaps.outer.top = 44
 | Key | Default | |
 |---|---|---|
 | `enabled` | `true` | Windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on. |
-| `duration-ms` | `50` | Roughly how long a window takes to arrive, up to 1000. `0` jumps. |
+| `duration-ms` | `150` | Roughly how long a window takes to arrive, up to 1000. `0` jumps. |
 
 ## `[drag]`
 
@@ -247,7 +247,7 @@ accordion-edges = true          # resting on a peeking accordion edge focuses th
 
 [animations]
 enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
-duration-ms = 50                # roughly how long a window takes to arrive
+duration-ms = 150               # roughly how long a window takes to arrive
 
 [drag]
 placeholders = true             # outline where a dragged tile came from and the tile it will swap with

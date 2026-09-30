@@ -56,7 +56,7 @@ extension Config {
 
     [animations]
     enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
-    duration-ms = 50                # roughly how long a window takes to arrive
+    duration-ms = 150               # roughly how long a window takes to arrive
 
     [drag]
     placeholders = true             # outline where a dragged tile came from and the tile it will swap with

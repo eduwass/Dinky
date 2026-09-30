@@ -19,7 +19,7 @@ final class Animator: NSObject {
     private var finishes: [UInt64: () -> Void] = [:]
     private var link: CADisplayLink?
     private var lastTick: CFTimeInterval?
-    private var spring = Spring(response: 0.05, damping: 0.9)
+    private var spring = Spring(response: 0.15, damping: 0.9)
     private var timeout = 1.0
     /// Where windows came to rest the last time they were written unanimated, by the frame they were asked for.
     /// An app that snaps to a grid (Terminal) or keeps a minimum size never reaches its tile exactly, and
