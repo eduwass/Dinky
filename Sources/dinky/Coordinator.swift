@@ -217,6 +217,8 @@ final class Coordinator {
 
     private func forget(_ id: WindowID) {
         attempts[id] = nil
+        applier.forget(id)
+        animator.forget(id)
         heldTabs[id] = nil
         notTabs.remove(id)
         guard let placement = placements.removeValue(forKey: id), let space = placement.space,

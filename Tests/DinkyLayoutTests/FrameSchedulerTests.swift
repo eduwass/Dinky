@@ -222,6 +222,29 @@ struct FrameSchedulerTests {
         #expect(scheduler.minimumSizes == [10: CGSize(width: 574, height: 300)])
     }
 
+    @Test func `A window at its recorded minimum is matched without a write`() {
+        let fake = FakeWindows(minWidths: [10: 574])
+        let scheduler = fake.scheduler()
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        let again = submitAndWait(scheduler, [job(1, 10, 0)])
+        #expect(again.map(\.written) == [false])
+        #expect(again.map(\.matched) == [true], "as close as it will come is where it was asked to go")
+    }
+
+    @Test func `Forget clears a window's minimum and its unconfirmed refusal`() {
+        let fake = FakeWindows(minWidths: [10: 574, 20: 115])
+        let scheduler = fake.scheduler()
+        _ = submitAndWait(scheduler, [job(1, 10, 0), job(1, 20, 100)])
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        #expect(scheduler.minimumSizes[10] != nil)
+        #expect(scheduler.unconfirmedMinimums == [20])
+        scheduler.forget(10)
+        scheduler.forget(20)
+        #expect(scheduler.minimumSizes == [:])
+        #expect(scheduler.unconfirmedMinimums.isEmpty)
+    }
+
     @Test func `Unreadable window is written once and reported unmatched`() {
         var writes = 0
         let scheduler = FrameScheduler(settle: 0, read: { _ in nil }, write: { _ in writes += 1 })
@@ -310,6 +333,22 @@ struct FrameSchedulerStepTests {
         _ = submitAndWait(other, [job(1, 20, 0)])
         _ = submitAndWait(other, [job(1, 20, 0)])
         #expect(other.minimumSizes[20]?.width == 250)
+    }
+
+    @Test func `A pass that finds the window in place forgets the sizes steps asked for`() {
+        // Stepped to 300 wide and already there when the pass arrives, so nothing is written.
+        let fake = FakeWindows(minWidths: [10: 300])
+        let scheduler = fake.scheduler()
+        var step = job(1, 10, 0)
+        step.frame.size.width = 300
+        scheduler.step([step])
+        #expect(submitAndWait(scheduler, [step]).map(\.written) == [false])
+
+        // Then it refuses 100 at 300: two passes make that a minimum, as for a window never stepped.
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        #expect(scheduler.minimumSizes[10] == nil, "one refusal could be an app still catching up")
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        #expect(scheduler.minimumSizes[10]?.width == 300)
     }
 
     @Test func `A window that left shows no minimum`() {

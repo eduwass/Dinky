@@ -75,6 +75,12 @@ final class Animator: NSObject {
         for result in results { landed[result.job.id] = result.got.map { (result.job.frame, $0) } }
     }
 
+    /// Forgets a window that is gone, so a new window given its id starts fresh.
+    func forget(_ id: WindowID) {
+        entries[id] = nil
+        landed[id] = nil
+    }
+
     /// Stops every animation where it is. Nothing is finished.
     func cancel() {
         entries = [:]

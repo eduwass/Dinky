@@ -64,7 +64,7 @@ final class AppState {
         // report workspace numbers.
         numbers.arrange()
         hooks.start()
-        recovery.start(model: coordinator.model)
+        recovery.start(model: coordinator.model, applier: coordinator.applier)
         hoverFocus.update(config: config.focusFollowsMouse)
     }
 

@@ -5,12 +5,18 @@ import DinkyPrivate
 // Applies a layout through Accessibility. Scheduling (a queue per app, newest frame wins, one retry)
 // lives in FrameScheduler; this file is only the AX side: element lookup, writes, readback, raises.
 final class FrameApplier {
+    /// A window by its owner too: window ids are reused, so an id alone can name another app's window.
+    private struct Key: Hashable {
+        let pid: pid_t
+        let id: WindowID
+    }
+
     /// How long one AX call to an app may block before giving up, so a hung app only stalls its own queue.
     static let timeout: Float = 1
 
     private var scheduler: FrameScheduler!
     private let lock = NSLock()
-    private var elements: [WindowID: AXUIElement] = [:]
+    private var elements: [Key: AXUIElement] = [:]
     /// The largest minimum size any window of an app has shown, by bundle id. Kept across sessions in
     /// Application Support, so the write-settle-retry chain that discovers a minimum runs once per app ever.
     private var appMinimums: [String: CGSize] = [:]
@@ -43,6 +49,12 @@ final class FrameApplier {
     /// app has refused, so a new window of a known app is laid out right the first time.
     func minimumSize(of id: WindowID, app: String?) -> CGSize? {
         scheduler.minimumSizes[id] ?? app.flatMap { app in lock.withLock { appMinimums[app] } }
+    }
+
+    /// Forgets a window that is gone: its element and what the scheduler learned about it.
+    func forget(_ id: WindowID) {
+        lock.withLock { elements = elements.filter { $0.key.id != id } }
+        scheduler.forget(id)
     }
 
     /// Drops every frame not written yet.
@@ -79,12 +91,16 @@ final class FrameApplier {
         let retried = results.filter(\.retried)
         guard !retried.isEmpty else { return }
         let minimums = scheduler.minimumSizes
+        var changed = false
         for result in retried {
             guard let minimum = minimums[result.job.id],
                   let app = NSRunningApplication(processIdentifier: result.job.pid)?.bundleIdentifier else { continue }
-            lock.withLock { appMinimums[app] = appMinimums[app]?.grown(to: minimum) ?? minimum }
+            lock.withLock {
+                let grown = appMinimums[app]?.grown(to: minimum) ?? minimum
+                if appMinimums[app] != grown { appMinimums[app] = grown; changed = true }
+            }
         }
-        saveMinimums()
+        if changed { saveMinimums() }
     }
 
     private static func loadMinimums() -> [String: CGSize] {
@@ -120,9 +136,10 @@ final class FrameApplier {
     }
 
     private func element(pid: pid_t, id: WindowID) -> AXUIElement? {
-        if let cached = lock.withLock({ elements[id] }) { return cached }
+        let key = Key(pid: pid, id: id)
+        if let cached = lock.withLock({ elements[key] }) { return cached }
         guard let element = axWindow(pid: pid, wid: id, timeout: Self.timeout) else { return nil }
-        lock.withLock { elements[id] = element }
+        lock.withLock { elements[key] = element }
         return element
     }
 
