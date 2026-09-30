@@ -36,6 +36,9 @@ final class FrameApplier {
     /// Sizes windows refused to shrink below, from readback.
     var minimumSizes: [WindowID: CGSize] { scheduler.minimumSizes }
 
+    /// Windows that refused a size once, waiting for another pass to confirm it.
+    var unconfirmedMinimums: Set<WindowID> { scheduler.unconfirmedMinimums }
+
     /// The size a window refused to shrink below or, if it has refused nothing yet, the largest any window of its
     /// app has refused, so a new window of a known app is laid out right the first time.
     func minimumSize(of id: WindowID, app: String?) -> CGSize? {

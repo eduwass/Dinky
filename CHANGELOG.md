@@ -4,6 +4,7 @@
 
 - Windows glide to their tiles instead of jumping. Turn it off or change the speed under `[animations]`; it's off while macOS's Reduce Motion is on.
 - While you drag a tiled window, dinky outlines the tile it came from and the tile it will swap with (`[drag] placeholders`). The drop now goes to the tile under the pointer rather than under the window's centre.
+- A window put into native full screen, or still catching up with a resize, no longer teaches dinky that its app can't shrink, which could leave every window of that app filling the screen.
 - `flatten-workspace-tree` puts windows back into the workspace's configured layout: a fixed grid gets its cells back, an accordion workspace becomes an accordion again.
 - `move` past the edge of an accordion that fills the workspace takes the window out of it, into a tile beside the accordion, as in AeroSpace.
 

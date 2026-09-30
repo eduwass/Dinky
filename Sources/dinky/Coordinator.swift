@@ -311,6 +311,13 @@ final class Coordinator {
                     self.animator.noteLanded(results)
                     self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
                     self.flush()
+                    // A refusal counts on the second pass; run it soon rather than on the next event.
+                    if !self.applier.unconfirmedMinimums.isDisjoint(with: layout.order) {
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                            self?.dirty.insert(key)
+                            self?.flush()
+                        }
+                    }
                 }
             }
         }

@@ -146,7 +146,7 @@ final class FrameSchedulerTests: XCTestCase {
         XCTAssertEqual(results.map(\.job.id), [10, 20, 30])
     }
 
-    func testRefusedSizeIsRetriedOnceAndRecordedAsMinimum() {
+    func testRefusedSizeIsRetriedOnceAndRecordedAsMinimumOnTheSecondPass() {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         let results = submitAndWait(scheduler, [job(1, 10, 0), job(1, 11, 100)])
@@ -154,7 +154,22 @@ final class FrameSchedulerTests: XCTestCase {
         XCTAssertEqual(results.map(\.retried), [true, false])
         XCTAssertEqual(results[0].got?.width, 574)
         XCTAssertEqual(fake.writes(to: 10).count, 2)
+        XCTAssertEqual(scheduler.minimumSizes, [:], "one refusal could be an app still catching up")
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
         XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 0)])
+    }
+
+    func testAnAppThatCatchesUpShowsNoMinimum() {
+        var lagging = true
+        let scheduler = FrameScheduler(settle: 0, read: { job in
+            lagging ? CGRect(x: 0, y: 0, width: 2524, height: 100) : job.frame
+        }, write: { _ in })
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        lagging = false
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        lagging = true
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        XCTAssertEqual(scheduler.minimumSizes, [:], "landing where it was put forgets the earlier refusal")
     }
 
     func testTwoRefusalsInOnePassCompleteOnceWithBothMinimums() {
@@ -162,6 +177,7 @@ final class FrameSchedulerTests: XCTestCase {
         let scheduler = fake.scheduler()
         var completions = 0
         var minimums: [WindowID: CGSize] = [:]
+        _ = submitAndWait(scheduler, [job(1, 10, 0), job(2, 20, 100), job(2, 21, 200)])
         let done = XCTestExpectation(description: "results")
         scheduler.submit([job(1, 10, 0), job(2, 20, 100), job(2, 21, 200)]) { _ in
             completions += 1
@@ -178,8 +194,9 @@ final class FrameSchedulerTests: XCTestCase {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
         let again = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(fake.writes(to: 10).count, 2)
+        XCTAssertEqual(fake.writes(to: 10).count, 4)
         XCTAssertEqual(again.map(\.written), [false])
     }
 
@@ -187,8 +204,9 @@ final class FrameSchedulerTests: XCTestCase {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
+        _ = submitAndWait(scheduler, [job(1, 10, 0)])
         let moved = submitAndWait(scheduler, [job(1, 10, 50)])
-        XCTAssertEqual(fake.writes(to: 10).count, 3)
+        XCTAssertEqual(fake.writes(to: 10).count, 5)
         XCTAssertEqual(moved.map(\.retried), [false])
     }
 
@@ -197,8 +215,8 @@ final class FrameSchedulerTests: XCTestCase {
         let scheduler = FrameScheduler(settle: 0, read: { _ in frame }, write: { job in
             frame = CGRect(origin: job.frame.origin, size: job.frame.size.grown(to: CGSize(width: 574, height: 300)))
         })
-        _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 100, height: 400))])
-        _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 600, height: 100))])
+        for _ in 0..<2 { _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 100, height: 400))]) }
+        for _ in 0..<2 { _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 600, height: 100))]) }
         XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 300)])
     }
 
@@ -272,4 +290,33 @@ final class FrameSchedulerStepTests: XCTestCase {
         XCTAssertFalse(result.dropFirst().dropLast().contains { $0.hasPrefix("write") })
     }
 
+    func testASizeAnAnimationStepAskedForIsNotAMinimum() {
+        // The window is stuck at 300 wide, a size a step asked for: it is catching up, not refusing.
+        let lagging = FakeWindows([10: CGRect(x: 0, y: 0, width: 300, height: 100)], minWidths: [10: 300])
+        let scheduler = lagging.scheduler()
+        var step = job(1, 10, 0)
+        step.frame.size.width = 300
+        scheduler.step([step])
+        let results = submitAndWait(scheduler, [job(1, 10, 0)])
+        XCTAssertTrue(results[0].retried)
+        XCTAssertNil(scheduler.minimumSizes[10])
+
+        // Stuck at a size nothing asked for is a minimum.
+        let refusing = FakeWindows([20: CGRect(x: 0, y: 0, width: 250, height: 100)], minWidths: [20: 250])
+        let other = refusing.scheduler()
+        var small = job(1, 20, 0)
+        small.frame.size.width = 300
+        other.step([small])
+        _ = submitAndWait(other, [job(1, 20, 0)])
+        _ = submitAndWait(other, [job(1, 20, 0)])
+        XCTAssertEqual(other.minimumSizes[20]?.width, 250)
+    }
+
+    func testAWindowThatLeftShowsNoMinimum() {
+        // Gone to native full screen while it was written: whole-display size, somewhere else.
+        let scheduler = FrameScheduler(settle: 0, read: { _ in CGRect(x: 0, y: 0, width: 1024, height: 768) }, write: { _ in })
+        let results = submitAndWait(scheduler, [job(1, 10, 50)])
+        XCTAssertTrue(results[0].retried)
+        XCTAssertNil(scheduler.minimumSizes[10])
+    }
 }

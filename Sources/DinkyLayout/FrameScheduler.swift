@@ -45,6 +45,8 @@ public final class FrameScheduler: @unchecked Sendable {
     private let lock = NSLock()
     private var apps: [Int32: App] = [:]
     private var minimums: [WindowID: CGSize] = [:]
+    /// Refusals seen once, by window: a minimum only when a later pass sees the same one.
+    private var candidates: [WindowID: CGSize] = [:]
     /// Bumped by `cancel`; writes queued under an older generation are dropped.
     private var generation = 0
 
@@ -60,8 +62,11 @@ public final class FrameScheduler: @unchecked Sendable {
         self.move = move ?? write
     }
 
-    /// Sizes windows refused to go below, observed on readback. Only dimensions that were refused are set.
+    /// Sizes windows refused to go below, seen the same on two passes. Only dimensions that were refused are set.
     public var minimumSizes: [WindowID: CGSize] { lock.withLock { minimums } }
+
+    /// Windows that refused a size once and wait for a second pass to tell a minimum from an app catching up.
+    public var unconfirmedMinimums: Set<WindowID> { lock.withLock { Set(candidates.keys) } }
 
     /// Queue frames. `completion` gets the results of every process queue these jobs went to,
     /// once each has written them (or newer frames for the same windows).
@@ -127,15 +132,22 @@ public final class FrameScheduler: @unchecked Sendable {
         for job in steps {
             app.written[job.id] == job.frame.size ? move(job) : write(job)
             app.written[job.id] = job.frame.size
+            app.stepSizes[job.id, default: []].append(job.frame.size)
         }
-        let results = run(jobs) { self.lock.withLock { self.generation } == generation }
-        for result in results where result.written { app.written[result.job.id] = nil }
+        let results = run(jobs, stepSizes: app.stepSizes) { self.lock.withLock { self.generation } == generation }
+        for result in results where result.written {
+            app.written[result.job.id] = nil
+            app.stepSizes[result.job.id] = nil
+        }
+        // In place, or already where its minimum lets it be: whatever it refused before, it has caught up.
+        lock.withLock { for result in results where result.matched || !result.written { candidates[result.job.id] = nil } }
         for batch in batches { batch.report(results) }
     }
 
     /// Write, settle, read back; write the misses once more, settle, read back again. Writes only while `live`.
-    /// A window already where its recorded minimum size lets it be is neither written nor retried.
-    private func run(_ jobs: [FrameJob], live: () -> Bool) -> [FrameResult] {
+    /// A window already where its recorded minimum size lets it be is neither written nor retried. A window
+    /// still at a size an animation step asked for is catching up, not refusing, so it shows no minimum.
+    private func run(_ jobs: [FrameJob], stepSizes: [WindowID: [CGSize]], live: () -> Bool) -> [FrameResult] {
         var results = jobs.map { job in
             let current = read(job)
             let write = live() && !(current?.isClose(to: reachable(job), within: 1) ?? false)
@@ -157,7 +169,7 @@ public final class FrameScheduler: @unchecked Sendable {
         wait()
         for i in misses {
             results[i].got = read(results[i].job)
-            recordMinimum(results[i])
+            recordMinimum(results[i], stepSizes: stepSizes[results[i].job.id] ?? [])
         }
         return results
     }
@@ -172,14 +184,28 @@ public final class FrameScheduler: @unchecked Sendable {
         if settle > 0 { Thread.sleep(forTimeInterval: settle) }
     }
 
-    /// A window that came back larger than asked has shown a minimum size in that dimension.
-    private func recordMinimum(_ result: FrameResult) {
+    /// A window that came back larger than asked, where it was put, may have a minimum size in that dimension. It
+    /// counts once a later pass sees the same refusal: an app still resizing to an earlier size (Ghostty reflowing,
+    /// an Electron app, or a size an animation step asked for) has caught up by then. A window somewhere else has
+    /// left (native full screen, another Space) and says nothing about how small it can be.
+    private func recordMinimum(_ result: FrameResult, stepSizes: [CGSize]) {
+        let id = result.job.id
         guard let got = result.got else { return }
+        guard abs(got.minX - result.job.frame.minX) <= 2, abs(got.minY - result.job.frame.minY) <= 2,
+              !stepSizes.contains(got.size) else { return lock.withLock { candidates[id] = nil } }
         let wanted = result.job.frame.size
-        let minimum = CGSize(width: got.width > wanted.width + 2 ? got.width : 0,
+        let refused = CGSize(width: got.width > wanted.width + 2 ? got.width : 0,
                              height: got.height > wanted.height + 2 ? got.height : 0)
-        guard minimum != .zero else { return }
-        lock.withLock { minimums[result.job.id] = minimums[result.job.id]?.grown(to: minimum) ?? minimum }
+        lock.withLock {
+            let seen = candidates[id] ?? .zero
+            candidates[id] = refused == .zero ? nil : refused
+            let confirmed = CGSize(width: refused.width > 0 && abs(refused.width - seen.width) <= 2 ? refused.width : 0,
+                                   height: refused.height > 0 && abs(refused.height - seen.height) <= 2 ? refused.height : 0)
+            if confirmed != .zero {
+                minimums[id] = minimums[id]?.grown(to: confirmed) ?? confirmed
+                candidates[id] = nil
+            }
+        }
     }
 
     /// One process's queue and what is waiting on it. Guarded by the scheduler's lock.
@@ -191,6 +217,9 @@ public final class FrameScheduler: @unchecked Sendable {
         var steps: [FrameJob] = []
         /// The size each window's last step wrote, so the next step can be a plain move. Queue only.
         var written: [WindowID: CGSize] = [:]
+        /// Every size steps asked of each window since its last full write. Apps that resize lazily can still
+        /// be at one of them when the full write reads back. Queue only.
+        var stepSizes: [WindowID: [CGSize]] = [:]
         var scheduled = false
         var prepared = false
 
