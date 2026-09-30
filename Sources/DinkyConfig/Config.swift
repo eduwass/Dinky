@@ -16,8 +16,8 @@ public struct Config: Equatable {
     public var defaultLayout = LayoutKind.tiles
     /// Whether dinky tiles numbered workspaces unless overridden.
     public var defaultTiling = true
-    /// Workspace numbers (1-based) with their own tiling settings.
-    public var workspaceLayouts: [Int: WorkspaceLayout] = [:]
+    /// Workspace numbers (1-based) with their own tiling settings, resolved against the top-level defaults.
+    public var workspaceLayouts: [Int: WorkspaceSettings] = [:]
     /// Cmd-Tab and Dock clicks go through the fast switch.
     public var followAppActivation = true
     public var accordion = Accordion()
@@ -97,13 +97,8 @@ public struct Config: Equatable {
                 guard let index = Int(number), index > 0, String(index) == number else {
                     throw ConfigError(path: workspacesTable.path(number), "expected a positive workspace number")
                 }
-                let settings = try WorkspaceLayout(workspacesTable.table(number)!)
-                if (settings.columns != nil || settings.rows != nil || settings.expand != nil)
-                    && (settings.layout ?? defaultLayout) != .fixed {
-                    let key = settings.columns != nil ? "columns" : settings.rows != nil ? "rows" : "expand"
-                    throw ConfigError(path: workspacesTable.path("\(number).\(key)"), "only valid for a fixed layout")
-                }
-                workspaceLayouts[index] = settings
+                workspaceLayouts[index] = try WorkspaceSettings(workspacesTable.table(number)!,
+                                                                tiling: defaultTiling, layout: defaultLayout)
             }
         }
         followAppActivation = try t.bool("follow-app-activation") ?? followAppActivation
@@ -137,45 +132,41 @@ public enum ExpansionKind: String, CaseIterable {
     case rows, columns, accordion
 }
 
-/// A `[workspace.N]` override. Omitted keys inherit the top-level settings.
-public struct WorkspaceLayout: Equatable {
-    public var tiling: Bool?
-    public var layout: LayoutKind?
-    public var columns: Int?
-    public var rows: Int?
-    public var expand: ExpansionKind?
+/// A workspace's tiling settings: a `[workspace.N]` table with omitted keys taken from the top-level settings.
+public struct WorkspaceSettings: Equatable {
+    public var tiling: Bool
+    public var layout: LayoutKind
+    public var rows = 1
+    public var columns = 1
+    public var expand = ExpansionKind.columns
 
-    init(_ t: Table) throws {
-        tiling = try t.bool("tiling")
-        layout = try t.choice("layout")
-        columns = try t.int("columns")
-        rows = try t.int("rows")
-        expand = try t.choice("expand")
+    public init(tiling: Bool, layout: LayoutKind) {
+        self.tiling = tiling
+        self.layout = layout
+    }
+
+    init(_ t: Table, tiling: Bool, layout: LayoutKind) throws {
+        self.tiling = try t.bool("tiling") ?? tiling
+        self.layout = try t.choice("layout") ?? layout
+        let columns: Int? = try t.int("columns")
+        let rows: Int? = try t.int("rows")
+        let expand: ExpansionKind? = try t.choice("expand")
         if let columns, columns < 1 { throw ConfigError(path: t.path("columns"), "must be at least 1") }
         if let rows, rows < 1 { throw ConfigError(path: t.path("rows"), "must be at least 1") }
         try t.done()
+        if self.layout != .fixed, let key = columns != nil ? "columns" : rows != nil ? "rows" : expand != nil ? "expand" : nil {
+            throw ConfigError(path: t.path(key), "only valid for a fixed layout")
+        }
+        self.rows = rows ?? self.rows
+        self.columns = columns ?? self.columns
+        self.expand = expand ?? self.expand
     }
 }
 
 extension Config {
-    public func tiling(forWorkspace number: Int) -> Bool {
-        workspaceLayouts[number]?.tiling ?? defaultTiling
-    }
-
-    public func layout(forWorkspace number: Int) -> LayoutKind {
-        workspaceLayouts[number]?.layout ?? defaultLayout
-    }
-
-    public func fixedRows(forWorkspace number: Int) -> Int {
-        workspaceLayouts[number]?.rows ?? 1
-    }
-
-    public func fixedColumns(forWorkspace number: Int) -> Int {
-        workspaceLayouts[number]?.columns ?? 1
-    }
-
-    public func expansion(forWorkspace number: Int) -> ExpansionKind {
-        workspaceLayouts[number]?.expand ?? .columns
+    /// The settings of the workspace with this number, the top-level ones for an unnumbered workspace.
+    public func settings(forWorkspace number: Int?) -> WorkspaceSettings {
+        number.flatMap { workspaceLayouts[$0] } ?? WorkspaceSettings(tiling: defaultTiling, layout: defaultLayout)
     }
 }
 

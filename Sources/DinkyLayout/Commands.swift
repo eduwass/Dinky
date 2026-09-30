@@ -43,7 +43,7 @@ extension Workspace {
     /// tiles that way, does nothing.
     @discardableResult
     public mutating func move(_ direction: Direction) -> Bool {
-        fullscreen = nil
+        isFullscreen = false
         guard let focused, let path = root.path(of: focused) else { return false }
         if case .fixed = algorithm, isFixedTree {
             let (column, row) = switch direction {
@@ -97,7 +97,7 @@ extension Workspace {
     /// across the axis, else into a new container wrapping the neighbour. Adapted from AeroSpace's join-with.
     @discardableResult
     public mutating func join(_ direction: Direction) -> Bool {
-        fullscreen = nil
+        isFullscreen = false
         guard let focused, let path = root.path(of: focused) else { return false }
         let forward = direction.isForward, offset = forward ? 1 : -1
         guard let depth = path.indices.last(where: { depth in
@@ -126,7 +126,7 @@ extension Workspace {
     /// visibly changed.
     @discardableResult
     public mutating func resize(by delta: CGFloat, along axis: Orientation? = nil) -> Bool {
-        fullscreen = nil
+        isFullscreen = false
         guard let focused, var path = root.path(of: focused) else { return false }
         while let index = path.popLast() {
             let parent = root.container(at: path)

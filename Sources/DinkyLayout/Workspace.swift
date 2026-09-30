@@ -1,8 +1,8 @@
 import CoreGraphics
 
-/// How new windows are placed in a workspace.
+/// How new windows are placed in a workspace. Dwindle carries the root's layout mode.
 public enum TilingAlgorithm: Equatable, Sendable {
-    case dwindle
+    case dwindle(LayoutMode)
     case fixed(rows: Int, columns: Int, expand: FixedExpansion)
 }
 
@@ -20,28 +20,29 @@ public struct Workspace: Equatable, Sendable {
     /// chose its orientation.
     public var autoOrientAccordions: Bool
     public private(set) var algorithm: TilingAlgorithm
-    private var configuredMode: LayoutMode
     /// The tree. The root is always a container, possibly empty.
     public internal(set) var root: Container
     /// The focused window, if any.
     public internal(set) var focused: WindowID?
-    /// The window shown fullscreen over the tree, if any. Focusing another window or any layout command ends it.
-    public internal(set) var fullscreen: WindowID?
+    /// Whether the focused window is shown fullscreen over the tree. Focusing another window or any layout
+    /// command ends it.
+    var isFullscreen = false
+    /// The window shown fullscreen over the tree, if any.
+    public var fullscreen: WindowID? { isFullscreen ? focused : nil }
     /// Sizes windows refused to go below. Tiles grow to them when their siblings can give the space.
     public var minimumSizes: [WindowID: CGSize] = [:]
 
-    /// An empty workspace whose root uses `mode`. An accordion root with `autoOrientAccordions` starts `auto`,
-    /// as a container switched to accordion would, so it runs top to bottom on a tall display.
+    /// An empty workspace laid out by `algorithm`. A dwindle accordion root with `autoOrientAccordions` starts
+    /// `auto`, as a container switched to accordion would, so it runs top to bottom on a tall display.
     public init(bounds: CGRect, gaps: Gaps = .zero, accordionPadding: CGFloat = 30, autoOrientAccordions: Bool = false,
-                mode: LayoutMode = .tiles, algorithm: TilingAlgorithm = .dwindle) {
+                algorithm: TilingAlgorithm = .dwindle(.tiles)) {
         self.bounds = bounds
         self.gaps = gaps
         self.accordionPadding = accordionPadding
         self.autoOrientAccordions = autoOrientAccordions
         self.algorithm = algorithm
-        self.configuredMode = algorithm == .dwindle ? mode : .tiles
         switch algorithm {
-        case .dwindle:
+        case .dwindle(let mode):
             root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal, mode)
         case .fixed(let rows, let columns, _):
             precondition(rows > 0 && columns > 0)
@@ -98,8 +99,8 @@ public struct Workspace: Equatable, Sendable {
         if windows.isEmpty, case .fixed(let rows, let columns, _) = algorithm {
             root = Self.fixedRoot(rows: rows, columns: columns)
         }
-        if fullscreen == id { fullscreen = nil }
         if focused == id {
+            isFullscreen = false
             focused = nil
             if let next = root.mostRecentWindow ?? windows.first { focus(next) }
         }
@@ -202,11 +203,9 @@ public struct Workspace: Equatable, Sendable {
     }
 
     /// Switch algorithms. Changing the template deliberately rearranges the existing windows once.
-    public mutating func setAlgorithm(_ new: TilingAlgorithm, mode: LayoutMode = .tiles) {
-        let newMode: LayoutMode = new == .dwindle ? mode : .tiles
-        guard algorithm != new || configuredMode != newMode else { return }
+    public mutating func setAlgorithm(_ new: TilingAlgorithm) {
+        guard algorithm != new else { return }
         algorithm = new
-        configuredMode = newMode
         rebuild()
     }
 
@@ -214,9 +213,8 @@ public struct Workspace: Equatable, Sendable {
     private mutating func rebuild() {
         let ids = isFixedTree ? fixedWindows : windows
         switch algorithm {
-        case .dwindle:
-            root = Container(configuredMode == .accordion && autoOrientAccordions ? .auto : .horizontal,
-                             configuredMode, ids.map(Node.window))
+        case .dwindle(let mode):
+            root = Container(mode == .accordion && autoOrientAccordions ? .auto : .horizontal, mode, ids.map(Node.window))
         case .fixed(let rows, let columns, let expand):
             root = Self.fixedRoot(rows: rows, columns: columns)
             for id in ids { _ = insertIntoFixed(id, expand: expand) }
@@ -230,13 +228,12 @@ public struct Workspace: Equatable, Sendable {
         guard let path = root.path(of: old), !contains(new) else { return }
         root.modify(at: Array(path.dropLast())) { $0.replace(at: path.last!, with: .window(new)) }
         if focused == old { focused = new }
-        if fullscreen == old { fullscreen = new }
         minimumSizes[old] = nil
     }
 
     /// Undo every tree edit: the windows go back into the configured layout, in order, with equal ratios.
     public mutating func flatten() {
-        fullscreen = nil
+        isFullscreen = false
         rebuild()
     }
 
@@ -244,8 +241,8 @@ public struct Workspace: Equatable, Sendable {
     /// Ends fullscreen unless it is the fullscreen window.
     public mutating func focus(_ id: WindowID) {
         guard let path = root.path(of: id) else { return }
+        if focused != id { isFullscreen = false }
         focused = id
-        if fullscreen != id { fullscreen = nil }
         for depth in path.indices {
             root.modify(at: Array(path.prefix(depth))) { $0.active = path[depth] }
         }
@@ -300,7 +297,7 @@ public struct Workspace: Equatable, Sendable {
 
     /// Give every container in the tree equal ratios.
     public mutating func balanceSizes() {
-        fullscreen = nil
+        isFullscreen = false
         root.balance()
     }
 
@@ -332,7 +329,7 @@ public struct Workspace: Equatable, Sendable {
     /// so the container is not merged into its parent halfway. With `autoOrientAccordions`, a container becoming
     /// an accordion turns `auto` unless a command chose its orientation.
     public mutating func setLayout(_ mode: LayoutMode?, _ orientation: ContainerOrientation?) {
-        fullscreen = nil
+        isFullscreen = false
         guard let focused, let path = root.path(of: focused) else { return }
         root.modify(at: Array(path.dropLast())) { c in
             if let mode {
@@ -349,7 +346,7 @@ public struct Workspace: Equatable, Sendable {
 
     /// Toggle fullscreen for the focused window. The tree is not changed.
     public mutating func toggleFullscreen() {
-        fullscreen = fullscreen == nil ? focused : nil
+        if focused != nil { isFullscreen.toggle() }
     }
 
     /// Frames and stacking for every window. A fullscreen window covers the bounds minus outer gaps and comes first.

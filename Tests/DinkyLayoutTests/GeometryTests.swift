@@ -69,11 +69,11 @@ struct TilesTests {
 
 struct AccordionTests {
     @Test func `Single child fills rect`() {
-        #expect(workspace(1, mode: .accordion).layout().frames[1] == rect(0, 0, 1000, 600))
+        #expect(workspace(1, algorithm: .dwindle(.accordion)).layout().frames[1] == rect(0, 0, 1000, 600))
     }
 
     @Test func `Middle focused neighbours peek on both sides`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         ws.focus(2)
         let layout = ws.layout()
         #expect(layout.frames == [1: rect(0, 0, 970, 600), 2: rect(30, 0, 940, 600), 3: rect(30, 0, 970, 600)])
@@ -81,13 +81,13 @@ struct AccordionTests {
     }
 
     @Test func `Last focused previous peeks on left`() {
-        let layout = workspace(3, mode: .accordion).layout() // 3 is focused
+        let layout = workspace(3, algorithm: .dwindle(.accordion)).layout() // 3 is focused
         #expect(layout.frames == [1: rect(0, 0, 970, 600), 2: rect(0, 0, 940, 600), 3: rect(30, 0, 970, 600)])
         #expect(layout.order == [3, 2, 1])
     }
 
     @Test func `First focused next peeks on right`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         ws.focus(1)
         let layout = ws.layout()
         #expect(layout.frames == [1: rect(0, 0, 970, 600), 2: rect(60, 0, 940, 600), 3: rect(30, 0, 970, 600)])
@@ -95,18 +95,18 @@ struct AccordionTests {
     }
 
     @Test func `Vertical accordion peeks along height`() {
-        var ws = workspace(2, bounds: rect(0, 0, 600, 1000), mode: .accordion)
+        var ws = workspace(2, bounds: rect(0, 0, 600, 1000), algorithm: .dwindle(.accordion))
         ws.focus(1)
         #expect(ws.layout().frames == [1: rect(0, 0, 600, 970), 2: rect(0, 30, 600, 970)])
     }
 
     @Test func `Accordion respects outer gaps`() {
-        let ws = workspace(2, bounds: rect(0, 0, 1020, 620), gaps: Gaps(all: 10), mode: .accordion)
+        let ws = workspace(2, bounds: rect(0, 0, 1020, 620), gaps: Gaps(all: 10), algorithm: .dwindle(.accordion))
         #expect(ws.layout().frames == [1: rect(10, 10, 970, 600), 2: rect(40, 10, 970, 600)])
     }
 
     @Test func `Stacking order is stable across focus changes`() {
-        var ws = workspace(5, mode: .accordion)
+        var ws = workspace(5, algorithm: .dwindle(.accordion))
         ws.focus(3)
         #expect(ws.layout().order == [3, 2, 4, 1, 5])
         ws.focus(1)

@@ -41,7 +41,7 @@ struct NeighborTests {
     }
 
     @Test func `Accordion neighbours follow child order`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         #expect(ws.neighbor(of: 3, .left) == 2)
         ws.focus(1)
         #expect(ws.neighbor(of: 1, .right) == 2)
@@ -83,7 +83,7 @@ struct SwapAndMoveTests {
     }
 
     @Test func `Move past a root accordion edge leaves it for a tile`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         #expect(ws.move(.right) == true)
         #expect(shape(ws.root) == "h[ah[1 2] 3]")
         #expect(ws.move(.left) == true, "moving back enters the accordion at its near edge")
@@ -91,7 +91,7 @@ struct SwapAndMoveTests {
     }
 
     @Test func `Move at the edge of a lone accordion window does nothing`() {
-        var ws = workspace(1, mode: .accordion)
+        var ws = workspace(1, algorithm: .dwindle(.accordion))
         #expect(ws.move(.right) == false)
         #expect(shape(ws.root) == "ah[1]")
     }

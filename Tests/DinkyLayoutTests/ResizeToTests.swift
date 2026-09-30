@@ -87,13 +87,11 @@ struct ResizeToTests {
     }
 
     @Test func `Fixed layout drag includes empty cells in its extent`() {
-        var horizontal = Workspace(bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .columns))
-        horizontal.insert(1)
+        var horizontal = workspace(1, bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .columns))
         #expect(horizontal.resize(1, to: CGSize(width: 600, height: 900), moving: [.right]) == true)
         #expect(horizontal.layout().frames[1]?.width == 600)
 
-        var vertical = Workspace(bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 3, columns: 1, expand: .rows))
-        vertical.insert(1)
+        var vertical = workspace(1, bounds: rect(0, 0, 1000, 900), algorithm: .fixed(rows: 3, columns: 1, expand: .rows))
         #expect(vertical.resize(1, to: CGSize(width: 1000, height: 400), moving: [.down]) == true)
         #expect(vertical.layout().frames[1]?.height == 400)
     }
