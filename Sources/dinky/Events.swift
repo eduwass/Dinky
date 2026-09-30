@@ -30,7 +30,7 @@ func runDebug(_ args: [String]) -> Int32 {
     let clock = DateFormatter()
     clock.dateFormat = "HH:mm:ss.SSS"
     print("watching \(model.windows.count) windows, ctrl-c to stop")
-    model.onChange = { event in
+    model.observe { event in
         let t = clock.string(from: event.time)
         let kind = name(event.kind)
         var line = "\(t) \(kind.padding(toLength: 14, withPad: " ", startingAt: 0)) \(event.change)"

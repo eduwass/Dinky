@@ -68,28 +68,27 @@ final class AppState {
         hoverFocus.update(config: config.focusFollowsMouse)
     }
 
-    /// Off stops tiling and puts every window back where it was before dinky touched it.
-    /// This is the emergency path: `dinky enable off`, or the menu's Enabled item.
-    func setEnabled(_ on: Bool) {
+    /// The one enable transition. Off stops tiling and puts every window back where it was before dinky
+    /// touched it, and returns the restore's summary. This is the emergency path: `dinky enable off`, the
+    /// menu's Enabled item, `dinky recover` and quitting all come through here.
+    @discardableResult
+    func setEnabled(_ on: Bool) -> String {
         if on { recovery.resume() }
         enabled = on
-        applyConfig()
-        if !on { recovery.restore() }
+        propagateEnabled()
+        return on ? "" : recovery.restore()
     }
 
     /// `dinky recover` and the menu's restore item: after a crash, stops tiling and restores every
     /// journaled window, including those the crashed session left tiled.
     func recover() -> Reply {
         guard recovery.recoverable > 0 else { return .error("no windows from a previous session to restore") }
-        enabled = false
-        applyConfig()
-        return .ok(recovery.restore() + "; dinky is disabled, `dinky enable on` tiles again")
+        return .ok(setEnabled(false) + "; dinky is disabled, `dinky enable on` tiles again")
     }
 
     /// Quitting stops tiling and puts every window back.
     func quit() {
-        coordinator?.enabled = false
-        recovery.restore()
+        setEnabled(false)
     }
 
     private func apply(_ result: Result<Config, ConfigError>) {
@@ -104,17 +103,19 @@ final class AppState {
                 numbers.arrange()
                 hoverFocus.update(config: config.focusFollowsMouse)
             }
+            applyStartAtLogin(config.startAtLogin)
         case .failure(let error):
             configError = error
             fputs("config: \(error), keeping the previous config\n", stderr)
         }
-        applyConfig()
+        // The new hotkeys and a reload while disabled stay disabled.
+        propagateEnabled()
     }
 
-    private func applyConfig() {
+    /// Hands `enabled` to the parts that keep their own copy. The activation follower and hover focus read it
+    /// when they decide.
+    private func propagateEnabled() {
         hotkeys.enabled = enabled
         coordinator?.enabled = enabled
-        followEnabled = enabled && config.followAppActivation
-        applyStartAtLogin(config.startAtLogin)
     }
 }

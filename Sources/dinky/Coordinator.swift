@@ -54,7 +54,7 @@ final class Coordinator {
     }
 
     func start() {
-        model.onChange = { [weak self] event in self?.handle(event) }
+        model.observe { [weak self] event in self?.handle(event) }
         animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
         displays.observe { [weak self] _ in self?.reconcile() }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.

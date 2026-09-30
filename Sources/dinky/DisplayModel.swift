@@ -3,7 +3,8 @@ import DinkyPrivate
 
 // Fans the one process-wide WindowServer callback out to every model that wants events.
 // dinky_events_start keeps a single callback, so exactly one owner may call it: this hub.
-// Subscribers run on the main queue.
+// Subscribers run on the main queue. The models subscribe here; everything else observes a model, which has
+// taken the event in by the time its observers run.
 final class EventHub {
     static let shared = EventHub()
     private var subscribers: [(DinkyEvent) -> Void] = []
@@ -37,7 +38,7 @@ struct Display: Equatable {
 }
 
 // Displays, their Spaces, the current and previous Space per display, and which display has focus.
-// Refreshed from WindowServer Space events, screen reconfiguration and `reconcile()`. Main thread only.
+// Refreshed from WindowServer Space events, screen reconfiguration, a poll and `reconcile()`. Main thread only.
 final class DisplayModel {
     private(set) var displays: [Display] = []
     /// The Space each display was on before its current one, by display UUID, for back-and-forth.
@@ -66,6 +67,8 @@ final class DisplayModel {
                                                           object: nil, queue: .main) { [weak self] _ in
             self?.reconcile()
         }
+        // Neither notification is reliable for swipes posted by other processes.
+        Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.reconcile() }
     }
 
     /// Re-reads every display from WindowServer. Records previous Spaces and publishes if anything changed.

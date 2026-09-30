@@ -38,14 +38,13 @@ final class Recovery {
     private var saveScheduled = false
     private var applier: FrameApplier!
 
-    /// Carries over a crashed session's journal, then journals windows as the model sees them. Subscribes
-    /// after the coordinator, so each event reaches the model first and frames are read before any write lands.
-    /// Restores write through the coordinator's applier, so there is one owner of the minimum sizes it learns.
+    /// Carries over a crashed session's journal, then journals windows as the model sees them, so each frame is
+    /// the one the model read before dinky wrote any. Restores write through the coordinator's applier, so there is one owner of the minimum sizes it learns.
     func start(model: WindowModel, applier: FrameApplier) {
         self.model = model
         self.applier = applier
         carryOver()
-        EventHub.shared.subscribe { [weak self] _ in self?.record() }
+        model.observe { [weak self] _ in self?.record() }
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.activeSpaceDidChangeNotification,
                                                           object: nil, queue: .main) { [weak self] _ in self?.record() }
         resume()
