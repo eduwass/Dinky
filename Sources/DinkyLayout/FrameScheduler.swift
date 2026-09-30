@@ -17,6 +17,8 @@ public struct FrameJob: Equatable, Sendable {
 /// What a window ended up at after a write.
 public struct FrameResult: Equatable, Sendable {
     public var job: FrameJob
+    /// Where the window was asked to go: the job's frame grown to the window's recorded minimum size.
+    public var target: CGRect
     /// The frame read back, nil when the window could not be read.
     public var got: CGRect?
     /// False when the window was already in place and nothing was written.
@@ -24,8 +26,8 @@ public struct FrameResult: Equatable, Sendable {
     /// True when the first write landed elsewhere and it was written once more.
     public var retried = false
 
-    /// Landed within 2 pt on every edge.
-    public var matched: Bool { got.map { $0.isClose(to: job.frame, within: 2) } ?? false }
+    /// Landed within 2 pt of the target on every edge.
+    public var matched: Bool { got.map { $0.isClose(to: target, within: 2) } ?? false }
 }
 
 /// Schedules frame writes: one serial queue per process so a slow app only stalls itself,
@@ -113,6 +115,17 @@ public final class FrameScheduler: @unchecked Sendable {
         app.queue.async { self.drain(app) }
     }
 
+    /// Forgets a window that is gone: its minimum size, any refusal waiting to be confirmed, and what steps wrote.
+    /// Window ids are reused, so a new window must not inherit them.
+    public func forget(_ id: WindowID) {
+        lock.withLock {
+            minimums[id] = nil
+            candidates[id] = nil
+            // What steps wrote is the queue's alone, so it is cleared there, after anything already queued.
+            for app in apps.values { app.queue.async { app.written[id] = nil; app.stepSizes[id] = nil } }
+        }
+    }
+
     /// Drops every frame not written yet, including a second try already under way. Completions still run,
     /// with the results of what was written.
     public func cancel() {
@@ -132,11 +145,11 @@ public final class FrameScheduler: @unchecked Sendable {
         for job in steps {
             app.written[job.id] == job.frame.size ? move(job) : write(job)
             app.written[job.id] = job.frame.size
-            app.stepSizes[job.id, default: []].append(job.frame.size)
+            app.stepSizes[job.id, default: []].insert(job.frame.size)
         }
         let results = run(jobs, stepSizes: app.stepSizes) { self.lock.withLock { self.generation } == generation }
-        for result in results where result.written {
-            app.written[result.job.id] = nil
+        for result in results {
+            if result.written { app.written[result.job.id] = nil }
             app.stepSizes[result.job.id] = nil
         }
         // In place, or already where its minimum lets it be: whatever it refused before, it has caught up.
@@ -147,12 +160,12 @@ public final class FrameScheduler: @unchecked Sendable {
     /// Write, settle, read back; write the misses once more, settle, read back again. Writes only while `live`.
     /// A window already where its recorded minimum size lets it be is neither written nor retried. A window
     /// still at a size an animation step asked for is catching up, not refusing, so it shows no minimum.
-    private func run(_ jobs: [FrameJob], stepSizes: [WindowID: [CGSize]], live: () -> Bool) -> [FrameResult] {
+    private func run(_ jobs: [FrameJob], stepSizes: [WindowID: Set<CGSize>], live: () -> Bool) -> [FrameResult] {
         var results = jobs.map { job in
-            let current = read(job)
-            let write = live() && !(current?.isClose(to: reachable(job), within: 1) ?? false)
+            let current = read(job), target = reachable(job)
+            let write = live() && !(current?.isClose(to: target, within: 1) ?? false)
             if write { self.write(job) }
-            return FrameResult(job: job, got: current, written: write)
+            return FrameResult(job: job, target: target, got: current, written: write)
         }
         let written = results.indices.filter { results[$0].written }
         guard !written.isEmpty else { return results }
@@ -160,7 +173,7 @@ public final class FrameScheduler: @unchecked Sendable {
         for i in written { results[i].got = read(results[i].job) }
 
         // Only windows that answered and landed elsewhere; an unreadable (possibly hung) one is not worth a second try.
-        let misses = written.filter { i in results[i].got.map { !$0.isClose(to: reachable(results[i].job), within: 2) } ?? false }
+        let misses = written.filter { i in results[i].got.map { !$0.isClose(to: results[i].target, within: 2) } ?? false }
         guard !misses.isEmpty, live() else { return results }
         for i in misses {
             write(results[i].job)
@@ -188,7 +201,7 @@ public final class FrameScheduler: @unchecked Sendable {
     /// counts once a later pass sees the same refusal: an app still resizing to an earlier size (Ghostty reflowing,
     /// an Electron app, or a size an animation step asked for) has caught up by then. A window somewhere else has
     /// left (native full screen, another Space) and says nothing about how small it can be.
-    private func recordMinimum(_ result: FrameResult, stepSizes: [CGSize]) {
+    private func recordMinimum(_ result: FrameResult, stepSizes: Set<CGSize>) {
         let id = result.job.id
         guard let got = result.got else { return }
         guard abs(got.minX - result.job.frame.minX) <= 2, abs(got.minY - result.job.frame.minY) <= 2,
@@ -217,9 +230,9 @@ public final class FrameScheduler: @unchecked Sendable {
         var steps: [FrameJob] = []
         /// The size each window's last step wrote, so the next step can be a plain move. Queue only.
         var written: [WindowID: CGSize] = [:]
-        /// Every size steps asked of each window since its last full write. Apps that resize lazily can still
-        /// be at one of them when the full write reads back. Queue only.
-        var stepSizes: [WindowID: [CGSize]] = [:]
+        /// Every size steps asked of each window since the last full pass that included it. Apps that resize
+        /// lazily can still be at one of them when the full write reads back. Queue only.
+        var stepSizes: [WindowID: Set<CGSize>] = [:]
         var scheduled = false
         var prepared = false
 
