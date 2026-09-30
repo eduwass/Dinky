@@ -1,6 +1,6 @@
 ---
 id: din-7cqx
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-09-25T09:32:53Z

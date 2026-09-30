@@ -1,6 +1,6 @@
 ---
 id: din-drei
-status: open
+status: closed
 deps: [din-mlu6, din-j2iv, din-nt98, din-w0m5]
 links: []
 created: 2026-09-25T09:32:54Z
