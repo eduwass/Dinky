@@ -2,13 +2,25 @@
 
 ## Unreleased
 
-- Windows glide to their tiles instead of jumping. Turn it off or change the speed under `[animations]`; it's off while macOS's Reduce Motion is on.
-- While you drag a tiled window, dinky outlines the tile it came from and the tile it will swap with (`[drag] placeholders`). The drop now goes to the tile under the pointer rather than under the window's centre.
-- dinky warns when AeroSpace, Amethyst, yabai or KiwiDesk is also running (a `!` in the menu bar, the menu, the log and `dinky doctor`): two tilers undo each other's layouts, which looks like dinky failing to tile.
-- Clicking between two windows of the same app moves focus and the border again; dinky no longer keeps the previous window as focused.
-- A window put into native full screen, or still catching up with a resize, no longer teaches dinky that its app can't shrink, which could leave every window of that app filling the screen.
-- `flatten-workspace-tree` puts windows back into the workspace's configured layout: a fixed grid gets its cells back, an accordion workspace becomes an accordion again.
+### Motion
+
+- Windows glide to their tiles instead of jumping. Set the speed with `[animations] duration-ms` (50 by default) or turn it off with `enabled = false`. It's off while macOS's Reduce Motion is on.
+- While you drag a tiled window, dinky outlines the tile it came from and the tile it will swap with. The window now swaps with the tile under the pointer, not the one under its centre. `[drag] placeholders = false` turns the outlines off.
+
+### Layouts
+
+- `flatten-workspace-tree` puts windows back into the workspace's configured layout: a fixed grid gets its cells back, and an accordion workspace becomes an accordion again.
 - `move` past the edge of an accordion that fills the workspace takes the window out of it, into a tile beside the accordion, as in AeroSpace.
+
+### Other
+
+- dinky warns when AeroSpace, Amethyst, yabai or KiwiDesk is also running, with a `!` in the menu bar, a line in the menu and in `dinky doctor`. Two tilers undo each other's layouts, which looks like dinky failing to tile.
+- The update window shows what changed, and every release is listed at [dinky.rodeo/changelog](https://dinky.rodeo/changelog/).
+
+### Fixes
+
+- Clicking between two windows of the same app moves focus and the border to the window you clicked.
+- A window put into native full screen, or slow to finish a resize, no longer teaches dinky that its app can't shrink. That could leave every window of the app filling the screen.
 
 ## 0.4
 

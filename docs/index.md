@@ -24,8 +24,8 @@ instead of half a second. It has an accordion mode, focus borders, a TOML
 config and a `dinky` command line for scripts and bars. Nothing is injected
 into the Dock.
 
-It is not a compositor: macOS still draws every window. No scrolling layouts,
-no animations.
+It is not a compositor: macOS still draws every window. No scrolling layouts;
+windows glide to their tiles by being moved there, frame by frame.
 
 Status: early, in daily use by its author on macOS 27. Expect rough edges.
 
