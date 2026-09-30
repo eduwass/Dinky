@@ -10,9 +10,8 @@ public struct ConfigFinding: Equatable, CustomStringConvertible {
 }
 
 /// Checks a parsed config beyond what parsing guarantees: every binding and rule command is in the
-/// vocabulary, every `mode X` names a mode, every key name has a keycode, and there is a main mode.
-/// `keyIsKnown` comes from the app's key table so this stays free of AppKit.
-public func checkConfig(_ config: Config, keyIsKnown: (String) -> Bool) -> [ConfigFinding] {
+/// vocabulary, every `mode X` names a mode, and there is a main mode. Key names are checked at parse time.
+public func checkConfig(_ config: Config) -> [ConfigFinding] {
     var findings: [ConfigFinding] = []
     func check(_ commands: [String], at place: String) {
         for text in commands {
@@ -30,11 +29,7 @@ public func checkConfig(_ config: Config, keyIsKnown: (String) -> Bool) -> [Conf
     }
     for (name, mode) in config.modes.sorted(by: { $0.key < $1.key }) {
         for (combo, commands) in mode.bindings.sorted(by: { $0.key.description < $1.key.description }) {
-            let place = "mode.\(name).\(combo)"
-            if !keyIsKnown(combo.key) {
-                findings.append(.init(level: .error, message: "\(place): unknown key '\(combo.key)'"))
-            }
-            check(commands, at: place)
+            check(commands, at: "mode.\(name).\(combo)")
         }
     }
     for (i, rule) in config.rules.enumerated() {

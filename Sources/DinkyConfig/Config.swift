@@ -1,7 +1,7 @@
 import Foundation
 import TOMLDecoder
 
-// Config types and TOML loading. No AppKit here.
+// Config types and TOML loading. No AppKit here; Carbon.HIToolbox for the key codes only.
 // TOML keys are kebab-case, Swift properties camelCase. Every key is optional; the defaults are the
 // property initial values, and the shipped file (DefaultConfig.swift) spells out the same values.
 

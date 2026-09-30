@@ -1,3 +1,4 @@
+import Carbon.HIToolbox
 import Testing
 @testable import DinkyConfig
 
@@ -15,16 +16,25 @@ struct KeyComboTests {
         #expect(try KeyCombo("alt-page-up") == KeyCombo(modifiers: .alt, key: "page-up"))
         #expect(try KeyCombo("page-down") == KeyCombo(key: "page-down"))
         #expect(try KeyCombo("shift-alt-left-bracket").description == "alt-shift-left-bracket")
-        for name in KeyCombo.keyNames {
+        for name in KeyCombo.keyCodes.keys {
             #expect(try KeyCombo("alt-\(name)").key == name)
             #expect(try KeyCombo(name).key == name)
         }
     }
 
     @Test func `Key names are kebab-case`() {
-        for name in KeyCombo.keyNames {
+        for name in KeyCombo.keyCodes.keys {
             #expect(name == name.lowercased(), "\(name)")
         }
+    }
+
+    @Test func `Key codes`() {
+        #expect(KeyCombo.keyCodes.count == 100)
+        #expect(Set(KeyCombo.keyCodes.values).count == 100, "two names share a keycode")
+        #expect(KeyCombo.keyCodes["a"] == UInt16(kVK_ANSI_A))
+        #expect(KeyCombo.keyCodes["page-up"] == UInt16(kVK_PageUp))
+        #expect(KeyCombo.keyCodes["keypad-enter"] == UInt16(kVK_ANSI_KeypadEnter))
+        #expect(KeyCombo.keyCodes["backtick"] == UInt16(kVK_ANSI_Grave))
     }
 
     @Test(arguments: ["", "alt-", "alt--", "hyper-a", "alt-shift-hh", "alt-Semicolon", "-a", "option-a", "pageUp", "alt-page"])

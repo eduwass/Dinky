@@ -35,7 +35,7 @@ struct SchemaTests {
         let pattern = definitions["keyCombo"]!["pattern"] as! String
         let regex = try NSRegularExpression(pattern: pattern)
         func matches(_ text: String) -> Bool { regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil }
-        for name in KeyCombo.keyNames {
+        for name in KeyCombo.keyCodes.keys {
             #expect(matches(name), "\(name)")
             #expect(matches("alt-shift-\(name)"), "\(name)")
         }

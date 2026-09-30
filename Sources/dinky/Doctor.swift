@@ -29,7 +29,7 @@ func runDoctor(_ args: [String]) -> Int32 {
             fail("\(error)")
         }
     }
-    for finding in checkConfig(config, keyIsKnown: { keyCodes[$0] != nil }) {
+    for finding in checkConfig(config) {
         finding.level == .error ? fail(finding.message) : warn(finding.message)
     }
 
