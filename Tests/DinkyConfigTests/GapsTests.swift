@@ -60,11 +60,11 @@ struct GapsTests {
         """)
         #expect(config.workspaceDisplays == [4: [.secondary], 2: [.name("dell"), .main]])
         #expect(try Config.parse("").workspaceDisplays == [:])
-        assertError("[workspace-to-display]\n6 = 'main'\n", path: "workspace-to-display.6", contains: "from 1 to 5")
-        assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", contains: "not a workspace number")
-        assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", contains: "can't be empty")
-        assertError("[workspace-to-display]\n1 = 2\n", path: "workspace-to-display.1", contains: "string")
-        assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", contains: "[workspace-to-display]")
+        assertError("[workspace-to-display]\n6 = 'main'\n", path: "workspace-to-display.6", line: 2, contains: "from 1 to 5")
+        assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", line: 2, contains: "not a workspace number")
+        assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", line: 2, contains: "can't be empty")
+        assertError("[workspace-to-display]\n1 = 2\n", path: "workspace-to-display.1", line: 2, contains: "string")
+        assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", line: 2, contains: "[workspace-to-display]")
     }
 
     @Test func patterns() {
@@ -78,24 +78,11 @@ struct GapsTests {
     }
 
     @Test func `Bad gaps fail`() {
-        assertError("[gaps]\nouter.top = 'wide'\n", path: "gaps.outer.top", contains: "expected an integer")
-        assertError("[gaps]\nouter.top = [{ monitor.main = 44 }, 8]\n", path: "gaps.outer.top", contains: "expected an integer")
-        assertError("[gaps]\ninner.diagonal = 3\n", path: "gaps.inner.diagonal", contains: "unknown key")
-        assertError("[display.main]\nborders.width = 2\n", path: "display.main.borders", contains: "unknown key")
-        assertError("[display.main]\ngaps.outer.tpo = 2\n", path: "display.main.gaps.outer.tpo", contains: "unknown key")
-        assertError("[display]\ngaps.outer.top = 2\n", path: "display.gaps.outer", contains: "unknown key")
-    }
-
-    private func assertError(
-        _ toml: String, path: String, contains text: String,
-        fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column
-    ) {
-        let sourceLocation = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
-        let error = #expect(throws: ConfigError.self, "expected an error for \(path)", sourceLocation: sourceLocation) {
-            try Config.parse(toml)
-        }
-        guard let error else { return }
-        #expect(error.path == path, "\(error)", sourceLocation: sourceLocation)
-        #expect(error.description.contains(text), "\(error)", sourceLocation: sourceLocation)
+        assertError("[gaps]\nouter.top = 'wide'\n", path: "gaps.outer.top", line: 2, contains: "expected an integer")
+        assertError("[gaps]\nouter.top = [{ monitor.main = 44 }, 8]\n", path: "gaps.outer.top", line: 2, contains: "expected an integer")
+        assertError("[gaps]\ninner.diagonal = 3\n", path: "gaps.inner.diagonal", line: 2, contains: "unknown key")
+        assertError("[display.main]\nborders.width = 2\n", path: "display.main.borders", line: 2, contains: "unknown key")
+        assertError("[display.main]\ngaps.outer.tpo = 2\n", path: "display.main.gaps.outer.tpo", line: 2, contains: "unknown key")
+        assertError("[display]\ngaps.outer.top = 2\n", path: "display.gaps.outer", line: 2, contains: "unknown key")
     }
 }
