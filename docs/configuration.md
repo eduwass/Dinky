@@ -126,6 +126,13 @@ gaps.outer.top = 44
 | `delay-ms` | `100` | How long the pointer must rest. |
 | `accordion-edges` | `true` | Resting on a peeking accordion edge focuses that window. |
 
+## `[animations]`
+
+| Key | Default | |
+|---|---|---|
+| `enabled` | `true` | Windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on. |
+| `duration-ms` | `50` | Roughly how long a window takes to arrive, up to 1000. `0` jumps. |
+
 ## `[hooks]`
 
 Commands run on events. See [Scripting](commands.md#scripting) for the
@@ -231,6 +238,10 @@ exclude-apps = []               # bundle IDs whose windows get no border
 enabled = false
 delay-ms = 100                  # how long the pointer rests on a window before it takes focus
 accordion-edges = true          # resting on a peeking accordion edge focuses that window
+
+[animations]
+enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
+duration-ms = 50                # roughly how long a window takes to arrive
 
 # dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
 # [hooks]

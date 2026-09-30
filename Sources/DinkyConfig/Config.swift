@@ -26,6 +26,7 @@ public struct Config: Equatable {
     public var displays: [DisplayOverride] = []
     public var borders = Borders()
     public var focusFollowsMouse = FocusFollowsMouse()
+    public var animations = Animations()
     public var hooks = Hooks()
     /// `[[rules]]`, in file order.
     public var rules: [WindowRule] = []
@@ -114,6 +115,7 @@ public struct Config: Equatable {
         }
         borders = try t.table("borders").map(Borders.init) ?? borders
         focusFollowsMouse = try t.table("focus-follows-mouse").map(FocusFollowsMouse.init) ?? focusFollowsMouse
+        animations = try t.table("animations").map(Animations.init) ?? animations
         hooks = try t.table("hooks").map(Hooks.init) ?? hooks
         rules = try t.tables("rules")?.map(WindowRule.init) ?? []
         if let modeTable = try t.table("mode") {
@@ -241,6 +243,22 @@ public struct FocusFollowsMouse: Equatable {
         delayMs = try t.int("delay-ms") ?? delayMs
         guard delayMs >= 0 else { throw ConfigError(path: t.path("delay-ms"), "must be 0 or more") }
         accordionEdges = try t.bool("accordion-edges") ?? accordionEdges
+        try t.done()
+    }
+}
+
+/// `[animations]`: windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on.
+public struct Animations: Equatable {
+    public var enabled = true
+    /// Roughly how long a window takes to reach its tile. 0 jumps, as with animations off.
+    public var durationMs = 50
+
+    public init() {}
+
+    init(_ t: Table) throws {
+        enabled = try t.bool("enabled") ?? enabled
+        durationMs = try t.int("duration-ms") ?? durationMs
+        guard (0...1000).contains(durationMs) else { throw ConfigError(path: t.path("duration-ms"), "must be 0 to 1000") }
         try t.done()
     }
 }

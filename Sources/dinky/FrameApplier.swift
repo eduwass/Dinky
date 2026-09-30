@@ -28,7 +28,8 @@ final class FrameApplier {
                 AXUIElementSetAttributeValue(app, "AXEnhancedUserInterface" as CFString, kCFBooleanFalse)
             },
             read: { [unowned self] job in element(pid: job.pid, id: job.id).flatMap(frame) },
-            write: { [unowned self] job in element(pid: job.pid, id: job.id).map { write(job.frame, to: $0) } }
+            write: { [unowned self] job in element(pid: job.pid, id: job.id).map { write(job.frame, to: $0) } },
+            move: { [unowned self] job in element(pid: job.pid, id: job.id).map { move(job.frame.origin, to: $0) } }
         )
     }
 
@@ -44,6 +45,9 @@ final class FrameApplier {
     /// Drops every frame not written yet.
     func cancel() { scheduler.cancel() }
 
+    /// Writes one step of an animation: no readback, no retry, no raising.
+    func step(_ jobs: [FrameJob]) { scheduler.step(jobs) }
+
     /// Write every frame in `layout`, then raise overlapping windows into the layout's order if they are not,
     /// unless that would move focus away from a window other than `front`, the one the layout puts on top.
     /// `completion` runs on a background queue with the readback of every app touched.
@@ -54,11 +58,16 @@ final class FrameApplier {
         }
         scheduler.submit(jobs) { [unowned self] results in
             rememberAppMinimums(results)
-            raiseQueue.async {
-                let ids = layout.raises(current: onScreenOrder())
-                if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids) }
-                completion(results)
-            }
+            raiseIntoOrder(layout, pids: pids, front: front) { completion(results) }
+        }
+    }
+
+    /// Raise overlapping windows into the layout's order if they are not, as `apply` does after writing.
+    func raiseIntoOrder(_ layout: Layout, pids: [WindowID: pid_t], front: WindowID?, then done: @escaping () -> Void = {}) {
+        raiseQueue.async {
+            let ids = layout.raises(current: onScreenOrder())
+            if Self.raisingKeepsFocus(ids, front: front, pids: pids) { self.raise(ids, pids: pids) }
+            done()
         }
     }
 
@@ -122,6 +131,11 @@ final class FrameApplier {
         AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
         AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, originValue)
         AXUIElementSetAttributeValue(element, kAXSizeAttribute as CFString, sizeValue)
+    }
+
+    private func move(_ origin: CGPoint, to element: AXUIElement) {
+        var origin = origin
+        AXUIElementSetAttributeValue(element, kAXPositionAttribute as CFString, AXValueCreate(.cgPoint, &origin)!)
     }
 
     private func frame(_ element: AXUIElement) -> CGRect? {

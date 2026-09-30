@@ -259,6 +259,18 @@ final class ConfigTests: XCTestCase {
         assertError("[focus-follows-mouse]\naccordion = true\n", path: "focus-follows-mouse.accordion", line: 2, contains: "unknown key")
     }
 
+    func testAnimations() throws {
+        XCTAssertEqual(Config.default.animations, Animations())
+        let config = try Config.parse("""
+        [animations]
+        enabled = false
+        duration-ms = 300
+        """)
+        XCTAssertFalse(config.animations.enabled)
+        XCTAssertEqual(config.animations.durationMs, 300)
+        assertError("[animations]\nduration-ms = -1\n", path: "animations.duration-ms", line: 2, contains: "0 to 1000")
+    }
+
     func testLoadFromMissingFileFails() {
         XCTAssertThrowsError(try Config.load(from: URL(fileURLWithPath: "/nonexistent/dinky.toml"))) { error in
             XCTAssertTrue("\(error)".contains("/nonexistent/dinky.toml"))

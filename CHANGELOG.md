@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Windows glide to their tiles instead of jumping. Turn it off or change the speed under `[animations]`; it's off while macOS's Reduce Motion is on.
 - `flatten-workspace-tree` puts windows back into the workspace's configured layout: a fixed grid gets its cells back, an accordion workspace becomes an accordion again.
 - `move` past the edge of an accordion that fills the workspace takes the window out of it, into a tile beside the accordion, as in AeroSpace.
 

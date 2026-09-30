@@ -131,6 +131,21 @@
         }
       }
     },
+    "animations": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on.",
+      "properties": {
+        "enabled": { "type": "boolean", "default": true },
+        "duration-ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "default": 50,
+          "description": "Roughly how long a window takes to arrive. 0 jumps."
+        }
+      }
+    },
     "hooks": {
       "type": "object",
       "additionalProperties": false,

@@ -54,6 +54,10 @@ extension Config {
     delay-ms = 100                  # how long the pointer rests on a window before it takes focus
     accordion-edges = true          # resting on a peeking accordion edge focuses that window
 
+    [animations]
+    enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
+    duration-ms = 50                # roughly how long a window takes to arrive
+
     # dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
     # [hooks]
     # startup = ['exec-and-forget brew services restart sketchybar']

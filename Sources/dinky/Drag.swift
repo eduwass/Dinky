@@ -8,7 +8,7 @@ import DinkyLayout
 extension Coordinator {
     func noteFrameChange(of id: WindowID) {
         // Only tiled windows have a Space.
-        guard dragging == nil, placements[id]?.space != nil, mouseButtonDown else { return }
+        guard dragging == nil, placements[id]?.space != nil, !isAnimating(id), mouseButtonDown else { return }
         dragging = id
         watchDragEnd()
     }

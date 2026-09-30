@@ -24,7 +24,7 @@ final class Coordinator {
     let model = WindowModel()
     var enabled = true {
         didSet {
-            if !enabled { applier.cancel() }
+            if !enabled { applier.cancel(); animator.cancel() }
             if enabled, !oldValue { reconcile() }
         }
     }
@@ -32,6 +32,7 @@ final class Coordinator {
     private let displays: DisplayModel
     private(set) var config: Config
     let applier = FrameApplier()
+    private lazy var animator = Animator(applier: applier)
     private var borders: BorderManager?
     func isBorderWindow(_ id: WindowID) -> Bool { borders?.isBorder(id) ?? false }
     private(set) var workspaces: [SpaceKey: Workspace] = [:]
@@ -59,6 +60,7 @@ final class Coordinator {
 
     func start() {
         model.onChange = { [weak self] event in self?.handle(event) }
+        animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
         displays.observe { [weak self] _ in self?.reconcile() }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
@@ -75,8 +77,10 @@ final class Coordinator {
 
     func update(config: Config) {
         self.config = config
+        animator.setDuration(ms: config.animations.durationMs)
         if config.borders.enabled {
-            borders = borders ?? BorderManager(config: config.borders, model: model)
+            borders = borders ?? BorderManager(config: config.borders, model: model,
+                                               isAnimating: { [unowned self] id in animator.isAnimating(id) })
             borders?.update(config: config.borders)
         } else {
             borders = nil
@@ -298,14 +302,34 @@ final class Coordinator {
         workspaces[key] = workspace
         let layout = workspace.layout()
         let pids = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in model.windows[id].map { (id, $0.pid) } })
-        applier.apply(layout, pids: pids, front: workspace.focused) { [weak self] _ in
-            DispatchQueue.main.async {
-                guard let self, self.enabled else { return }
-                self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
-                self.flush()
+        let write = { [weak self] in
+            guard let self else { return }
+            applier.apply(layout, pids: pids, front: workspace.focused) { [weak self] results in
+                DispatchQueue.main.async {
+                    guard let self, self.enabled else { return }
+                    self.animator.noteLanded(results)
+                    self.edit(key) { $0.minimumSizes = self.minimumSizes(in: $0) }
+                    self.flush()
+                }
             }
         }
+        guard animates else { return write() }
+        // Stacking first, so the window coming to the front of an accordion slides in on top.
+        applier.raiseIntoOrder(layout, pids: pids, front: workspace.focused)
+        let starts = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in
+            id == dragging ? nil : model.windows[id].map { (id, $0.frame) }
+        })
+        animator.animate(key, from: starts, to: layout.frames, pids: pids, then: write)
     }
+
+    /// Whether passes glide windows to their tiles.
+    private var animates: Bool {
+        config.animations.enabled && config.animations.durationMs > 0
+            && !NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    /// Whether dinky is gliding the window to its tile right now.
+    func isAnimating(_ id: WindowID) -> Bool { animator.isAnimating(id) }
 
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
         var sizes: [WindowID: CGSize] = [:]

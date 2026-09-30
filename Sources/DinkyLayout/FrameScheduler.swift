@@ -30,7 +30,9 @@ public struct FrameResult: Equatable, Sendable {
 
 /// Schedules frame writes: one serial queue per process so a slow app only stalls itself,
 /// the newest frame per window wins, and a window that refuses its frame is written at most twice.
-/// The actual reads and writes are injected, so this is testable without Accessibility.
+/// Animation steps take a lighter path on the same queues: written once, not read back, and only moved
+/// when their size is the one last written. The actual reads and writes are injected, so this is testable
+/// without Accessibility.
 public final class FrameScheduler: @unchecked Sendable {
     public typealias Completion = ([FrameResult]) -> Void
 
@@ -38,6 +40,7 @@ public final class FrameScheduler: @unchecked Sendable {
     private let prepare: (Int32) -> Void
     private let read: (FrameJob) -> CGRect?
     private let write: (FrameJob) -> Void
+    private let move: (FrameJob) -> Void
 
     private let lock = NSLock()
     private var apps: [Int32: App] = [:]
@@ -45,13 +48,16 @@ public final class FrameScheduler: @unchecked Sendable {
     /// Bumped by `cancel`; writes queued under an older generation are dropped.
     private var generation = 0
 
-    /// `prepare` runs once per process before its first write; `read` and `write` run on that process's queue.
+    /// `prepare` runs once per process before its first write; `read`, `write` and `move` (position only)
+    /// run on that process's queue.
     public init(settle: TimeInterval = 0.1, prepare: @escaping (Int32) -> Void = { _ in },
-                read: @escaping (FrameJob) -> CGRect?, write: @escaping (FrameJob) -> Void) {
+                read: @escaping (FrameJob) -> CGRect?, write: @escaping (FrameJob) -> Void,
+                move: ((FrameJob) -> Void)? = nil) {
         self.settle = settle
         self.prepare = prepare
         self.read = read
         self.write = write
+        self.move = move ?? write
     }
 
     /// Sizes windows refused to go below, observed on readback. Only dimensions that were refused are set.
@@ -65,18 +71,41 @@ public final class FrameScheduler: @unchecked Sendable {
         let batch = Batch(waiting: byPid.count, completion)
         lock.withLock {
             for (pid, jobs) in byPid {
-                let app = apps[pid] ?? App(pid)
-                apps[pid] = app
+                let app = app(pid)
                 for job in jobs {
                     if let i = app.pending.firstIndex(where: { $0.id == job.id }) { app.pending[i] = job } else { app.pending.append(job) }
                 }
                 app.batches.append(batch)
-                if !app.scheduled {
-                    app.scheduled = true
-                    app.queue.async { self.drain(app) }
-                }
+                schedule(app)
             }
         }
+    }
+
+    /// Queue animation steps: each replaces any step of the same window not written yet, and is written once
+    /// without reading back. A step whose size is the one last written for its window only moves it.
+    public func step(_ jobs: [FrameJob]) {
+        lock.withLock {
+            for job in jobs {
+                let app = app(job.pid)
+                if let i = app.steps.firstIndex(where: { $0.id == job.id }) { app.steps[i] = job } else { app.steps.append(job) }
+                schedule(app)
+            }
+        }
+    }
+
+    /// The process's queue, made on first use. Under the lock.
+    private func app(_ pid: Int32) -> App {
+        if let app = apps[pid] { return app }
+        let app = App(pid)
+        apps[pid] = app
+        return app
+    }
+
+    /// Drain the process's queue unless a drain is already on its way. Under the lock.
+    private func schedule(_ app: App) {
+        guard !app.scheduled else { return }
+        app.scheduled = true
+        app.queue.async { self.drain(app) }
     }
 
     /// Drops every frame not written yet, including a second try already under way. Completions still run,
@@ -84,18 +113,23 @@ public final class FrameScheduler: @unchecked Sendable {
     public func cancel() {
         lock.withLock {
             generation += 1
-            for app in apps.values { app.pending = [] }
+            for app in apps.values { app.pending = []; app.steps = [] }
         }
     }
 
-    /// Take everything pending for one process and write it. Runs on the process's queue.
+    /// Take everything pending for one process and write it, steps first. Runs on the process's queue.
     private func drain(_ app: App) {
-        let (jobs, batches, needsPrepare, generation) = lock.withLock {
-            defer { app.pending = []; app.batches = []; app.scheduled = false; app.prepared = true }
-            return (app.pending, app.batches, !app.prepared, self.generation)
+        let (steps, jobs, batches, needsPrepare, generation) = lock.withLock {
+            defer { app.steps = []; app.pending = []; app.batches = []; app.scheduled = false; app.prepared = true }
+            return (app.steps, app.pending, app.batches, !app.prepared, self.generation)
         }
         if needsPrepare { prepare(app.pid) }
+        for job in steps {
+            app.written[job.id] == job.frame.size ? move(job) : write(job)
+            app.written[job.id] = job.frame.size
+        }
         let results = run(jobs) { self.lock.withLock { self.generation } == generation }
+        for result in results where result.written { app.written[result.job.id] = nil }
         for batch in batches { batch.report(results) }
     }
 
@@ -154,6 +188,9 @@ public final class FrameScheduler: @unchecked Sendable {
         let queue: DispatchQueue
         var pending: [FrameJob] = []
         var batches: [Batch] = []
+        var steps: [FrameJob] = []
+        /// The size each window's last step wrote, so the next step can be a plain move. Queue only.
+        var written: [WindowID: CGSize] = [:]
         var scheduled = false
         var prepared = false
 

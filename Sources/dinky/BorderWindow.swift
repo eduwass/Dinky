@@ -28,9 +28,11 @@ final class BorderWindow {
         if id != 0 { dinky_border_destroy(id) }
     }
 
-    func update(_ window: Window, color: DinkyConfig.Color, config: Borders) {
+    /// Place and draw the border around `window`. With `moveOnly`, a border that would need redrawing hides instead.
+    func update(_ window: Window, color: DinkyConfig.Color, config: Borders, moveOnly: Bool = false) {
         let look = Look(size: window.frame.size, cornerRadius: window.cornerRadius,
                         color: color, width: config.width)
+        if moveOnly, look != drawn { return hide() }
         let scale = backingScale(of: window.frame)
         if scale != self.scale { recreate(scale: scale) }
         guard id != 0 else { return }

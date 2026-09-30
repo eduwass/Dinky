@@ -248,3 +248,28 @@ final class FrameSchedulerTests: XCTestCase {
         XCTAssertEqual(layout.raises(current: [1, 2]), [2])
     }
 }
+
+final class FrameSchedulerStepTests: XCTestCase {
+    func testStepsMoveWhenTheSizeIsUnchangedAndAreNotReadBack() {
+        let lock = NSLock()
+        var calls: [String] = []
+        let done = expectation(description: "drained")
+        let scheduler = FrameScheduler(settle: 0, read: { _ in XCTFail("steps are not read back"); return nil },
+                                       write: { job in lock.withLock { calls.append("write \(Int(job.frame.minX))") } },
+                                       move: { job in lock.withLock { calls.append("move \(Int(job.frame.minX))") } })
+        scheduler.step([job(1, 10, 0)])
+        scheduler.step([job(1, 10, 10)])
+        var wider = job(1, 10, 20)
+        wider.frame.size.width = 200
+        scheduler.step([wider])
+        scheduler.step([])
+        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { done.fulfill() }
+        wait(for: [done], timeout: 1)
+        // The first two may coalesce; either way the first write sizes the window and a resize writes again.
+        let result = lock.withLock { calls }
+        XCTAssertEqual(result.first?.hasPrefix("write"), true)
+        XCTAssertEqual(result.last, "write 20")
+        XCTAssertFalse(result.dropFirst().dropLast().contains { $0.hasPrefix("write") })
+    }
+
+}

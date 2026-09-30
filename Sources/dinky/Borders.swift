@@ -14,10 +14,17 @@ final class BorderManager {
     private var focusedID: UInt32 = 0
     private var visibleSpaces: Set<UInt64> = []
     private var restackPending = false
+    /// Windows that moved or resized since the last sync, placed together once per run-loop turn.
+    private var moved: Set<UInt32> = []
+    private var refocusPending = false
+    /// Whether dinky is animating the window, when its border only follows moves: redrawing it at every
+    /// size of a resize costs more than a frame.
+    private let isAnimating: (UInt32) -> Bool
 
-    init(config: Borders, model: WindowModel) {
+    init(config: Borders, model: WindowModel, isAnimating: @escaping (UInt32) -> Bool) {
         self.config = config
         self.model = model
+        self.isAnimating = isAnimating
         refreshSpaces()
         focusedID = dinky_border_focused_window()
         syncAll()
@@ -43,7 +50,10 @@ final class BorderManager {
             refocus()
             // The new app's front window can settle a few ms after the app (JankyBorders waits 20 ms).
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
-        case .windowReorder, .windowCreate, .windowDestroy, .windowUpdate, .windowTitle:
+        case .windowUpdate:
+            // Sent as a window redraws, so every frame of a resize: one focus check per run-loop turn.
+            refocusSoon()
+        case .windowReorder, .windowCreate, .windowDestroy, .windowTitle:
             refocus()
         default:
             break
@@ -54,6 +64,8 @@ final class BorderManager {
             borders[window.id] = nil
         } else if event.kind == .windowReorder {
             restack()
+        } else if event.kind == .windowMove || event.kind == .windowResize {
+            syncMoved(window.id)
         } else {
             sync(window)
         }
@@ -69,6 +81,25 @@ final class BorderManager {
             self?.restackPending = false
             self?.syncAll()
         }
+    }
+
+    /// A window being animated or dragged sends a move and a resize every frame. Placing its border is a
+    /// WindowServer round trip, so the events of one run-loop turn share one placement.
+    private func syncMoved(_ id: UInt32) {
+        guard moved.insert(id).inserted, moved.count == 1 else { return }
+        DispatchQueue.main.async { [weak self] in
+            guard let self else { return }
+            let ids = moved
+            moved = []
+            sync(ids)
+        }
+    }
+
+    /// Windows that finished animating: their borders catch up with any size they skipped.
+    func arrived(_ ids: [UInt32]) { sync(ids) }
+
+    private func sync<S: Sequence<UInt32>>(_ ids: S) {
+        for id in ids { if let window = model.windows[id] { sync(window) } }
     }
 
     /// Mission Control came or went: every border hides or returns.
@@ -91,7 +122,17 @@ final class BorderManager {
         let focused = window.id == focusedID
         let border = borders[window.id] ?? BorderWindow(target: window.id)
         borders[window.id] = border
-        border.update(window, color: focused ? config.activeColor : config.inactiveColor, config: config)
+        border.update(window, color: focused ? config.activeColor : config.inactiveColor, config: config,
+                      moveOnly: isAnimating(window.id))
+    }
+
+    private func refocusSoon() {
+        guard !refocusPending else { return }
+        refocusPending = true
+        DispatchQueue.main.async { [weak self] in
+            self?.refocusPending = false
+            self?.refocus()
+        }
     }
 
     private func refocus() {
