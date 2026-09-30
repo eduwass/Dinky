@@ -1,6 +1,6 @@
 ---
 id: din-lgtw
-status: open
+status: closed
 deps: []
 links: []
 created: 2026-09-26T20:55:18Z
