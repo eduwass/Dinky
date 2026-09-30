@@ -66,6 +66,18 @@ NSArray<DinkyDisplay *> *dinky_displays(void)
     return result;
 }
 
+NSArray<NSNumber *> *dinky_current_space_ids(void)
+{
+    int cid = dinky_connection();
+    NSMutableArray *result = [NSMutableArray array];
+    NSArray *managed = CFBridgingRelease(SLSCopyManagedDisplaySpaces(cid));
+    for (NSDictionary *entry in managed) {
+        CFStringRef identifier = (__bridge CFStringRef)entry[@"Display Identifier"];
+        [result addObject:@(SLSManagedDisplayGetCurrentSpace(cid, identifier))];
+    }
+    return result;
+}
+
 uint64_t dinky_current_space_id(CFStringRef displayUUID)
 {
     return SLSManagedDisplayGetCurrentSpace(dinky_connection(), displayUUID);
