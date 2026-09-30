@@ -165,14 +165,11 @@ enum Dispatcher {
         } catch {
             return error.reply
         }
-        guard wid != 0 else { return .error("no focused window") }
-        guard let space = AppState.shared.numbers.space(of: n) else { return .error("workspace \(n) has no Space; see `dinky doctor`") }
-        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on workspace \(n)") }
-        let model = AppState.shared.displays
-        let from = model.display(ofWindow: wid)
-        if let error = move(wid, to: space, arriving: "workspace \(n)") { return error }
-        if let from, let to = model.display(containingSpace: space) { keepOffset(of: wid, from: from, to: to) }
-        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
+        guard let space = AppState.shared.numbers.space(of: n),
+              let to = AppState.shared.displays.display(containingSpace: space) else {
+            return .error("workspace \(n) has no Space; see `dinky doctor`")
+        }
+        if let reply = relocate(wid, to: space, on: to, destination: "workspace \(n)", follow: follow) { return reply }
         // macOS activates another app when the Space left behind loses the active app's window, so focus the
         // moved window once its workspace shows.
         if follow { _ = show(n) { AppState.shared.coordinator?.focus(wid) } }
@@ -219,16 +216,31 @@ enum Dispatcher {
     private static func moveWindowToDisplay(_ target: DisplayTarget, follow: Bool, window wid: WindowID) -> Reply {
         let model = AppState.shared.displays
         model.reconcile()
-        guard wid != 0, let pid = windowPID(wid), let from = model.display(ofWindow: wid) else { return .error("no focused window") }
+        guard wid != 0, let from = model.display(ofWindow: wid) else { return .error("no focused window") }
         let displays = model.displays
         guard displays.count > 1, let i = displays.firstIndex(of: from) else { return .error("no other display") }
         let n = (i + (target == .next ? 1 : -1) + displays.count) % displays.count
         let to = displays[n]
-        if let error = move(wid, to: to.currentSpaceID, arriving: "display \(n + 1)") { return error }
-        keepOffset(of: wid, from: from, to: to)
-        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
-        if follow { focusWindow(pid: pid, id: wid) }
+        if let reply = relocate(wid, to: to.currentSpaceID, on: to, destination: "display \(n + 1)", follow: follow) {
+            return reply
+        }
+        // The Space is on screen, so there is nothing to show first.
+        if follow { AppState.shared.coordinator?.focus(wid) }
         return .ok("moved window \(wid) to display \(n + 1)")
+    }
+
+    /// Moves a window to a Space on display `to` and tells the coordinator, which refocuses the Space left
+    /// behind unless the caller follows the window. Nil once moved, else the reply to answer (an error, or ok
+    /// when the window is already there).
+    private static func relocate(_ wid: WindowID, to space: UInt64, on to: Display, destination: String,
+                                 follow: Bool) -> Reply? {
+        guard wid != 0 else { return .error("no focused window") }
+        guard dinky_window_space_id(wid) != space else { return .ok("window \(wid) is already on \(destination)") }
+        let from = AppState.shared.displays.display(ofWindow: wid)
+        if let error = move(wid, to: space, arriving: destination) { return error }
+        if let from { keepOffset(of: wid, from: from, to: to) }
+        AppState.shared.coordinator?.windowMoved(wid, refocus: !follow)
+        return nil
     }
 
     /// A floating window moved to another display keeps its offset from the display's corner; the tree places a
