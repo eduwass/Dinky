@@ -25,6 +25,7 @@
         <a {% if page.url == '/' %}aria-current="page"{% endif %} href="{{ '/' | relative_url }}">00 / Introduction</a>
         <a {% if page.url contains '/configuration/' %}aria-current="page"{% endif %} href="{{ '/configuration/' | relative_url }}">01 / Configuration</a>
         <a {% if page.url contains '/commands/' %}aria-current="page"{% endif %} href="{{ '/commands/' | relative_url }}">02 / Commands</a>
+        <a {% if page.url contains '/changelog/' %}aria-current="page"{% endif %} href="{{ '/changelog/' | relative_url }}">03 / Changelog</a>
       </aside>
 
       <main id="content">

@@ -5,6 +5,7 @@ on:
     branches: [main]
     paths:
       - docs/**
+      - CHANGELOG.md
       - .github/workflows/pages.yml
   workflow_dispatch:
 
@@ -23,6 +24,11 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5
       - uses: actions/configure-pages@v5
+      # The released sections of CHANGELOG.md, without its title or anything still unreleased.
+      - name: Include the changelog
+        run: |
+          mkdir -p docs/_includes
+          awk '/^# /{next} /^## /{skip = ($0 == "## Unreleased")} !skip' CHANGELOG.md > docs/_includes/changelog.md
       - uses: actions/jekyll-build-pages@v1
         with:
           source: ./docs

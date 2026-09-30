@@ -4,4 +4,6 @@
 .DS_Store
 build/
 dist/
+# Copied from CHANGELOG.md when the manual is built.
+docs/_includes/changelog.md
 __pycache__/
