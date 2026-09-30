@@ -165,12 +165,13 @@ uint32_t dinky_border_focused_window(void)
     NSMutableArray *spaces = [NSMutableArray array];
     for (DinkyDisplay *display in dinky_displays()) [spaces addObject:@(display.currentSpaceID)];
 
-    // Document-tagged windows of the front app, front to back.
+    // Document-tagged windows of the front app, front to back. A minimized one is never focused.
     uint64_t set_tags = 1;
     uint64_t clear_tags = 0;
     NSArray *windows = CFBridgingRelease(SLSCopyWindowsWithOptionsAndTags(dinky_connection(), owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags));
     for (NSNumber *wid in windows) {
-        if (dinky_window_info(wid.unsignedIntValue).isDocument) return wid.unsignedIntValue;
+        DinkyWindowInfo info = dinky_window_info(wid.unsignedIntValue);
+        if (info.isDocument && info.isVisible) return wid.unsignedIntValue;
     }
     return 0;
 }

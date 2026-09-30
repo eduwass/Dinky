@@ -18,14 +18,16 @@ struct Window {
     var spaceID: UInt64 = 0
     var isOrderedIn = false
     var isDocument = false
+    var isVisible = false
     var isMinimized = false
     var cornerRadius = 0
 
     var id: UInt32 { identity.id }
     var pid: pid_t { identity.pid }
 
-    // Tileable: normal layer, on screen, a document window rather than a sheet, panel or popup.
-    var isNormal: Bool { level == 0 && isOrderedIn && isDocument }
+    // Tileable: normal layer, on screen, visible (not minimized), a document window rather than a sheet,
+    // panel or popup.
+    var isNormal: Bool { level == 0 && isOrderedIn && isVisible && isDocument }
 }
 
 struct WindowEvent {
@@ -120,7 +122,9 @@ final class WindowModel {
         publish(kind, .removed, window, pid: window.pid)
     }
 
-    private func refresh(_ id: UInt32, kind: DinkyEventKind) {
+    /// Re-reads a known window, its Space included, and publishes it as updated (or removed, if it is gone).
+    /// Does nothing for a window the model does not know.
+    func refresh(_ id: UInt32, kind: DinkyEventKind = .windowUpdate) {
         guard var window = windows[id] else { return }
         let info = dinky_window_info(id)
         guard info.exists else { return remove(id, kind: kind) }
@@ -150,6 +154,7 @@ final class WindowModel {
         window.level = Int(info.level)
         window.isOrderedIn = info.isOrderedIn
         window.isDocument = info.isDocument
+        window.isVisible = info.isVisible
         window.isMinimized = info.isMinimized
         window.cornerRadius = Int(info.cornerRadius)
     }

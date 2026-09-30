@@ -53,7 +53,8 @@ typedef struct {
     uint64_t tags;
     uint64_t attributes;
     bool isOrderedIn;
-    bool isDocument;       // JankyBorders window_suitable: a real document or modal window
+    bool isDocument;       // JankyBorders window_suitable, kind only: a real document or modal window
+    bool isVisible;        // the visible attribute or tag; clear while minimized
     bool isMinimized;      // yabai space_window_list minimized test
     int cornerRadius;      // 0 if SkyLight does not report one
 } DinkyWindowInfo;

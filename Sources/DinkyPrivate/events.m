@@ -142,8 +142,8 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
     uint64_t tags = info.tags;
     bool attached = tags & (1ULL << 7);
     bool ignoresCycle = tags & (1ULL << 18);
-    info.isDocument = info.parentID == 0 && dinky_is_visible(info.attributes, tags) && dinky_has_document_tags(tags)
-                      && !attached && !ignoresCycle;
+    info.isDocument = info.parentID == 0 && dinky_has_document_tags(tags) && !attached && !ignoresCycle;
+    info.isVisible = dinky_is_visible(info.attributes, tags);
     info.isMinimized = dinky_is_minimized(info.attributes, tags);
     return info;
 }

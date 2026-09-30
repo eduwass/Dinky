@@ -6,17 +6,18 @@ import DinkyPrivate
 // focused window's border gets the active colour, the rest the inactive one (JankyBorders'
 // behaviour).
 //
-// The owner feeds it the WindowModel's events through handle(_:).
+// The owner feeds it the WindowModel's events through handle(_:). Events only record what needs doing;
+// one flush per run-loop turn does it, in a fixed order: the focus check first, so every border is drawn
+// with the current focus, then the borders of the windows that changed (or all of them).
 final class BorderManager {
     private var config: Borders
     private let model: WindowModel
     private var borders: [UInt32: BorderWindow] = [:]
     private var focusedID: UInt32 = 0
     private var visibleSpaces: Set<UInt64> = []
-    private var restackPending = false
-    /// Windows that moved or resized since the last sync, placed together once per run-loop turn.
-    private var moved: Set<UInt32> = []
-    private var refocusPending = false
+    /// What the next flush does: check focus, place every border, or place the borders of these windows.
+    private var pending = (refocus: false, all: false, ids: Set<UInt32>())
+    private var flushScheduled = false
     /// Whether dinky is animating the window, when its border only follows moves: redrawing it at every
     /// size of a resize costs more than a frame.
     private let isAnimating: (UInt32) -> Bool
@@ -43,60 +44,53 @@ final class BorderManager {
         switch event.kind {
         case .spaceChange, .spaceCreated, .spaceDestroyed:
             refreshSpaces()
-            refocus()
-            syncAll()
-            return
+            pending.refocus = true
+            pending.all = true
         case .frontApp:
-            refocus()
+            pending.refocus = true
             // The new app's front window can settle a few ms after the app (JankyBorders waits 20 ms).
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
-        case .windowUpdate:
-            // Sent as a window redraws, so every frame of a resize: one focus check per run-loop turn.
-            refocusSoon()
         case .windowReorder:
-            refocus()
+            pending.refocus = true
             // A click between one app's windows can report the previous one in front for a few ms.
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
-        case .windowCreate, .windowDestroy, .windowTitle:
-            refocus()
+        case .windowUpdate, .windowCreate, .windowDestroy, .windowTitle:
+            pending.refocus = true
         default:
             break
         }
 
-        guard let window = event.window else { return }
-        if event.change == .removed {
-            borders[window.id] = nil
-        } else if event.kind == .windowReorder {
-            restack()
-        } else if event.kind == .windowMove || event.kind == .windowResize {
-            syncMoved(window.id)
-        } else {
-            sync(window)
+        if let window = event.window {
+            if event.change == .removed {
+                // Released now, not at the flush: WindowServer can reuse the id before then.
+                borders[window.id] = nil
+            } else if event.kind == .windowReorder {
+                // A border is ordered next to its target once, so a window raised later lands on top of every
+                // border below it: an app's activation, or the accordion raising its other windows, buries the
+                // focused border under the windows raised after it. So any reorder places every border again.
+                pending.all = true
+            } else {
+                // A window being animated or dragged sends a move and a resize every frame, and placing its
+                // border is a WindowServer round trip, so the events of one turn share one placement.
+                pending.ids.insert(window.id)
+            }
         }
+        scheduleFlush()
     }
 
-    /// A border is ordered next to its target once, so a window raised later lands on top of every border
-    /// below it: an app's activation, or the accordion raising its other windows, buries the focused border
-    /// under the windows raised after it. So any reorder places every border again, once per run-loop turn.
-    private func restack() {
-        guard !restackPending else { return }
-        restackPending = true
-        DispatchQueue.main.async { [weak self] in
-            self?.restackPending = false
-            self?.syncAll()
-        }
+    private func scheduleFlush() {
+        guard !flushScheduled else { return }
+        flushScheduled = true
+        DispatchQueue.main.async { [weak self] in self?.flush() }
     }
 
-    /// A window being animated or dragged sends a move and a resize every frame. Placing its border is a
-    /// WindowServer round trip, so the events of one run-loop turn share one placement.
-    private func syncMoved(_ id: UInt32) {
-        guard moved.insert(id).inserted, moved.count == 1 else { return }
-        DispatchQueue.main.async { [weak self] in
-            guard let self else { return }
-            let ids = moved
-            moved = []
-            sync(ids)
-        }
+    /// Does what the events since the last flush asked for: focus first, then the borders.
+    private func flush() {
+        let work = pending
+        pending = (refocus: false, all: false, ids: [])
+        flushScheduled = false
+        if work.refocus { refocus() }
+        if work.all { syncAll() } else { sync(work.ids) }
     }
 
     /// Windows that finished animating: their borders catch up with any size they skipped.
@@ -119,7 +113,8 @@ final class BorderManager {
             borders[window.id] = nil
             return
         }
-        guard window.isOrderedIn, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
+        // Minimized windows land here too (they are still documents, just not visible), so the border hides.
+        guard window.isOrderedIn, window.isVisible, !window.isMinimized, visibleSpaces.contains(window.spaceID), !MissionControl.shared.active else {
             borders[window.id]?.hide()
             return
         }
@@ -128,15 +123,6 @@ final class BorderManager {
         borders[window.id] = border
         border.update(window, color: focused ? config.activeColor : config.inactiveColor, config: config,
                       moveOnly: isAnimating(window.id))
-    }
-
-    private func refocusSoon() {
-        guard !refocusPending else { return }
-        refocusPending = true
-        DispatchQueue.main.async { [weak self] in
-            self?.refocusPending = false
-            self?.refocus()
-        }
     }
 
     private func refocus() {
