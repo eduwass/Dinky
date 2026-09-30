@@ -53,7 +53,11 @@ final class BorderManager {
         case .windowUpdate:
             // Sent as a window redraws, so every frame of a resize: one focus check per run-loop turn.
             refocusSoon()
-        case .windowReorder, .windowCreate, .windowDestroy, .windowTitle:
+        case .windowReorder:
+            refocus()
+            // A click between one app's windows can report the previous one in front for a few ms.
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in self?.refocus() }
+        case .windowCreate, .windowDestroy, .windowTitle:
             refocus()
         default:
             break

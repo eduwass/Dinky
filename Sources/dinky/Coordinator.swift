@@ -105,9 +105,9 @@ final class Coordinator {
             if [.windowMove, .windowResize].contains(event.kind) { noteFrameChange(of: window.id) }
         }
         if [.frontApp, .windowReorder, .windowCreate].contains(event.kind) { syncFocus() }
-        if event.kind == .frontApp {
-            // The app's front window settles a few ms after the app, as the border manager also knows: Cmd-`
-            // between one app's windows reports the app with its previous window still in front.
+        if [.frontApp, .windowReorder].contains(event.kind) {
+            // The front window settles a few ms after the event, as the border manager also knows: Cmd-` or a click
+            // between one app's windows can report the previous window still in front.
             DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(20)) { [weak self] in
                 self?.syncFocus()
                 self?.flush()
