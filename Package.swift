@@ -39,7 +39,7 @@ let package = Package(
             dependencies: ["DinkyCommands", "DinkyConfig", .product(name: "TOMLDecoder", package: "TOMLDecoder")],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
-        // Config types and TOML loading. No AppKit. Unit tested.
+        // Config types and TOML loading. No AppKit; Carbon.HIToolbox for the key codes only. Unit tested.
         .target(
             name: "DinkyConfig",
             dependencies: [.product(name: "TOMLDecoder", package: "TOMLDecoder")],

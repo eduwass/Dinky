@@ -3,12 +3,12 @@ import DinkyConfig
 @testable import DinkyCommands
 
 struct ConfigCheckTests {
-    private func check(_ toml: String, known: Set<String> = ["h", "1", "esc", "r"]) throws -> [ConfigFinding] {
-        checkConfig(try Config.parse(toml), keyIsKnown: { known.contains($0) })
+    private func check(_ toml: String) throws -> [ConfigFinding] {
+        checkConfig(try Config.parse(toml))
     }
 
     @Test func `Default config is clean`() throws {
-        let findings = checkConfig(Config.default, keyIsKnown: { _ in true })
+        let findings = checkConfig(Config.default)
         #expect(findings == [])
     }
 
@@ -30,12 +30,6 @@ struct ConfigCheckTests {
         #expect(findings.count == 1)
         #expect(findings[0].message.contains("names a mode that is not in the config"))
         #expect(try check("[mode.main]\nalt-h = 'mode resize'\n[mode.resize]\nesc = 'mode main'") == [])
-    }
-
-    @Test func `Unknown key name`() throws {
-        let findings = try check("[mode.main]\nalt-h = 'focus left'", known: [])
-        #expect(findings.count == 1)
-        #expect(findings[0].message.contains("unknown key 'h'"))
     }
 
     @Test func `Rule and hook commands are checked`() throws {

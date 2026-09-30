@@ -19,18 +19,10 @@ final class HotkeyEngine {
         self.onCommands = onCommands
     }
 
-    /// Replaces all bindings and goes back to `main`. Keys without a keycode are logged and skipped.
+    /// Replaces all bindings and goes back to `main`.
     func load(modes: [String: Mode]) {
         self.modes = modes.mapValues { mode in
-            var bindings: [KeyPress: [String]] = [:]
-            for (combo, commands) in mode.bindings {
-                guard let press = KeyPress(combo) else {
-                    fputs("hotkeys: no keycode for '\(combo)', skipped\n", stderr)
-                    continue
-                }
-                bindings[press] = commands
-            }
-            return bindings
+            Dictionary(uniqueKeysWithValues: mode.bindings.map { (KeyPress($0.key), $0.value) })
         }
         enter("main")
     }
