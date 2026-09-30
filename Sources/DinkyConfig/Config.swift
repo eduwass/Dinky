@@ -27,6 +27,7 @@ public struct Config: Equatable {
     public var borders = Borders()
     public var focusFollowsMouse = FocusFollowsMouse()
     public var animations = Animations()
+    public var drag = Drag()
     public var hooks = Hooks()
     /// `[[rules]]`, in file order.
     public var rules: [WindowRule] = []
@@ -116,6 +117,7 @@ public struct Config: Equatable {
         borders = try t.table("borders").map(Borders.init) ?? borders
         focusFollowsMouse = try t.table("focus-follows-mouse").map(FocusFollowsMouse.init) ?? focusFollowsMouse
         animations = try t.table("animations").map(Animations.init) ?? animations
+        drag = try t.table("drag").map(Drag.init) ?? drag
         hooks = try t.table("hooks").map(Hooks.init) ?? hooks
         rules = try t.tables("rules")?.map(WindowRule.init) ?? []
         if let modeTable = try t.table("mode") {
@@ -259,6 +261,19 @@ public struct Animations: Equatable {
         enabled = try t.bool("enabled") ?? enabled
         durationMs = try t.int("duration-ms") ?? durationMs
         guard (0...1000).contains(durationMs) else { throw ConfigError(path: t.path("duration-ms"), "must be 0 to 1000") }
+        try t.done()
+    }
+}
+
+/// `[drag]`: dragging a tiled window with the mouse.
+public struct Drag: Equatable {
+    /// Outline the tile a dragged window came from and the one it will swap with.
+    public var placeholders = true
+
+    public init() {}
+
+    init(_ t: Table) throws {
+        placeholders = try t.bool("placeholders") ?? placeholders
         try t.done()
     }
 }

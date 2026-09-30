@@ -146,6 +146,18 @@
         }
       }
     },
+    "drag": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Dragging a tiled window with the mouse.",
+      "properties": {
+        "placeholders": {
+          "type": "boolean",
+          "default": true,
+          "description": "While you drag a tiled window, outline the tile it came from and the tile it will swap with."
+        }
+      }
+    },
     "hooks": {
       "type": "object",
       "additionalProperties": false,

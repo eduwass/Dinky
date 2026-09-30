@@ -58,6 +58,9 @@ extension Config {
     enabled = true                  # windows glide to their tiles; off while Reduce Motion is on
     duration-ms = 50                # roughly how long a window takes to arrive
 
+    [drag]
+    placeholders = true             # outline where a dragged tile came from and the tile it will swap with
+
     # dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
     # [hooks]
     # startup = ['exec-and-forget brew services restart sketchybar']

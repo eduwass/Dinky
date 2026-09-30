@@ -47,6 +47,7 @@ final class Coordinator {
     var notTabs: Set<WindowID> = []
     /// The tiled window being dragged with the mouse, until the button is released. See Drag.swift.
     var dragging: WindowID?
+    lazy var placeholders = DragPlaceholders()
     /// Called when the focused window changes.
     var onFocusChange: (() -> Void)?
     private var lastFocused: WindowID = 0
