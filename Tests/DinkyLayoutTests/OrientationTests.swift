@@ -67,6 +67,21 @@ struct OrientationTests {
         #expect(ws.layout().frames[3] == rect(450, 30, 550, 570))
     }
 
+    /// h[1 *[2 3]] with 1 held at 450: the column is laid out 550x600, though its ratio alone would make it 700x600.
+    @Test func `Every command sees a held back auto column as vertical`() {
+        var ws = column()
+        #expect(ws.resize(by: 200, along: .horizontal) == true)
+        ws.setOrientation(.auto)
+        ws.minimumSizes = [1: CGSize(width: 450, height: 0)]
+        #expect(shape(ws.root) == "h[1 *[2 3]]")
+        #expect(ws.containerAxis(of: 3) == .vertical)
+        #expect(ws.edgeWindow(.up) == 2)
+        #expect(ws.resize(by: 50, along: .vertical) == true)
+        #expect(ws.layout().frames[3] == rect(450, 250, 550, 350))
+        ws.insert(4)
+        #expect(shape(ws.root) == "h[1 *[2 h[3 4]]]", "3 is 550x350, so it splits side by side")
+    }
+
     @Test func `Explicit orientation is not changed by layout`() {
         var ws = column(autoOrientAccordions: false)
         ws.setMode(.accordion)

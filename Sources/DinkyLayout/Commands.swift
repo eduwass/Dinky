@@ -61,14 +61,14 @@ extension Workspace {
             focus(focused)
             return true
         }
-        let axis = direction.orientation, forward = direction.isForward
+        let axis = direction.orientation, forward = direction.isForward, layout = tiledLayout()
         let parentPath = Array(path.dropLast()), index = path.last!
         let parent = root.container(at: parentPath)
         let sibling = index + (forward ? 1 : -1)
-        if axisOfContainer(at: parentPath) == axis, parent.children.indices.contains(sibling) {
+        if axisOfContainer(at: parentPath, in: layout) == axis, parent.children.indices.contains(sibling) {
             if case .window(let other) = parent.children[sibling] { return swap(focused, other) }
             var destination = parentPath + [sibling]
-            while case .container(let c) = root.node(at: destination), axisOfContainer(at: destination) != axis {
+            while case .container(let c) = root.node(at: destination), axisOfContainer(at: destination, in: layout) != axis {
                 destination.append(c.activeIndex)
             }
             detach(path, adjusting: &destination)
@@ -77,11 +77,11 @@ extension Workspace {
             } else {
                 root.modify(at: Array(destination.dropLast())) { $0.insert(.window(focused), at: destination.last! + 1) }
             }
-        } else if let depth = path.indices.dropLast().last(where: { axisOfContainer(at: Array(path.prefix($0))) == axis }) {
+        } else if let depth = path.indices.dropLast().last(where: { axisOfContainer(at: Array(path.prefix($0)), in: layout) == axis }) {
             var outer = Array(path.prefix(depth + 1))
             detach(path, adjusting: &outer)
             root.modify(at: Array(outer.dropLast())) { $0.insert(.window(focused), at: outer.last! + (forward ? 1 : 0)) }
-        } else if axisOfContainer(at: []) != axis || (root.mode == .accordion && root.children.count > 1) {
+        } else if axisOfContainer(at: [], in: layout) != axis || (root.mode == .accordion && root.children.count > 1) {
             root.modify(at: parentPath) { $0.remove(at: index) }
             root = Container(ContainerOrientation(axis), .tiles, [.container(root)])
             root.insert(.window(focused), at: forward ? 1 : 0)
@@ -99,15 +99,16 @@ extension Workspace {
     public mutating func join(_ direction: Direction) -> Bool {
         isFullscreen = false
         guard let focused, let path = root.path(of: focused) else { return false }
-        let forward = direction.isForward, offset = forward ? 1 : -1
+        let forward = direction.isForward, offset = forward ? 1 : -1, layout = tiledLayout()
         guard let depth = path.indices.last(where: { depth in
             let prefix = Array(path.prefix(depth))
-            return axisOfContainer(at: prefix) == direction.orientation
+            return axisOfContainer(at: prefix, in: layout) == direction.orientation
                 && root.container(at: prefix).children.indices.contains(path[depth] + offset)
         }) else { return false }
         var target = Array(path.prefix(depth)) + [path[depth] + offset]
         detach(path, adjusting: &target)
         let across = direction.orientation.opposite
+        // Asked after the detach: the target may have grown into the space the window left.
         switch root.node(at: target) {
         case .container(let c) where axisOfContainer(at: target) == across:
             root.modify(at: target) { $0.insert(.window(focused), at: forward ? 0 : c.children.count) }
@@ -128,11 +129,13 @@ extension Workspace {
     public mutating func resize(by delta: CGFloat, along axis: Orientation? = nil) -> Bool {
         isFullscreen = false
         guard let focused, var path = root.path(of: focused) else { return false }
+        let layout = tiledLayout()
         while let index = path.popLast() {
             let parent = root.container(at: path)
-            let rect = root.rect(at: path, in: gaps.inset(bounds)), along = parent.axis(in: rect)
+            let rect = rect(at: path, in: layout), along = parent.axis(in: rect)
             guard parent.mode == .tiles, parent.children.count > 1, axis ?? along == along else { continue }
-            let extent = along == .horizontal ? rect.width : rect.height
+            // The children share the container's extent less the gaps between them, as `tileRects` splits it.
+            let extent = (along == .horizontal ? rect.width : rect.height) - gaps.inner(along) * CGFloat(parent.children.count - 1)
             let smallest = parent.children[index].minimumExtent(along, gap: gaps.inner(along), padding: accordionPadding, minimumSizes)
             let old = parent.ratios[index]
             let smallestOther = parent.ratios.enumerated().filter { $0.offset != index }.map(\.element).min()!

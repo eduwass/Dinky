@@ -70,10 +70,10 @@ public struct Workspace: Equatable, Sendable {
             root.insert(.window(id), at: root.children.count)
             return focus(id)
         }
-        let leaf = root.rect(at: path, in: gaps.inset(bounds))
+        let layout = tiledLayout(), leaf = layout.frames[focused] ?? gaps.inset(bounds)
         let axis: Orientation = leaf.width >= leaf.height ? .horizontal : .vertical
         let parentPath = Array(path.dropLast()), index = path.last!
-        let joins = axisOfContainer(at: parentPath) == axis || root.container(at: parentPath).children.count == 1
+        let joins = axisOfContainer(at: parentPath, in: layout) == axis || root.container(at: parentPath).children.count == 1
         root.modify(at: parentPath) { parent in
             if parent.children.count == 1, parent.orientation != .auto { parent.orientation = ContainerOrientation(axis) }
             if joins || parent.mode == .accordion {
@@ -283,13 +283,14 @@ public struct Workspace: Equatable, Sendable {
                 return first == second ? a < b : first < second
             }
         }
-        var container = root, rect = gaps.inset(bounds)
+        let layout = tiledLayout()
+        var container = root, path: [Int] = []
         while !container.children.isEmpty {
-            let index = container.axis(in: rect) != side.orientation ? container.activeIndex
+            let index = axisOfContainer(at: path, in: layout) != side.orientation ? container.activeIndex
                 : side.isForward ? container.children.count - 1 : 0
             switch container.children[index] {
             case .window(let id): return id
-            case .container(let c): (container, rect) = (c, container.rect(at: [index], in: rect))
+            case .container(let c): (container, path) = (c, path + [index])
             }
         }
         return nil
@@ -311,12 +312,22 @@ public struct Workspace: Equatable, Sendable {
         root.path(of: id).map { axisOfContainer(at: Array($0.dropLast())) }
     }
 
-    /// The axis the container at `path` runs along now, `auto` resolved from the rectangle it is laid out in
-    /// (its windows' frames together), so minimum sizes count as they do on screen.
+    /// The axis the container at `path` runs along now, `auto` resolved from the rectangle it is laid out in,
+    /// so minimum sizes count as they do on screen.
     func axisOfContainer(at path: [Int]) -> Orientation {
-        let container = root.container(at: path), frames = tiledLayout().frames
-        let rect = Node.container(container).windows.compactMap { frames[$0] }.reduce(CGRect.null) { $0.union($1) }
-        return container.axis(in: rect.isNull ? gaps.inset(bounds) : rect)
+        axisOfContainer(at: path, in: tiledLayout())
+    }
+
+    /// The axis of the container at `path` in `layout`, for callers asking about several containers at once.
+    func axisOfContainer(at path: [Int], in layout: Layout) -> Orientation {
+        root.container(at: path).axis(in: rect(at: path, in: layout))
+    }
+
+    /// The rectangle the container at `path` is laid out in, gaps and minimum sizes applied.
+    func rect(at path: [Int]) -> CGRect { rect(at: path, in: tiledLayout()) }
+
+    func rect(at path: [Int], in layout: Layout) -> CGRect {
+        layout.containerRects[path] ?? gaps.inset(bounds)
     }
 
     /// Set the layout mode of the focused window's parent container. Ratios are kept, so tiles come back as they were.

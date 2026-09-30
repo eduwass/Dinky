@@ -124,6 +124,16 @@ struct FixedLayoutTests {
         assertRatios(ws.root.ratios, widths)
     }
 
+    @Test func `Resizing next to an empty cell uses the whole column`() {
+        var ws = workspace(3, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 2, columns: 2, expand: .columns))
+        ws.focus(2)
+        #expect(ws.rect(at: [1]) == rect(600, 0, 600, 900))
+        #expect(ws.resize(by: 150) == true)
+        #expect(ws.layout().frames[2] == rect(600, 0, 600, 600))
+        #expect(ws.resize(2, to: CGSize(width: 600, height: 300), moving: [.down]) == true)
+        #expect(ws.layout().frames[2] == rect(600, 0, 600, 300))
+    }
+
     @Test func `Changing template keeps focus`() {
         var ws = workspace(4)
         ws.focus(1)

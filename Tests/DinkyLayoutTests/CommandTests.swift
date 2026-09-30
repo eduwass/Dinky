@@ -165,6 +165,17 @@ struct ResizeTests {
         assertRatios(ws.root.ratios, [0.1, 0.1, 0.8])
     }
 
+    @Test func `Resize by and resize to share the extent between the gaps`() {
+        let gaps = Gaps(horizontal: 10, vertical: 0, top: 0, bottom: 0, left: 0, right: 0)
+        var by = workspace(2, gaps: gaps), to = by
+        #expect(by.layout().frames[2] == rect(505, 0, 495, 600))
+        #expect(by.resize(by: 100) == true)
+        #expect(to.resize(2, to: CGSize(width: 595, height: 600), moving: [.left]) == true)
+        #expect(by.layout().frames[1] == rect(0, 0, 395, 600))
+        #expect(by.layout().frames[2] == rect(405, 0, 595, 600))
+        #expect(to.layout() == by.layout())
+    }
+
     @Test func `Single window cannot resize`() {
         var ws = workspace(1)
         #expect(ws.resize(by: 50) == false)
