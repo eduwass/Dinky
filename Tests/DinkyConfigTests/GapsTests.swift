@@ -1,23 +1,23 @@
-import XCTest
+import Testing
 @testable import DinkyConfig
 
-final class GapsTests: XCTestCase {
+struct GapsTests {
     private let builtIn = Monitor(name: "Built-in Retina Display", isMain: false, count: 2)
     private let dell = Monitor(name: "DELL U2723QE", isMain: true, count: 2)
 
-    func testNumbersAndTables() throws {
+    @Test func `Numbers and tables`() throws {
         let gaps = try Config.parse("[gaps]\ninner = 6\nouter = 4\n").gaps
-        XCTAssertEqual(gaps.inner, Inner(6))
-        XCTAssertEqual(gaps.outer, Sides(4))
+        #expect(gaps.inner == Inner(6))
+        #expect(gaps.outer == Sides(4))
         let split = try Config.parse("[gaps]\ninner = { horizontal = 8, vertical = 6 }\nouter = { top = 44, left = 2 }\n").gaps
-        XCTAssertEqual(split.inner, Inner(horizontal: 8, vertical: 6))
-        XCTAssertEqual(split.outer, Sides(top: 44, bottom: 8, left: 2, right: 8), "sides left out keep the default")
+        #expect(split.inner == Inner(horizontal: 8, vertical: 6))
+        #expect(split.outer == Sides(top: 44, bottom: 8, left: 2, right: 8), "sides left out keep the default")
         let dotted = try Config.parse("[gaps]\ninner.vertical = 0\nouter.top = 44\n").gaps
-        XCTAssertEqual(dotted.inner, Inner(horizontal: 8, vertical: 0))
-        XCTAssertEqual(dotted.outer.top, 44)
+        #expect(dotted.inner == Inner(horizontal: 8, vertical: 0))
+        #expect(dotted.outer.top == 44)
     }
 
-    func testDisplayOverrides() throws {
+    @Test func `Display overrides`() throws {
         let config = try Config.parse("""
         [gaps]
         inner = 12
@@ -30,13 +30,13 @@ final class GapsTests: XCTestCase {
         gaps.outer.top = 10
         gaps.inner = 6
         """)
-        XCTAssertEqual(config.displays.count, 2)
-        XCTAssertEqual(config.gaps(for: dell), Gaps(inner: Inner(12), outer: Sides(top: 44, bottom: 8, left: 8, right: 8)))
-        XCTAssertEqual(config.gaps(for: builtIn), Gaps(inner: Inner(6), outer: Sides(top: 10, bottom: 8, left: 8, right: 8)))
-        XCTAssertEqual(config.gaps(for: Monitor(name: "LG", isMain: false, count: 3)), config.gaps, "no match, no change")
+        #expect(config.displays.count == 2)
+        #expect(config.gaps(for: dell) == Gaps(inner: Inner(12), outer: Sides(top: 44, bottom: 8, left: 8, right: 8)))
+        #expect(config.gaps(for: builtIn) == Gaps(inner: Inner(6), outer: Sides(top: 10, bottom: 8, left: 8, right: 8)))
+        #expect(config.gaps(for: Monitor(name: "LG", isMain: false, count: 3)) == config.gaps, "no match, no change")
     }
 
-    func testNamePatternBeatsMainAndLongerNameBeatsShorter() throws {
+    @Test func `Name pattern beats main and longer name beats shorter`() throws {
         let config = try Config.parse("""
         [display.main]
         gaps.outer.top = 1
@@ -47,19 +47,19 @@ final class GapsTests: XCTestCase {
         gaps.outer.top = 3
         """)
         let gaps = config.gaps(for: dell)
-        XCTAssertEqual(gaps.outer.top, 3)
-        XCTAssertEqual(gaps.outer.bottom, 1, "the overrides layer, each one only changes what it sets")
+        #expect(gaps.outer.top == 3)
+        #expect(gaps.outer.bottom == 1, "the overrides layer, each one only changes what it sets")
     }
 
-    func testWorkspaceToDisplay() throws {
+    @Test func `Workspace to display`() throws {
         let config = try Config.parse("""
         workspaces = 4
         [workspace-to-display]
         4 = 'secondary'
         2 = ['dell', 'main']
         """)
-        XCTAssertEqual(config.workspaceDisplays, [4: [.secondary], 2: [.name("dell"), .main]])
-        XCTAssertEqual(try Config.parse("").workspaceDisplays, [:])
+        #expect(config.workspaceDisplays == [4: [.secondary], 2: [.name("dell"), .main]])
+        #expect(try Config.parse("").workspaceDisplays == [:])
         assertError("[workspace-to-display]\n6 = 'main'\n", path: "workspace-to-display.6", contains: "from 1 to 5")
         assertError("[workspace-to-display]\nfive = 'main'\n", path: "workspace-to-display.five", contains: "not a workspace number")
         assertError("[workspace-to-display]\n1 = ''\n", path: "workspace-to-display.1", contains: "can't be empty")
@@ -67,17 +67,17 @@ final class GapsTests: XCTestCase {
         assertError("[display.main]\nworkspaces = 1\n", path: "display.main.workspaces", contains: "[workspace-to-display]")
     }
 
-    func testPatterns() {
-        XCTAssertTrue(MonitorPattern.main.matches(dell))
-        XCTAssertFalse(MonitorPattern.main.matches(builtIn))
-        XCTAssertTrue(MonitorPattern.secondary.matches(builtIn))
-        XCTAssertFalse(MonitorPattern.secondary.matches(Monitor(name: "x", isMain: false, count: 3)))
-        XCTAssertTrue(MonitorPattern.name("built-in").matches(builtIn))
-        XCTAssertTrue(MonitorPattern.name("dell").matches(dell), "case-insensitive substring")
-        XCTAssertFalse(MonitorPattern.name("built-in").matches(Monitor(name: "Apple Virtual Display", isMain: true, count: 1)))
+    @Test func patterns() {
+        #expect(MonitorPattern.main.matches(dell))
+        #expect(!MonitorPattern.main.matches(builtIn))
+        #expect(MonitorPattern.secondary.matches(builtIn))
+        #expect(!MonitorPattern.secondary.matches(Monitor(name: "x", isMain: false, count: 3)))
+        #expect(MonitorPattern.name("built-in").matches(builtIn))
+        #expect(MonitorPattern.name("dell").matches(dell), "case-insensitive substring")
+        #expect(!MonitorPattern.name("built-in").matches(Monitor(name: "Apple Virtual Display", isMain: true, count: 1)))
     }
 
-    func testBadGapsFail() {
+    @Test func `Bad gaps fail`() {
         assertError("[gaps]\nouter.top = 'wide'\n", path: "gaps.outer.top", contains: "expected an integer")
         assertError("[gaps]\nouter.top = [{ monitor.main = 44 }, 8]\n", path: "gaps.outer.top", contains: "expected an integer")
         assertError("[gaps]\ninner.diagonal = 3\n", path: "gaps.inner.diagonal", contains: "unknown key")
@@ -86,13 +86,16 @@ final class GapsTests: XCTestCase {
         assertError("[display]\ngaps.outer.top = 2\n", path: "display.gaps.outer", contains: "unknown key")
     }
 
-    private func assertError(_ toml: String, path: String, contains text: String, file: StaticString = #filePath, line: UInt = #line) {
-        do {
-            _ = try Config.parse(toml)
-            XCTFail("expected an error for \(path)", file: file, line: line)
-        } catch {
-            XCTAssertEqual(error.path, path, "\(error)", file: file, line: line)
-            XCTAssertTrue(error.description.contains(text), error.description, file: file, line: line)
+    private func assertError(
+        _ toml: String, path: String, contains text: String,
+        fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column
+    ) {
+        let sourceLocation = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
+        let error = #expect(throws: ConfigError.self, "expected an error for \(path)", sourceLocation: sourceLocation) {
+            try Config.parse(toml)
         }
+        guard let error else { return }
+        #expect(error.path == path, "\(error)", sourceLocation: sourceLocation)
+        #expect(error.description.contains(text), "\(error)", sourceLocation: sourceLocation)
     }
 }
