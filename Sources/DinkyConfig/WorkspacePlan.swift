@@ -30,7 +30,8 @@ public enum PlanAction: Equatable {
 }
 
 public struct PlanStep: Equatable {
-    /// Workspace number to Space, updated for this step. The app keeps it for the next one.
+    /// Workspace number to Space, updated for this step. The app keeps it for the next one. It assumes the
+    /// action succeeds; the app reverts it when the action fails.
     public var binding: [Int: UInt64]
     /// What to do next, nil when the Spaces match the config.
     public var action: PlanAction?
@@ -49,27 +50,30 @@ public struct WorkspacePlan {
         self.init(count: config.workspaces, assignments: config.workspaceDisplays)
     }
 
+    /// Workspace numbers, 1 through `count`; none when `count` is 0.
+    private var numbers: StrideThrough<Int> { stride(from: 1, through: count, by: 1) }
+
     /// The display each workspace lives on: the display its first matching pattern names, else the main one.
     public func homes(_ displays: [PlanDisplay]) -> [Int: String] {
         guard let main = displays.first(where: \.monitor.isMain) ?? displays.first else { return [:] }
         var homes: [Int: String] = [:]
-        for n in 1...count {
+        for n in numbers {
             let assigned = assignments[n]?.lazy.compactMap { pattern in displays.first { pattern.matches($0.monitor) } }.first
             homes[n] = (assigned ?? main).uuid
         }
         return homes
     }
 
-    /// The next step from where things stand. `binding` is the previous step's; `occupied` tells whether a Space
-    /// has windows on it. Workspaces are placed display by display, in number order, each on the first free
+    /// The next step from where things stand. `binding` is the previous step's; `occupied` is the Spaces that
+    /// have windows on them. Workspaces are placed display by display, in number order, each on the first free
     /// Space after the previous one's (a new Space when there is none), moving its windows along when it
     /// changes Space; windows only ever go to an empty Space, so two sets never mix. Then empty Spaces no
     /// workspace is on are removed; one is kept on a display with no workspace, which macOS requires anyway.
     /// A leftover Space with windows is left alone.
-    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: (UInt64) -> Bool) -> PlanStep {
+    public func step(_ displays: [PlanDisplay], binding: [Int: UInt64], occupied: Set<UInt64>) -> PlanStep {
         let all = Set(displays.flatMap(\.spaces))
         // Forget Spaces that are gone and workspaces past the count; one workspace per Space.
-        var binding = binding.filter { n, space in (1...count).contains(n) && all.contains(space) }
+        var binding = binding.filter { n, space in numbers.contains(n) && all.contains(space) }
         for n in binding.keys.sorted() where binding.contains(where: { $0.key < n && $0.value == binding[n] }) {
             binding[n] = nil
         }
@@ -77,15 +81,15 @@ public struct WorkspacePlan {
 
         for display in displays {
             var last = -1  // position of the previous workspace's Space on this display
-            for n in (1...count).filter({ homes[$0] == display.uuid }) {
+            for n in numbers.filter({ homes[$0] == display.uuid }) {
                 if let space = binding[n], let at = display.spaces.firstIndex(of: space), at > last {
                     last = at
                     continue
                 }
                 let bound = Set(binding.values)
-                let old = binding[n].flatMap { all.contains($0) && occupied($0) ? $0 : nil }
+                let old = binding[n].flatMap { occupied.contains($0) ? $0 : nil }
                 guard let at = display.spaces.indices.first(where: { i in
-                    i > last && !bound.contains(display.spaces[i]) && (old == nil || !occupied(display.spaces[i]))
+                    i > last && !bound.contains(display.spaces[i]) && (old == nil || !occupied.contains(display.spaces[i]))
                 }) else {
                     return PlanStep(binding: binding, action: .create(display: display.uuid))
                 }
@@ -99,7 +103,7 @@ public struct WorkspacePlan {
         for display in displays {
             let hasWorkspace = display.spaces.contains(where: bound.contains)
             let keep = hasWorkspace ? nil : (display.spaces.contains(display.current) ? display.current : display.spaces.first)
-            if let space = display.spaces.first(where: { !bound.contains($0) && $0 != keep && !occupied($0) }) {
+            if let space = display.spaces.first(where: { !bound.contains($0) && $0 != keep && !occupied.contains($0) }) {
                 return PlanStep(binding: binding, action: .remove(space: space))
             }
         }

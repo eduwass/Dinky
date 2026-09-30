@@ -13,7 +13,7 @@ struct WorkspacePlanTests {
         /// Steps until the plan is done, applying each action as WindowServer would.
         mutating func settle(_ plan: WorkspacePlan, limit: Int = 50) {
             for _ in 0..<limit {
-                let step = plan.step(displays, binding: binding, occupied: { windows[$0, default: 0] > 0 })
+                let step = plan.step(displays, binding: binding, occupied: Set(windows.filter { $0.value > 0 }.keys))
                 binding = step.binding
                 guard let action = step.action else { return }
                 actions.append(action)
@@ -145,9 +145,16 @@ struct WorkspacePlanTests {
     @Test func `Stale and duplicate bindings are dropped`() {
         let plan = WorkspacePlan(count: 2, assignments: [:])
         let displays = [Self.display("L", "Built-in", main: true, count: 1, [1, 2])]
-        let step = plan.step(displays, binding: [1: 2, 2: 2, 7: 1, 3: 99], occupied: { _ in false })
+        let step = plan.step(displays, binding: [1: 2, 2: 2, 7: 1, 3: 99], occupied: [])
         #expect(step.binding == [1: 2], "workspace 2 must get a Space after workspace 1's; there is none yet")
         #expect(step.action == .create(display: "L"))
+    }
+
+    @Test func `No workspaces plans nothing`() {
+        let plan = WorkspacePlan(count: 0, assignments: [:])
+        let displays = [Self.display("L", "Built-in", main: true, count: 1, [1])]
+        #expect(plan.homes(displays).isEmpty)
+        #expect(plan.step(displays, binding: [1: 1], occupied: []) == PlanStep(binding: [:], action: nil))
     }
 
     @Test func `Redocking is stable`() {

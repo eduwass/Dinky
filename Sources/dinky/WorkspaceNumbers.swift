@@ -87,6 +87,7 @@ final class WorkspaceNumbers {
                 PlanDisplay(uuid: $0.uuid, monitor: model.monitor($0), spaces: $0.userSpaces, current: $0.currentSpaceID)
             }
             guard !displays.isEmpty else { break }
+            let occupied = occupiedSpaces(among: displays.flatMap(\.spaces))
             let before = binding
             let step = plan.step(displays, binding: binding, occupied: occupied)
             binding = step.binding
@@ -107,14 +108,18 @@ final class WorkspaceNumbers {
         AppState.shared.coordinator?.reconcile()
     }
 
-    /// Whether a Space has windows dinky would tile or restore there: helper windows some apps keep on every
-    /// Space don't count. Without a window model to ask, any window counts.
-    private func occupied(_ space: UInt64) -> Bool {
+    /// The Spaces among `spaces` with windows dinky would tile or restore there: helper windows some apps keep
+    /// on every Space don't count. Without a window model to ask, any window counts.
+    private func occupiedSpaces(among spaces: [UInt64]) -> Set<UInt64> {
         guard let model = AppState.shared.coordinator?.model, !model.windows.isEmpty else {
-            return !dinky_space_window_ids(space, true).isEmpty
+            return Set(spaces.filter { !dinky_space_window_ids($0, true).isEmpty })
         }
-        return model.windows.values.contains { ($0.isNormal || $0.isMinimized) && dinky_window_space_id($0.id) == space }
+        let occupied = model.windows.values.filter { $0.isNormal || $0.isMinimized }.map { dinky_window_space_id($0.id) }
+        return Set(occupied).intersection(spaces)
     }
+
+    /// Whether a Space has windows dinky would tile or restore there.
+    private func occupied(_ space: UInt64) -> Bool { !occupiedSpaces(among: [space]).isEmpty }
 
     private func perform(_ action: PlanAction) -> Bool {
         let model = AppState.shared.displays
