@@ -19,6 +19,9 @@ final class Animator: NSObject {
     private var finishes: [UInt64: () -> Void] = [:]
     private var link: CADisplayLink?
     private var lastTick: CFTimeInterval?
+    /// When a frame was last stepped, on the wall clock, so a display link that stopped firing is noticed.
+    private var lastStepAt = CACurrentMediaTime()
+    private var watchdog: Timer?
     private var spring = Spring(response: 0.15, damping: 0.9)
     private var timeout = 1.0
     /// Where windows came to rest the last time they were written unanimated, by the frame they were asked for.
@@ -30,6 +33,10 @@ final class Animator: NSObject {
 
     init(applier: FrameApplier) {
         self.applier = applier
+        super.init()
+        // The link is made for one screen; with that screen gone it never fires again.
+        NotificationCenter.default.addObserver(forName: NSApplication.didChangeScreenParametersNotification, object: nil,
+                                               queue: .main) { [weak self] _ in self?.screensChanged() }
     }
 
     /// How long a window takes to arrive, roughly.
@@ -87,6 +94,8 @@ final class Animator: NSObject {
         finishes = [:]
         link?.isPaused = true
         lastTick = nil
+        watchdog?.invalidate()
+        watchdog = nil
     }
 
     private func run() {
@@ -95,12 +104,42 @@ final class Animator: NSObject {
             link?.add(to: .main, forMode: .common)
         }
         link?.isPaused = false
+        lastStepAt = CACurrentMediaTime()
+        if watchdog == nil {
+            watchdog = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.checkStalled() }
+        }
+    }
+
+    /// Drops the link, so the next pass makes one for the screen that is main now, and carries on with a pass in flight.
+    private func screensChanged() {
+        dropLink()
+        if !entries.isEmpty { run() }
+    }
+
+    /// A link that has not fired for a while (its screen went away without a screen change reaching us) would
+    /// leave windows mid-glide for good: put them on their tiles now and start over with a new link next time.
+    private func checkStalled() {
+        guard !entries.isEmpty, CACurrentMediaTime() - lastStepAt > 2 else { return }
+        dropLink()
+        step(dt: timeout)
+    }
+
+    private func dropLink() {
+        link?.invalidate()
+        link = nil
+        lastTick = nil
     }
 
     @objc private func tick(_ link: CADisplayLink) {
         // A stalled clock (sleep, a busy main thread) resumes where it was rather than leaping ahead.
         let dt = min(lastTick.map { link.timestamp - $0 } ?? link.duration, 1.0 / 30)
         lastTick = link.timestamp
+        step(dt: dt)
+    }
+
+    /// Advances every window by `dt` seconds and writes the frames; `dt` of `timeout` or more lands them all.
+    private func step(dt: Double) {
+        lastStepAt = CACurrentMediaTime()
         var jobs: [FrameJob] = [], arrived: [WindowID] = []
         for (id, entry) in entries {
             let done = entries[id]!.animation.step(spring, dt: dt, timeout: timeout)
@@ -111,8 +150,10 @@ final class Animator: NSObject {
         if !arrived.isEmpty { onArrive(arrived) }
         finishArrived()
         if entries.isEmpty {
-            link.isPaused = true
+            link?.isPaused = true
             lastTick = nil
+            watchdog?.invalidate()
+            watchdog = nil
         }
     }
 
