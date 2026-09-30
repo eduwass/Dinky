@@ -1,10 +1,11 @@
-import XCTest
+import Foundation
+import Testing
 import DinkyConfig
 import TOMLDecoder
 @testable import DinkyCommands
 
 /// docs/schemas/dinky.json is written by hand; these keep it from drifting away from the code.
-final class SchemaTests: XCTestCase {
+struct SchemaTests {
     private static let schema: [String: Any] = {
         let url = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
             .appending(path: "docs/schemas/dinky.json")
@@ -13,38 +14,38 @@ final class SchemaTests: XCTestCase {
 
     private var definitions: [String: [String: Any]] { Self.schema["definitions"] as! [String: [String: Any]] }
 
-    func testCommandPatternListsEveryCommand() throws {
+    @Test func `Command pattern lists every command`() throws {
         let pattern = definitions["command"]!["pattern"] as! String
         let regex = try NSRegularExpression(pattern: pattern)
         func matches(_ text: String) -> Bool { regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil }
         for doc in Command.all {
-            XCTAssertTrue(matches(doc.name), doc.name)
-            XCTAssertTrue(matches(doc.syntax), doc.syntax)
+            #expect(matches(doc.name), "\(doc.name)")
+            #expect(matches(doc.syntax), "\(doc.syntax)")
         }
         for bad in ["", "fly left", "workspaces 3", "layouts", "modes main"] {
-            XCTAssertFalse(matches(bad), bad)
+            #expect(!matches(bad), "\(bad)")
         }
         // The alternation names exactly the commands, no more.
         let listed = pattern.split(separator: "(")[1].split(separator: ")")[0].split(separator: "|").map(String.init)
-        XCTAssertEqual(Set(listed), Set(Command.all.map(\.name)))
-        XCTAssertEqual(listed.count, Command.all.count, "a command is listed twice")
+        #expect(Set(listed) == Set(Command.all.map(\.name)))
+        #expect(listed.count == Command.all.count, "a command is listed twice")
     }
 
-    func testKeyComboPatternMatchesEveryKeyName() throws {
+    @Test func `Key combo pattern matches every key name`() throws {
         let pattern = definitions["keyCombo"]!["pattern"] as! String
         let regex = try NSRegularExpression(pattern: pattern)
         func matches(_ text: String) -> Bool { regex.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)) != nil }
         for name in KeyCombo.keyNames {
-            XCTAssertTrue(matches(name), name)
-            XCTAssertTrue(matches("alt-shift-\(name)"), name)
+            #expect(matches(name), "\(name)")
+            #expect(matches("alt-shift-\(name)"), "\(name)")
         }
         for bad in ["", "alt-", "hyper-a", "alt-hh", "pageUp", "f21", "keypad-", "alt--", "A"] {
-            XCTAssertFalse(matches(bad), bad)
+            #expect(!matches(bad), "\(bad)")
         }
     }
 
-    func testSchemaKnowsEveryKeyInTheShippedConfig() throws {
-        XCTAssertTrue(Config.defaultTOML.hasPrefix("#:schema \(Self.schema["$id"] as! String)\n"))
+    @Test func `Schema knows every key in the shipped config`() throws {
+        #expect(Config.defaultTOML.hasPrefix("#:schema \(Self.schema["$id"] as! String)\n"))
         let root = try TOMLTable(source: Config.defaultTOML)
         let properties = Self.schema["properties"] as! [String: Any]
         func check(_ table: TOMLTable, _ schema: [String: Any], at path: String) throws {
@@ -54,7 +55,7 @@ final class SchemaTests: XCTestCase {
                 if let child = known[key] as? [String: Any] {
                     if let nested = try? table.table(forKey: key) { try check(nested, resolve(child), at: here) }
                 } else {
-                    XCTAssertNotNil(schema["additionalProperties"] as? [String: Any], "\(here) is not in the schema")
+                    #expect(schema["additionalProperties"] as? [String: Any] != nil, "\(here) is not in the schema")
                 }
             }
         }

@@ -1,44 +1,44 @@
-import XCTest
+import Testing
 import DinkyConfig
 @testable import DinkyCommands
 
-final class ConfigCheckTests: XCTestCase {
+struct ConfigCheckTests {
     private func check(_ toml: String, known: Set<String> = ["h", "1", "esc", "r"]) throws -> [ConfigFinding] {
         checkConfig(try Config.parse(toml), keyIsKnown: { known.contains($0) })
     }
 
-    func testDefaultConfigIsClean() throws {
+    @Test func `Default config is clean`() throws {
         let findings = checkConfig(Config.default, keyIsKnown: { _ in true })
-        XCTAssertEqual(findings, [])
+        #expect(findings == [])
     }
 
-    func testMissingMainModeIsAWarning() throws {
+    @Test func `Missing main mode is a warning`() throws {
         let findings = try check("workspaces = 3")
-        XCTAssertEqual(findings.map(\.level), [.warning])
-        XCTAssertTrue(findings[0].message.contains("[mode.main]"))
+        #expect(findings.map(\.level) == [.warning])
+        #expect(findings[0].message.contains("[mode.main]"))
     }
 
-    func testUnknownCommandInBinding() throws {
+    @Test func `Unknown command in binding`() throws {
         let findings = try check("[mode.main]\nalt-h = 'fly left'")
-        XCTAssertEqual(findings.count, 1)
-        XCTAssertEqual(findings[0].level, .error)
-        XCTAssertTrue(findings[0].message.hasPrefix("mode.main.alt-h:"))
+        #expect(findings.count == 1)
+        #expect(findings[0].level == .error)
+        #expect(findings[0].message.hasPrefix("mode.main.alt-h:"))
     }
 
-    func testModeCommandMustNameAMode() throws {
+    @Test func `Mode command must name a mode`() throws {
         let findings = try check("[mode.main]\nalt-h = 'mode resize'")
-        XCTAssertEqual(findings.count, 1)
-        XCTAssertTrue(findings[0].message.contains("names a mode that is not in the config"))
-        XCTAssertEqual(try check("[mode.main]\nalt-h = 'mode resize'\n[mode.resize]\nesc = 'mode main'"), [])
+        #expect(findings.count == 1)
+        #expect(findings[0].message.contains("names a mode that is not in the config"))
+        #expect(try check("[mode.main]\nalt-h = 'mode resize'\n[mode.resize]\nesc = 'mode main'") == [])
     }
 
-    func testUnknownKeyName() throws {
+    @Test func `Unknown key name`() throws {
         let findings = try check("[mode.main]\nalt-h = 'focus left'", known: [])
-        XCTAssertEqual(findings.count, 1)
-        XCTAssertTrue(findings[0].message.contains("unknown key 'h'"))
+        #expect(findings.count == 1)
+        #expect(findings[0].message.contains("unknown key 'h'"))
     }
 
-    func testRuleAndHookCommandsAreChecked() throws {
+    @Test func `Rule and hook commands are checked`() throws {
         let findings = try check("""
         [hooks]
         focus-changed = ['exec-and-forget true', 'nonsense']
@@ -50,17 +50,17 @@ final class ConfigCheckTests: XCTestCase {
         [[rules]]
         run = 'float'
         """)
-        XCTAssertEqual(findings.count, 2)
-        XCTAssertTrue(findings[0].message.hasPrefix("rules[1].run:"), findings[0].message)
-        XCTAssertTrue(findings[1].message.hasPrefix("hooks.focus-changed:"), findings[1].message)
+        #expect(findings.count == 2)
+        #expect(findings[0].message.hasPrefix("rules[1].run:"), "\(findings[0].message)")
+        #expect(findings[1].message.hasPrefix("hooks.focus-changed:"), "\(findings[1].message)")
     }
 
-    func testStartupHookIsChecked() throws {
+    @Test func `Startup hook is checked`() throws {
         let findings = try check("""
         [hooks]
         startup = ['exec-and-forget true', 'balance-sizes', 'focus-monitor next', 'focus left --boundaries nowhere']
         """)
-        XCTAssertEqual(findings.map(\.level), [.warning, .error])
-        XCTAssertTrue(findings[1].message.hasPrefix("hooks.startup:"), findings[1].message)
+        #expect(findings.map(\.level) == [.warning, .error])
+        #expect(findings[1].message.hasPrefix("hooks.startup:"), "\(findings[1].message)")
     }
 }

@@ -1,53 +1,53 @@
 import DinkyLayout
-import XCTest
+import Testing
 @testable import DinkyCommands
 
 private func parse(_ s: String) throws -> Command { try Command.parse(s) }
 
-final class FocusParseTests: XCTestCase {
-    func testDefaultsAreWorkspaceAndStop() throws {
-        XCTAssertEqual(try parse("focus left"), .focus(.left, boundaries: .workspace, action: .stop))
+struct FocusParseTests {
+    @Test func `Defaults are workspace and stop`() throws {
+        #expect(try parse("focus left") == .focus(.left, boundaries: .workspace, action: .stop))
     }
 
-    func testBoundariesFlagsInAnyOrder() throws {
-        XCTAssertEqual(try parse("focus --boundaries all-monitors-outer-frame left"),
-                       .focus(.left, boundaries: .allMonitorsOuterFrame, action: .stop))
-        XCTAssertEqual(try parse("focus down --boundaries-action wrap-around-the-workspace"),
-                       .focus(.down, boundaries: .workspace, action: .wrapAroundTheWorkspace))
-        XCTAssertEqual(try parse("focus --boundaries-action fail --boundaries workspace up"),
-                       .focus(.up, boundaries: .workspace, action: .fail))
-        XCTAssertEqual(try parse("focus right --boundaries all-monitors-outer-frame --boundaries-action wrap-around-all-monitors"),
-                       .focus(.right, boundaries: .allMonitorsOuterFrame, action: .wrapAroundAllMonitors))
-        XCTAssertEqual(try parse("focus --wrap-around left"), .focus(.left, boundaries: .workspace, action: .wrapAroundTheWorkspace))
+    @Test func `Boundaries flags in any order`() throws {
+        #expect(try parse("focus --boundaries all-monitors-outer-frame left") ==
+                .focus(.left, boundaries: .allMonitorsOuterFrame, action: .stop))
+        #expect(try parse("focus down --boundaries-action wrap-around-the-workspace") ==
+                .focus(.down, boundaries: .workspace, action: .wrapAroundTheWorkspace))
+        #expect(try parse("focus --boundaries-action fail --boundaries workspace up") ==
+                .focus(.up, boundaries: .workspace, action: .fail))
+        #expect(try parse("focus right --boundaries all-monitors-outer-frame --boundaries-action wrap-around-all-monitors") ==
+                .focus(.right, boundaries: .allMonitorsOuterFrame, action: .wrapAroundAllMonitors))
+        #expect(try parse("focus --wrap-around left") == .focus(.left, boundaries: .workspace, action: .wrapAroundTheWorkspace))
     }
 
-    func testBadFocusFlags() {
-        for s in ["focus", "focus --boundaries left", "focus left --boundaries screen", "focus left --boundaries-action loop",
-                  "focus left right", "focus left --frobnicate"] {
-            XCTAssertThrowsError(try parse(s), s)
+    @Test(arguments: ["focus", "focus --boundaries left", "focus left --boundaries screen", "focus left --boundaries-action loop",
+                      "focus left right", "focus left --frobnicate"])
+    func `Bad focus flags`(s: String) {
+        #expect(throws: (any Error).self) { try parse(s) }
+    }
+
+    @Test func `Wrap around all monitors needs the outer frame`() {
+        let error = #expect(throws: CommandError.self) {
+            try parse("focus left --boundaries-action wrap-around-all-monitors")
         }
+        #expect(error?.description.contains("all-monitors-outer-frame") == true, "\(error?.description ?? "")")
     }
 
-    func testWrapAroundAllMonitorsNeedsTheOuterFrame() {
-        XCTAssertThrowsError(try parse("focus left --boundaries-action wrap-around-all-monitors")) { error in
-            XCTAssertTrue("\(error)".contains("all-monitors-outer-frame"), "\(error)")
-        }
-    }
-
-    func testFocusMonitor() throws {
+    @Test func `Focus monitor`() throws {
         for word in ["left", "right", "up", "down", "next", "prev"] {
-            XCTAssertEqual(try parse("focus-monitor \(word)"), .focusMonitor(MonitorTarget(rawValue: word)!))
+            #expect(try parse("focus-monitor \(word)") == .focusMonitor(MonitorTarget(rawValue: word)!))
         }
-        XCTAssertEqual(MonitorTarget.up.direction, .up)
-        XCTAssertNil(MonitorTarget.next.direction)
-        XCTAssertThrowsError(try parse("focus-monitor"))
-        XCTAssertThrowsError(try parse("focus-monitor main"))
-        XCTAssertEqual(try parse("focus-monitor 2"), .focusMonitorNumber(2))
-        XCTAssertThrowsError(try parse("focus-monitor 0"))
+        #expect(MonitorTarget.up.direction == .up)
+        #expect(MonitorTarget.next.direction == nil)
+        #expect(throws: (any Error).self) { try parse("focus-monitor") }
+        #expect(throws: (any Error).self) { try parse("focus-monitor main") }
+        #expect(try parse("focus-monitor 2") == .focusMonitorNumber(2))
+        #expect(throws: (any Error).self) { try parse("focus-monitor 0") }
     }
 
-    func testBalanceSizes() throws {
-        XCTAssertEqual(try parse("balance-sizes"), .balanceSizes)
-        XCTAssertThrowsError(try parse("balance-sizes --workspace 2"))
+    @Test func `Balance sizes`() throws {
+        #expect(try parse("balance-sizes") == .balanceSizes)
+        #expect(throws: (any Error).self) { try parse("balance-sizes --workspace 2") }
     }
 }
