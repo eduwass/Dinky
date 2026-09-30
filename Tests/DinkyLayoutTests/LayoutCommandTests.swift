@@ -53,7 +53,7 @@ struct FullscreenExitTests {
 
 struct AccordionCommandTests {
     @Test func `Focus cycles through accordion order and brings it to front`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         #expect(ws.focus(.left) == true)
         #expect(ws.focused == 2)
         #expect(ws.layout().order.first == 2)

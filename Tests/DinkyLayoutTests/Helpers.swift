@@ -21,8 +21,8 @@ func shape(_ c: Container) -> String {
 
 /// A workspace with windows 1...n inserted in order.
 func workspace(_ n: Int, bounds: CGRect = CGRect(x: 0, y: 0, width: 1000, height: 600),
-               gaps: Gaps = .zero, mode: LayoutMode = .tiles, padding: CGFloat = 30) -> Workspace {
-    var ws = Workspace(bounds: bounds, gaps: gaps, accordionPadding: padding, mode: mode)
+               gaps: Gaps = .zero, algorithm: TilingAlgorithm = .dwindle(.tiles), padding: CGFloat = 30) -> Workspace {
+    var ws = Workspace(bounds: bounds, gaps: gaps, accordionPadding: padding, algorithm: algorithm)
     for id in 0..<n { ws.insert(WindowID(id + 1)) }
     return ws
 }

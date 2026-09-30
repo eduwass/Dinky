@@ -51,7 +51,7 @@ struct InsertTests {
     }
 
     @Test func `Insert into accordion is always a sibling`() {
-        var ws = workspace(2, mode: .accordion)
+        var ws = workspace(2, algorithm: .dwindle(.accordion))
         ws.insert(3)
         #expect(shape(ws.root) == "ah[1 2 3]")
     }
@@ -98,14 +98,12 @@ struct FixedLayoutTests {
     }
 
     @Test func `Row expansion and accordion overflow`() {
-        var rows = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .rows))
-        for id in 1...3 { rows.insert(WindowID(id)) }
+        var rows = workspace(3, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .rows))
         #expect(rows.layout().frames[3] == rect(0, 450, 600, 450))
         rows.remove(3)
         #expect(rows.layout().frames[1] == rect(0, 0, 600, 900))
 
-        var stacked = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 3, columns: 2, expand: .accordion))
-        for id in 1...8 { stacked.insert(WindowID(id)) }
+        var stacked = workspace(8, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 3, columns: 2, expand: .accordion))
         #expect(stacked.windows.count == 8)
         #expect(stacked.container(of: 7)?.mode == .accordion)
         #expect(stacked.container(of: 8)?.mode == .accordion)
@@ -118,8 +116,7 @@ struct FixedLayoutTests {
     }
 
     @Test func `Manual resize survives filling a hole`() {
-        var ws = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 2, columns: 2, expand: .columns))
-        ws.insert(1)
+        var ws = workspace(1, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 2, columns: 2, expand: .columns))
         ws.focus(1)
         #expect(ws.resize(by: 120, along: .horizontal) == true)
         let widths = ws.root.ratios
@@ -133,7 +130,7 @@ struct FixedLayoutTests {
         ws.setAlgorithm(.fixed(rows: 3, columns: 2, expand: .columns))
         #expect(ws.focused == 1)
         #expect(ws.layout().frames[4] == rect(500, 200, 500, 200))
-        ws.setAlgorithm(.dwindle, mode: .accordion)
+        ws.setAlgorithm(.dwindle(.accordion))
         #expect(ws.windows.count == 4)
         #expect(ws.root.mode == .accordion)
         #expect(ws.focused == 1)
@@ -141,17 +138,15 @@ struct FixedLayoutTests {
 
     @Test func `Changing dwindle to accordion reconfigures existing windows`() {
         var ws = workspace(3)
-        ws.setAlgorithm(.dwindle, mode: .accordion)
+        ws.setAlgorithm(.dwindle(.accordion))
         #expect(ws.root.mode == .accordion)
         #expect(ws.windows.count == 3)
-        ws.setAlgorithm(.dwindle, mode: .tiles)
+        ws.setAlgorithm(.dwindle(.tiles))
         #expect(ws.root.mode == .tiles)
     }
 
     @Test func `Move swaps cells and can fill a hole without breaking the template`() {
-        var ws = Workspace(bounds: rect(0, 0, 900, 600), algorithm: .fixed(rows: 2, columns: 3, expand: .columns))
-        ws.insert(1)
-        ws.insert(2)
+        var ws = workspace(2, bounds: rect(0, 0, 900, 600), algorithm: .fixed(rows: 2, columns: 3, expand: .columns))
         ws.focus(2)
         #expect(ws.move(.left) == true)
         #expect(ws.layout().frames[2] == rect(0, 0, 300, 300))
@@ -163,8 +158,7 @@ struct FixedLayoutTests {
     }
 
     @Test func `Empty edited tree restores the fixed template`() {
-        var ws = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 3, columns: 2, expand: .columns))
-        ws.insert(1)
+        var ws = workspace(1, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 3, columns: 2, expand: .columns))
         ws.setMode(.accordion)
         #expect(!ws.isFixedTree)
         ws.remove(1)
@@ -173,8 +167,7 @@ struct FixedLayoutTests {
     }
 
     @Test func `Moving out of overflow reclaims empty row`() {
-        var ws = Workspace(bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .rows))
-        for id in 1...3 { ws.insert(WindowID(id)) }
+        var ws = workspace(3, bounds: rect(0, 0, 1200, 900), algorithm: .fixed(rows: 1, columns: 2, expand: .rows))
         ws.remove(2)
         ws.focus(3)
         #expect(ws.move(.right) == true)
@@ -244,7 +237,7 @@ struct FlattenAndModeTests {
     }
 
     @Test func `Flatten restores the configured accordion`() {
-        var ws = workspace(3, mode: .accordion)
+        var ws = workspace(3, algorithm: .dwindle(.accordion))
         ws.focus(2)
         ws.setMode(.tiles)
         ws.join(.right)
@@ -254,8 +247,7 @@ struct FlattenAndModeTests {
     }
 
     @Test func `Flatten restores the fixed template`() {
-        var ws = Workspace(bounds: rect(0, 0, 1200, 600), algorithm: .fixed(rows: 1, columns: 3, expand: .columns))
-        for id in 1...3 { ws.insert(WindowID(id)) }
+        var ws = workspace(3, bounds: rect(0, 0, 1200, 600), algorithm: .fixed(rows: 1, columns: 3, expand: .columns))
         ws.focus(3)
         ws.join(.left)
         #expect(!ws.isFixedTree)

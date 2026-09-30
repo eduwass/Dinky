@@ -30,13 +30,13 @@ struct OrientationTests {
 
     @Test func `A new accordion workspace on a tall display runs top to bottom`() {
         let tall = rect(0, 0, 600, 1000)
-        var ws = Workspace(bounds: tall, autoOrientAccordions: true, mode: .accordion)
+        var ws = Workspace(bounds: tall, autoOrientAccordions: true, algorithm: .dwindle(.accordion))
         ws.insert(1)
         ws.insert(2)
         #expect(shape(ws.root) == "a*[1 2]")
         #expect(ws.containerAxis(of: 2) == .vertical)
         #expect(ws.layout().frames[2] == rect(0, 30, 600, 970))
-        var kept = Workspace(bounds: tall, autoOrientAccordions: false, mode: .accordion)
+        var kept = Workspace(bounds: tall, autoOrientAccordions: false, algorithm: .dwindle(.accordion))
         kept.insert(1)
         #expect(shape(kept.root) == "ah[1]", "without auto orientation the root stays horizontal")
         #expect(shape(Workspace(bounds: tall, autoOrientAccordions: true).root) == "h[]", "tiles are unchanged")
