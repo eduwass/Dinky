@@ -43,11 +43,16 @@ public struct Layout: Equatable, Sendable {
     public var frames: [WindowID: CGRect] = [:]
     /// Windows front to back: the first should be frontmost.
     public var order: [WindowID] = []
+    /// The rectangle each container was laid out in, by its path from the root. Empty containers included.
+    var containerRects: [[Int]: CGRect] = [:]
 
     public init(frames: [WindowID: CGRect] = [:], order: [WindowID] = []) {
         self.frames = frames
         self.order = order
     }
+
+    /// Equal when windows get the same frames in the same order; container rects follow from those.
+    public static func == (a: Layout, b: Layout) -> Bool { a.frames == b.frames && a.order == b.order }
 }
 
 extension Container {
@@ -63,8 +68,10 @@ extension Container {
     /// Lay out this container in `rect`: tiles split by ratios with the inner gap for its axis between siblings,
     /// accordion children overlap with neighbours peeking out by `padding`. `virtual` lays accordions out as tiles.
     /// `minimums` are sizes windows refused to go below; tiles grow to them when their siblings can give the space.
+    /// Records `rect` as the rect of the container at `path`.
     func layout(in rect: CGRect, gaps: Gaps, padding: CGFloat, minimums: [WindowID: CGSize] = [:],
-                virtual: Bool = false, into result: inout Layout) {
+                virtual: Bool = false, path: [Int] = [], into result: inout Layout) {
+        result.containerRects[path] = rect
         let tiled = mode == .tiles || virtual, axis = axis(in: rect), gap = gaps.inner(axis)
         let rects = tiled
             ? tileRects(in: rect, gap: gap, minimums: children.map { $0.minimumExtent(axis, gap: gap, padding: padding, minimums) })
@@ -75,7 +82,8 @@ extension Container {
                 result.frames[id] = rects[i]
                 result.order.append(id)
             case .container(let c):
-                c.layout(in: rects[i], gaps: gaps, padding: padding, minimums: minimums, virtual: virtual, into: &result)
+                c.layout(in: rects[i], gaps: gaps, padding: padding, minimums: minimums, virtual: virtual,
+                         path: path + [i], into: &result)
             }
         }
     }
@@ -121,14 +129,6 @@ extension Container {
                 ? CGRect(x: rect.minX + lead, y: rect.minY, width: rect.width - lead - trail, height: rect.height)
                 : CGRect(x: rect.minX, y: rect.minY + lead, width: rect.width, height: rect.height - lead - trail)
         }
-    }
-
-    /// Gap-free rect of the node at `path`, used for split decisions and resize arithmetic.
-    func rect(at path: [Int], in rect: CGRect) -> CGRect {
-        guard let first = path.first else { return rect }
-        let childRect = mode == .tiles ? tileRects(in: rect, gap: 0)[first] : rect
-        guard path.count > 1, case .container(let c) = children[first] else { return childRect }
-        return c.rect(at: Array(path.dropFirst()), in: childRect)
     }
 }
 
