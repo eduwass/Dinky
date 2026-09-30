@@ -30,6 +30,10 @@ int dinky_connection(void);
 // One entry per display, in SLSCopyManagedDisplaySpaces order.
 NSArray<DinkyDisplay *> *dinky_displays(void);
 
+// Each display's current Space, in SLSCopyManagedDisplaySpaces order. Cheaper than dinky_displays:
+// no UUID conversion and no per-Space type lookups.
+NSArray<NSNumber *> *dinky_current_space_ids(void);
+
 uint64_t dinky_current_space_id(CFStringRef displayUUID);
 
 // First Space of the window (SLSCopySpacesForWindows selector 0x7), 0 if none.

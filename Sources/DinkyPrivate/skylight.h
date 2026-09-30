@@ -48,6 +48,15 @@ static inline bool dinky_has_document_tags(uint64_t tags)
     return (tags & (1ULL << 0)) || ((tags & (1ULL << 1)) && (tags & (1ULL << 31)));
 }
 
+// A top-level document window, whether shown or not. JankyBorders misc/window.h window_suitable:
+// no parent, document tags, not attached (bit 7), not ignoring the cycle (bit 18).
+static inline bool dinky_is_document_kind(uint32_t parentID, uint64_t tags)
+{
+    bool attached = tags & (1ULL << 7);
+    bool ignoresCycle = tags & (1ULL << 18);
+    return parentID == 0 && dinky_has_document_tags(tags) && !attached && !ignoresCycle;
+}
+
 // Minimized windows carry these instead of the visible ones.
 static inline bool dinky_is_minimized(uint64_t attributes, uint64_t tags)
 {

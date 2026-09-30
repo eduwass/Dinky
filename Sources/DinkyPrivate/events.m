@@ -138,13 +138,9 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
     SLSGetWindowBounds(cid, windowID, &info.frame);
     info.pid = window_pid(windowID);
 
-    // JankyBorders misc/window.h window_suitable: not attached (bit 7), not ignoring the cycle (bit 18).
-    uint64_t tags = info.tags;
-    bool attached = tags & (1ULL << 7);
-    bool ignoresCycle = tags & (1ULL << 18);
-    info.isDocument = info.parentID == 0 && dinky_has_document_tags(tags) && !attached && !ignoresCycle;
-    info.isVisible = dinky_is_visible(info.attributes, tags);
-    info.isMinimized = dinky_is_minimized(info.attributes, tags);
+    info.isDocument = dinky_is_document_kind(info.parentID, info.tags);
+    info.isVisible = dinky_is_visible(info.attributes, info.tags);
+    info.isMinimized = dinky_is_minimized(info.attributes, info.tags);
     return info;
 }
 

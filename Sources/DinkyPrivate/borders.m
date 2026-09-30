@@ -1,5 +1,4 @@
 #import "borders.h"
-#import "events.h"
 #import "query.h"
 #import "skylight.h"
 
@@ -157,21 +156,42 @@ void dinky_border_destroy(uint32_t border)
     SLSReleaseWindow(dinky_connection(), border);
 }
 
+// JankyBorders get_front_window: the front app's first suitable window on a current Space.
 uint32_t dinky_border_focused_window(void)
 {
     int owner = dinky_front_connection();
     if (!owner) return 0;
 
-    NSMutableArray *spaces = [NSMutableArray array];
-    for (DinkyDisplay *display in dinky_displays()) [spaces addObject:@(display.currentSpaceID)];
-
     // Document-tagged windows of the front app, front to back. A minimized one is never focused.
+    int cid = dinky_connection();
     uint64_t set_tags = 1;
     uint64_t clear_tags = 0;
-    NSArray *windows = CFBridgingRelease(SLSCopyWindowsWithOptionsAndTags(dinky_connection(), owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags));
-    for (NSNumber *wid in windows) {
-        DinkyWindowInfo info = dinky_window_info(wid.unsignedIntValue);
-        if (info.isDocument && info.isVisible) return wid.unsignedIntValue;
+    NSArray *spaces = dinky_current_space_ids();
+    CFArrayRef windows = SLSCopyWindowsWithOptionsAndTags(cid, owner, (__bridge CFArrayRef)spaces, 0x2, &set_tags, &clear_tags);
+    if (!windows) return 0;
+
+    uint32_t focused = 0;
+    int count = (int)CFArrayGetCount(windows);
+    if (count) {
+        CFTypeRef query = SLSWindowQueryWindows(cid, windows, count);
+        CFTypeRef iterator = query ? SLSWindowQueryResultCopyWindows(query) : NULL;
+
+        // The iterator yields windows in the input array's order, so the first match is the
+        // frontmost. JankyBorders get_front_window relies on the same.
+        while (iterator && SLSWindowIteratorAdvance(iterator)) {
+            uint32_t wid = SLSWindowIteratorGetWindowID(iterator);
+            uint32_t parent = SLSWindowIteratorGetParentID(iterator);
+            uint64_t tags = SLSWindowIteratorGetTags(iterator);
+            uint64_t attributes = SLSWindowIteratorGetAttributes(iterator);
+            if (dinky_is_document_kind(parent, tags) && dinky_is_visible(attributes, tags)) {
+                focused = wid;
+                break;
+            }
+        }
+
+        if (iterator) CFRelease(iterator);
+        if (query) CFRelease(query);
     }
-    return 0;
+    CFRelease(windows);
+    return focused;
 }
