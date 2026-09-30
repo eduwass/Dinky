@@ -10,13 +10,13 @@ final class Animator: NSObject {
     private struct Entry {
         var animation: FrameAnimation
         let pid: pid_t
-        var key: SpaceKey
+        var key: UInt64
     }
 
     private let applier: FrameApplier
     private var entries: [WindowID: Entry] = [:]
     /// By tree, the rest of its latest pass, run once its windows have arrived.
-    private var finishes: [SpaceKey: () -> Void] = [:]
+    private var finishes: [UInt64: () -> Void] = [:]
     private var link: CADisplayLink?
     private var lastTick: CFTimeInterval?
     private var spring = Spring(response: 0.05, damping: 0.9)
@@ -47,7 +47,7 @@ final class Animator: NSObject {
 
     /// Move the tree's windows from `starts` to `targets`, then run `finish`. Windows already there, or with
     /// no start, are left to `finish`; with none left to move, it runs at once.
-    func animate(_ key: SpaceKey, from starts: [WindowID: CGRect], to targets: [WindowID: CGRect],
+    func animate(_ key: UInt64, from starts: [WindowID: CGRect], to targets: [WindowID: CGRect],
                  pids: [WindowID: pid_t], then finish: @escaping () -> Void) {
         for (id, entry) in entries where entry.key == key && targets[id] == nil { entries[id] = nil }
         for (id, target) in targets {

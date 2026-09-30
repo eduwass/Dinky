@@ -79,7 +79,7 @@ class Fuzzer:
     def __init__(self, seed, dinky, switching=False):
         self.rng, self.seed, self.dinky = random.Random(seed), seed, dinky
         self.switching = switching
-        self.history, self.hidden, self.docs = [], set(), 0
+        self.history, self.docs = [], 0
         self.seen, self.found = set(), {}  # violations reported last step; count per class
         self.landing, self.landings = None, []  # a step's trip to an empty workspace; all of them
         self.animated = 0  # steps during which dinky was seen animating
@@ -105,7 +105,7 @@ class Fuzzer:
         return [w for w in s["windows"] if w["bundle-id"] in APPS and where(w)]
 
     def count(self, s):
-        return len(self.windows(s, lambda w: w["normal"] or w["minimized"] or w["pid"] in self.hidden))
+        return len(self.windows(s, lambda w: w["normal"] or w["minimized"] or w["hidden"]))
 
     def visible(self, s):
         return self.windows(s, lambda w: w["normal"] and w["live-space"] == s["displays"][0]["current-space"])
@@ -146,24 +146,19 @@ class Fuzzer:
         return bool(ws) and self.cli("debug", "ax-unminimize", self.rng.choice(ws)["id"])
 
     def hide(self, s):
-        pids = sorted({w["pid"] for w in self.visible(s)} - self.hidden)
+        pids = sorted({w["pid"] for w in self.visible(s) if not w["hidden"]})
         if not pids: return False
-        pid = self.rng.choice(pids)
-        self.hidden.add(pid)
-        return self.cli("debug", "hide-app", pid)
+        return self.cli("debug", "hide-app", self.rng.choice(pids))
 
     def unhide(self, s):
-        if not self.hidden: return False
-        pid = self.rng.choice(sorted(self.hidden))
-        self.hidden.discard(pid)
-        return self.cli("debug", "unhide-app", pid)
+        pids = sorted({w["pid"] for w in self.windows(s, lambda w: w["hidden"])})
+        if not pids: return False
+        return self.cli("debug", "unhide-app", self.rng.choice(pids))
 
     def activate(self, s):  # the Cmd-Tab path: activate an app that has windows somewhere
-        apps = sorted({w["app"] for w in self.windows(s, lambda w: w["normal"] or w["pid"] in self.hidden)})
+        apps = sorted({w["app"] for w in self.windows(s, lambda w: w["normal"] or w["hidden"])})
         if not apps: return False
-        app = self.rng.choice(apps)
-        self.hidden -= {w["pid"] for w in s["windows"] if w["app"] == app}
-        return self.run("open", "-a", app)
+        return self.run("open", "-a", self.rng.choice(apps))
 
     def workspace(self, s):
         n = len(s["displays"][0]["workspaces"])

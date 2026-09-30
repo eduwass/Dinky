@@ -6,7 +6,7 @@ import DinkyLayout
 extension Coordinator {
     /// Holds a newly shown window out of the tree if it may be the next tab of a tile of its app, and has not been
     /// held before. `settleTab` tiles it after 250 ms if the tile's window is still there.
-    func holdAsTab(_ window: Window, in key: SpaceKey) -> Bool {
+    func holdAsTab(_ window: Window, in key: UInt64) -> Bool {
         guard !notTabs.contains(window.id), let tab = tab(replacedBy: window, in: key) else { return false }
         heldTabs[window.id] = tab
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) { [weak self] in self?.settleTab(window.id) }
@@ -18,7 +18,7 @@ extension Coordinator {
     /// then orders the previous tab out. But some apps (Ghostty, for one) open every new window at the previous
     /// window's frame, so the newcomer is held out of the tree until the tile's window is ordered out or
     /// `settleTab` gives up on it.
-    private func tab(replacedBy window: Window, in key: SpaceKey) -> WindowID? {
+    private func tab(replacedBy window: Window, in key: UInt64) -> WindowID? {
         workspaces[key]?.windows.first { id in
             guard id != window.id, let other = model.windows[id] else { return false }
             return other.pid == window.pid && other.frame.isClose(to: window.frame, within: 1)
@@ -27,7 +27,7 @@ extension Coordinator {
 
     /// When a tile's window is ordered out or closed just after a window of its app came in at its frame, that was
     /// a tab switch: the held new tab takes over the tile. False if no newcomer is held for this tile.
-    func takeOverTile(of id: WindowID, in key: SpaceKey) -> Bool {
+    func takeOverTile(of id: WindowID, in key: UInt64) -> Bool {
         guard let newcomer = heldTabs.first(where: { $0.value == id })?.key else { return false }
         heldTabs[newcomer] = nil
         edit(key) { $0.replace(id, with: newcomer) }

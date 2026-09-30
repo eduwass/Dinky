@@ -8,7 +8,7 @@ extension Coordinator {
 
     /// The tree of the display's current Space, if dinky has one.
     func workspace(on display: Display) -> Workspace? {
-        workspaces[SpaceKey(display: display.uuid, space: display.currentSpaceID)]
+        workspaces[display.currentSpaceID]
     }
 
     /// The container holding a tiled window.
@@ -43,11 +43,13 @@ extension Coordinator {
     }
 
     /// Floats a tiled window where it stands, or tiles a floating one beside the focused tile of its Space.
+    /// A window held as a possible tab is released, so it cannot take over a tile once floated.
     /// False for a window dinky has not classified.
     @discardableResult
     func setFloating(_ id: WindowID, _ floating: Bool) -> Bool {
         guard let placement = placements[id], let window = model.windows[id] else { return false }
         if let space = placement.space { edit(space) { $0.remove(id) } }
+        heldTabs[id] = nil
         placements[id] = Placement(floating: floating, space: nil)
         track(window)
         flush()
