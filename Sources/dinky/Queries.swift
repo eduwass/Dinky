@@ -50,7 +50,8 @@ func listWorkspaces(_ query: WorkspaceQuery) -> String {
         let visible = sid == now.displays[i].currentSpaceID
         if let only = query.visible, only != visible { continue }
         if let empty = query.empty, empty == occupied.contains(sid) { continue }
-        rows.append(now.monitorValues(i).merging(now.workspaceValues(n, space: sid, on: now.displays[i])) { a, _ in a })
+        rows.append(row(now.monitorValues(i).merging(now.workspaceValues(n, space: sid, on: now.displays[i])) { a, _ in a },
+                        WorkspaceQuery.variables))
     }
     return query.format.render(rows)
 }
@@ -84,7 +85,7 @@ func listWindows(_ query: WindowQuery) -> Reply {
             "app-name": app?.localizedName ?? window.app, "app-bundle-id": app?.bundleIdentifier ?? "",
             "app-pid": "\(window.pid)",
         ]) { a, _ in a }
-        rows.append((i, n ?? Int.max, window.id, values))
+        rows.append((i, n ?? Int.max, window.id, row(values, WindowQuery.variables)))
     }
     if query.focused, rows.isEmpty { return .error("no window is focused") }
     rows.sort { ($0.display, $0.workspace, $0.id) < ($1.display, $1.workspace, $1.id) }
@@ -95,8 +96,15 @@ func listMonitors(_ query: MonitorQuery) -> String {
     let now = QueryState()
     let rows = now.displays.indices.filter { i in
         query.focused.map { $0 == (now.displays[i].uuid == now.focused?.uuid) } ?? true
-    }.map(now.monitorValues)
+    }.map { row(now.monitorValues($0), MonitorQuery.variables) }
     return query.format.render(rows)
+}
+
+/// A query's row of format values. Every key must be one of the query's `variables`, the list its
+/// `--format` is checked against, so a value filed under a misspelt or renamed variable fails in debug builds.
+private func row(_ values: [String: String], _ variables: [String]) -> [String: String] {
+    assert(values.keys.allSatisfy(variables.contains), "not format variables: \(values.keys.filter { !variables.contains($0) })")
+    return values
 }
 
 /// What the queries read, taken fresh once per query.

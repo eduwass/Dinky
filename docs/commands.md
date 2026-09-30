@@ -31,7 +31,7 @@ prints it.
 | `mode <name>` | Switch binding mode. |
 | `reload-config` | Reload the config. |
 | `enable <on\|off\|toggle>` | Turn dinky on or off. Off restores windows. |
-| `list-workspaces`, `list-windows`, `list-monitors` | See [Scripting](#scripting). `list-displays` = `list-monitors`. |
+| `list-workspaces`, `list-windows`, `list-monitors`, `list-displays` | See [Scripting](#scripting). `list-displays` = `list-monitors`. |
 | `debug-state` | Tiling state as JSON, for bug reports. |
 | `exec-and-forget <shell command>` | Run with `/bin/sh -c` without waiting. Output goes to the log. |
 
