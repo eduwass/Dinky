@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Fixes
+
+- The minimum sizes dinky learns for an app are kept across quits and `enable off`; restoring windows no longer overwrites them with the ones from launch.
+- A new window that reuses a closed window's id is tiled instead of being left where it opened.
+- When macOS moves a display's Spaces to another display, their layouts move with them instead of starting over.
+- A minimized window keeps its border, hidden, instead of getting a new one when it comes back.
+- `move-window-to-display --follow` focuses the moved window the same way `move-window-to-workspace --follow` does, so a stale focus read cannot pull the layout back.
+- `dinky help` says what `enable off` does: it stops tiling and restores every window.
+
 ## 0.5
 
 ### Motion
