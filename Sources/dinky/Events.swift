@@ -85,6 +85,7 @@ private func describe(_ w: Window) -> String {
     if w.isNormal { flags.append("normal") }
     if !w.isOrderedIn { flags.append("hidden") }
     if w.isMinimized { flags.append("minimized") }
+    if !w.isVisible { flags.append("non-visible") }
     if !w.isDocument { flags.append("non-document") }
     return "wid=\(w.id) pid=\(w.pid) space=\(w.spaceID) level=\(w.level) radius=\(w.cornerRadius) \(f) [\(flags.joined(separator: ","))] \(w.appName ?? "?") \(w.bundleID ?? "")"
 }

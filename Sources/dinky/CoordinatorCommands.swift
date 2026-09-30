@@ -1,5 +1,4 @@
 import DinkyLayout
-import DinkyPrivate
 
 // What commands ask of the coordinator: tree commands on the focused window's Space, floating, and
 // taking in a window dinky moved to another Space.
@@ -59,13 +58,12 @@ extension Coordinator {
     /// macOS leaves keyboard focus with the moved window, so unless we are about to follow it, focus the window
     /// that took its place in the tree it left.
     func windowMoved(_ id: WindowID, refocus: Bool = true) {
-        guard var window = model.windows[id] else { return }
+        guard model.windows[id] != nil else { return }
         // The tree's own record: by now macOS has already re-pointed the app's frontmost window elsewhere.
         let from = placements[id]?.space
         let hadFocus = from.flatMap { workspaces[$0]?.focused } == id
-        window.spaceID = dinky_window_space_id(id)
-        track(window)
-        flush()
+        // Re-reads its Space; the update it publishes reaches handle, which tracks the window and flushes.
+        model.refresh(id)
         guard refocus, hadFocus, let from, let successor = workspaces[from]?.focused, successor != id else { return }
         focus(successor)
     }
