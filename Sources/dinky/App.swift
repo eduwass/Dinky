@@ -19,6 +19,8 @@ func runApp() -> Int32 {
 
 final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem!
+    /// Other tiling window managers seen running at the last refresh.
+    private var otherTilers: [String] = []
     private var socket: SocketServer?
     private let onboarding = Onboarding()
     private var signals: [DispatchSourceSignal] = []
@@ -71,7 +73,13 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func refresh() {
         let state = AppState.shared
         let workspace = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
-        statusItem.button?.title = (workspace.map { "\($0)" } ?? "?") + (state.configError == nil ? "" : "!")
+        let tilers = runningOtherTilers()
+        if tilers != otherTilers {
+            otherTilers = tilers
+            if !tilers.isEmpty { print("app: \(otherTilersWarning(tilers))") }
+        }
+        let trouble = state.configError != nil || !otherTilers.isEmpty
+        statusItem.button?.title = (workspace.map { "\($0)" } ?? "?") + (trouble ? "!" : "")
         statusItem.button?.appearsDisabled = !state.enabled
     }
 
@@ -84,6 +92,9 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(withTitle: "Workspace \(current.map { "\($0)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
         if let error = state.configError {
             menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "")
+        }
+        if !otherTilers.isEmpty {
+            menu.addItem(withTitle: otherTilersWarning(otherTilers), action: nil, keyEquivalent: "")
         }
         menu.addItem(.separator())
 

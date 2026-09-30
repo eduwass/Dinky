@@ -63,6 +63,9 @@ func runDoctor(_ args: [String]) -> Int32 {
                         : "\(label) has \(spaces) for workspace\(here.count == 1 ? "" : "s") \(here.map(String.init).joined(separator: ", "))")
     }
 
+    let tilers = runningOtherTilers()
+    tilers.isEmpty ? ok("no other tiling window manager is running") : warn(otherTilersWarning(tilers))
+
     ok(AXIsProcessTrusted() ? "this terminal has Accessibility (the app needs its own grant)" : "this terminal has no Accessibility grant; only the app needs one")
     if let reply = sendToApp("list-monitors --focused --format '%{monitor-name}'"), reply.ok {
         ok("app is running, focused display: \(reply.text)")

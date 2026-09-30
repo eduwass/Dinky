@@ -49,7 +49,7 @@ and exits 1 on errors or when it isn't running. CLI-only commands:
 | Command | |
 |---|---|
 | `app` | Run the app in the foreground, logging to the terminal. |
-| `doctor [--config <path>]` | Check the config and macOS settings. |
+| `doctor [--config <path>]` | Check the config and macOS settings, and that no other tiling window manager is running. |
 | `recover` | Restore windows left tiled by a crash. |
 | `debug events\|windows` | Print window events or windows, without the app. |
 

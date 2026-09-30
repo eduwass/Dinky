@@ -79,6 +79,10 @@ Dock clicks switch Spaces the fast way instead of sliding. Saying no is fine.
 The menu bar shows the current workspace. `dinky doctor` checks the config and
 the macOS settings dinky depends on.
 
+Run one tiling window manager at a time. With AeroSpace, Amethyst, yabai or
+KiwiDesk also running, each undoes the other's layouts; dinky shows a `!` in the
+menu bar and says which one to quit.
+
 ## Uninstall
 
 Quit dinky, delete the app and `~/.config/dinky`, and remove it from
