@@ -14,7 +14,8 @@ extension Coordinator {
             "enabled": enabled,
             "focused": focusedWindow,
             "displays": displays.displays.map { d in
-                ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces]
+                ["uuid": d.uuid, "current-space": d.currentSpaceID, "spaces": d.spaces, "user-spaces": d.userSpaces,
+                 "visible-area": json(d.visibleArea)] as [String: Any]
             },
             "workspaces": Dictionary(uniqueKeysWithValues: numbers.map { ("\($0.key)", $0.value) }),
             "trees": workspaces.map { key, workspace in
@@ -32,6 +33,8 @@ extension Coordinator {
                 ["id": id, "floating": placement.floating,
                  "display": placement.space?.display ?? "", "space": placement.space?.space ?? 0] as [String: Any]
             },
+            "animating": animatingWindows.sorted(),
+            "dragging": dragging ?? 0,
             "minimum-sizes": Dictionary(uniqueKeysWithValues: applier.minimumSizes.map { ("\($0.key)", [$0.value.width, $0.value.height]) }),
             "windows": model.windows.values.sorted { $0.id < $1.id }.map { w in
                 let live = dinky_window_info(w.id)

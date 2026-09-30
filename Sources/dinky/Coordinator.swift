@@ -339,6 +339,9 @@ final class Coordinator {
     /// Whether dinky is gliding the window to its tile right now.
     func isAnimating(_ id: WindowID) -> Bool { animator.isAnimating(id) }
 
+    /// The windows dinky is gliding to their tiles right now.
+    var animatingWindows: [WindowID] { animator.animating }
+
     private func minimumSizes(in workspace: Workspace) -> [WindowID: CGSize] {
         var sizes: [WindowID: CGSize] = [:]
         for id in workspace.windows { sizes[id] = applier.minimumSize(of: id, app: model.windows[id]?.bundleID) }

@@ -2,7 +2,8 @@
 """Fuzzes a running dinky app with random window, app and workspace actions and checks layout invariants.
 
 Runs inside the VM guest (see `just fuzz`), next to a running `dinky app`. Each step runs one random action, waits
-0.8 s and reads `dinky debug-state`, waits 1.5 s more and reads it again. Invariants are checked on the second
+for dinky's animations to finish (at least 0.8 s) and reads `dinky debug-state`, waits 1.5 s more and reads it again.
+An animation still running after 3 s is a violation. Invariants are checked on the second
 state (what was only late is noted as "settled late"), and anything that moved between the two, with nothing
 happening, is a "spontaneous shift". Violations are printed as they are found and the run goes on.
 
@@ -38,6 +39,25 @@ for i in 1...steps {
     usleep(10_000)
 }
 """
+# drag <x1> <y1> <x2> <y2>: press, drag in steps and release, as a hand moving a window by its title bar.
+DRAG = os.path.expanduser("~/dinky-fuzz-drag")
+DRAG_SOURCE = """
+import CoreGraphics
+import Foundation
+let a = CommandLine.arguments.dropFirst().compactMap { Double($0) }
+let (from, to) = (CGPoint(x: a[0], y: a[1]), CGPoint(x: a[2], y: a[3]))
+func post(_ type: CGEventType, _ p: CGPoint) {
+    CGEvent(mouseEventSource: nil, mouseType: type, mouseCursorPosition: p, mouseButton: .left)!.post(tap: .cghidEventTap)
+}
+post(.mouseMoved, from); usleep(100_000)
+post(.leftMouseDown, from); usleep(100_000)
+for i in 1...20 {
+    let t = Double(i) / 20
+    post(.leftMouseDragged, CGPoint(x: from.x + (to.x - from.x) * t, y: from.y + (to.y - from.y) * t)); usleep(16_000)
+}
+usleep(200_000)
+post(.leftMouseUp, to)
+"""
 # Control-Arrow with the secondary-fn flag, as Mission Control expects, <count> times. The fuzzer posts it in
 # dinky's `service` mode, which does not bind ctrl-left/right, so the switch is the native one.
 KEYS_SOURCE = """
@@ -62,6 +82,7 @@ class Fuzzer:
         self.history, self.hidden, self.docs = [], set(), 0
         self.seen, self.found = set(), {}  # violations reported last step; count per class
         self.landing, self.landings = None, []  # a step's trip to an empty workspace; all of them
+        self.animated = 0  # steps during which dinky was seen animating
 
     def run(self, *cmd):
         self.history.append(" ".join(str(c) for c in cmd))
@@ -71,8 +92,14 @@ class Fuzzer:
         return self.run(self.dinky, *args)
 
     def state(self):
+        """`dinky debug-state`, with each display's workspaces (their Spaces, by number) listed on it. The VM has one
+        display, so a workspace's place in that list plus one is its number."""
         out = subprocess.run([self.dinky, "debug-state"], capture_output=True, text=True, timeout=10)
-        return json.loads(out.stdout) if out.returncode == 0 else None
+        if out.returncode != 0: return None
+        s = json.loads(out.stdout)
+        numbered = sorted(s["workspaces"].items(), key=lambda item: int(item[0]))
+        for d in s["displays"]: d["workspaces"] = [space for _, space in numbered if space in d["spaces"]]
+        return s
 
     def windows(self, s, where=lambda w: True):
         return [w for w in s["windows"] if w["bundle-id"] in APPS and where(w)]
@@ -223,6 +250,31 @@ class Fuzzer:
             ["resize", "smart", self.rng.choice(["+50", "-50", "+120", "-120"])], ["flatten-workspace-tree"], ["retile"],
         ]))
 
+    def burst(self, s):
+        """Several commands back to back, each landing while the last one's animation is still under way,
+        as when flipping between windows: animations retarget, and final writes race steps."""
+        cmds = [["focus", "left"], ["focus", "right"], ["layout", "accordion"], ["layout", "tiles"], ["move", "left"],
+                ["move", "right"], ["resize", "smart", "+80"], ["resize", "smart", "-80"]]
+        for _ in range(self.rng.randint(3, 8)):
+            self.cli(*self.rng.choice(cmds))
+            time.sleep(self.rng.choice([0, 0.02, 0.05]))
+        return True
+
+    def drag(self, s):
+        """Drags a TextEdit window by its title bar onto another tile, or a little way and back to its own."""
+        self.tool(DRAG, DRAG_SOURCE)
+        ws = [w for w in self.visible(s) if w["live-frame"] and w["app"] == "TextEdit"]
+        others = [w for w in self.visible(s) if w["live-frame"]]
+        if not ws or len(others) < 2: return False
+        f = self.rng.choice(ws)["live-frame"]
+        x, y = f[0] + f[2] / 2, f[1] + 12
+        if self.rng.random() < 0.7:
+            t = self.rng.choice([w for w in others if w["live-frame"] != f])["live-frame"]
+            tx, ty = t[0] + t[2] / 2, t[1] + t[3] / 2
+        else:
+            tx, ty = x + self.rng.randint(-60, 60), y + self.rng.randint(20, 80)
+        return self.run(DRAG, int(x), int(y), int(tx), int(ty))
+
     def idle(self, s):
         self.history.append("idle 2s")
         time.sleep(2)
@@ -231,15 +283,15 @@ class Fuzzer:
     ACTIONS = [  # (weight, action); TextEdit documents and moves dominate, so one app often spans two Spaces
         (6, open_doc), (4, reopen_doc), (2, open_finder), (1, open_safari), (4, close), (1, quit), (2, minimize),
         (2, unminimize), (1, hide), (2, unhide), (4, activate), (5, workspace), (7, move_to_workspace),
-        (2, native_switch), (5, go_empty), (3, twin), (10, command), (2, idle),
+        (2, native_switch), (5, go_empty), (3, twin), (10, command), (2, idle), (5, burst), (3, drag),
     ]
     SWITCHING_ACTIONS = [  # apps come and go and focus falls back, on and across Spaces, with a hand on the mouse
         (5, open_doc), (3, reopen_doc), (2, open_finder), (3, open_safari), (8, close), (5, quit), (2, minimize),
         (2, unminimize), (3, hide), (3, unhide), (8, activate), (5, workspace), (6, move_to_workspace),
-        (3, native_switch), (5, go_empty), (2, command), (1, idle), (8, mouse), (2, native_fullscreen),
+        (3, native_switch), (5, go_empty), (2, command), (1, idle), (8, mouse), (2, native_fullscreen), (2, burst),
     ]
     # Actions after which the display should still be on the same Space.
-    STAYS = {close, quit, minimize, unminimize, hide, twin, command, idle}
+    STAYS = {close, quit, minimize, unminimize, hide, twin, command, idle, burst, drag}
 
     # Invariants
 
@@ -276,6 +328,13 @@ class Fuzzer:
         p = placements.get(s["focused"])
         if p and not p["floating"] and p["space"] and p["space"] not in current:
             v[("e-focus-hidden", s["focused"])] = f"focused window {s['focused']} is tiled on hidden Space {p['space']}"
+        area = s["displays"][0]["visible-area"]
+        for id, size in s["minimum-sizes"].items():
+            # A window that cannot shrink below nearly the whole display is a lagging readback, not a minimum.
+            if size[0] > 0.85 * area[2] or size[1] > 0.85 * area[3]:
+                v[("j-minimum", int(id))] = f"window {id} has minimum size {size}, nearly the display ({area[2]}x{area[3]})"
+        if s["dragging"]:
+            v[("k-dragging", s["dragging"])] = f"dinky still thinks window {s['dragging']} is being dragged"
         out = subprocess.run([self.dinky, "list-workspaces", "--focused"], capture_output=True, text=True).stdout.strip()
         d = s["displays"][0]
         if out.isdigit() and d["workspaces"][int(out) - 1] != d["current-space"]:
@@ -346,7 +405,7 @@ class Fuzzer:
             while not action(self, s):
                 start, action = len(self.history), self.rng.choices(actions, weights)[0]
             print(f"{step:4} " + "; ".join(self.history[start:]), flush=True)
-            time.sleep(0.8)
+            stuck = self.wait_for_animations()
             after = self.state()
             idle, spaces = self.settle()
             if after is None or idle is None:
@@ -358,6 +417,7 @@ class Fuzzer:
             late = self.check(after).keys() - checked.keys()
             if late: print("       settled late: " + ", ".join(f"{k} {i}" for k, i in sorted(late, key=str)))
             checked.update(self.shifts(after, idle))
+            if stuck: checked[("i-animating", 0)] = f"windows {stuck} were still animating 3 s after the action"
             if len(spaces) >= 3:
                 checked[("h-loop", 0)] = f"the display kept changing Space while idle: {' -> '.join(map(str, spaces))}"
             if action in self.STAYS and after["displays"][0]["current-space"] != s["displays"][0]["current-space"]:
@@ -368,8 +428,23 @@ class Fuzzer:
         for how in sorted({l[0] for l in self.landings}):
             ls = [l for l in self.landings if l[0] == how]
             print(f"empty workspace by {how}: {len(ls)}, stayed {sum(w == f'workspace {n}' for _, n, w in ls)}")
+        print(f"animations seen in {self.animated} of {step} steps")
         print(f"\nseed {self.seed}: {step} steps, " + (", ".join(f"{k} x{n}" for k, n in sorted(self.found.items())) or "no violations"))
         return 1 if self.found else 0
+
+    def wait_for_animations(self):
+        """Waits at least 0.8 s, and until dinky animates nothing, polling. The windows still animating after 3 s."""
+        start, seen = time.time(), False
+        while time.time() - start < 3:
+            s = self.state()
+            animating = s["animating"] if s else []
+            seen = seen or bool(animating)
+            if not animating and time.time() - start >= 0.8:
+                self.animated += seen
+                return []
+            time.sleep(0.05)
+        self.animated += 1
+        return animating
 
     def note_landing(self, s):
         how, n, space = self.landing

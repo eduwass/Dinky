@@ -42,6 +42,9 @@ final class Animator: NSObject {
     /// Whether dinky is moving the window right now, so its frame changes are not the user's.
     func isAnimating(_ id: WindowID) -> Bool { entries[id] != nil }
 
+    /// The windows moving now.
+    var animating: [WindowID] { Array(entries.keys) }
+
     /// Move the tree's windows from `starts` to `targets`, then run `finish`. Windows already there, or with
     /// no start, are left to `finish`; with none left to move, it runs at once.
     func animate(_ key: SpaceKey, from starts: [WindowID: CGRect], to targets: [WindowID: CGRect],
