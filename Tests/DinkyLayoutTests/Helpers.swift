@@ -1,5 +1,5 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import DinkyLayout
 
 /// Tree shape as text: "h[1 v[2 3]]", accordions prefixed with "a", e.g. "ah[1 2]", `auto` as "*".
@@ -31,8 +31,10 @@ func rect(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> CGRect {
     CGRect(x: x, y: y, width: w, height: h)
 }
 
-func assertRatios(_ actual: [Double], _ expected: [Double], file: StaticString = #filePath, line: UInt = #line) {
-    XCTAssertEqual(actual.count, expected.count, file: file, line: line)
-    for (a, e) in zip(actual, expected) { XCTAssertEqual(a, e, accuracy: 1e-9, file: file, line: line) }
-    XCTAssertEqual(actual.reduce(0, +), 1, accuracy: 1e-9, file: file, line: line)
+func assertRatios(_ actual: [Double], _ expected: [Double],
+                  fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column) {
+    let location = SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column)
+    #expect(actual.count == expected.count, sourceLocation: location)
+    for (a, e) in zip(actual, expected) { #expect(abs(a - e) <= 1e-9, sourceLocation: location) }
+    #expect(abs(actual.reduce(0, +) - 1) <= 1e-9, sourceLocation: location)
 }

@@ -1,172 +1,172 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import DinkyLayout
 
 /// Three windows in 1000x600: 1 on the left, 2 above 3 on the right.
 private func three() -> Workspace { workspace(3) }
 
-final class NeighborTests: XCTestCase {
-    func testLeftFromEitherRightWindowIsOne() {
-        XCTAssertEqual(three().neighbor(of: 2, .left), 1)
-        XCTAssertEqual(three().neighbor(of: 3, .left), 1)
+struct NeighborTests {
+    @Test func `Left from either right window is one`() {
+        #expect(three().neighbor(of: 2, .left) == 1)
+        #expect(three().neighbor(of: 3, .left) == 1)
     }
 
-    func testUpAndDownWithinRightColumn() {
-        XCTAssertEqual(three().neighbor(of: 3, .up), 2)
-        XCTAssertEqual(three().neighbor(of: 2, .down), 3)
+    @Test func `Up and down within right column`() {
+        #expect(three().neighbor(of: 3, .up) == 2)
+        #expect(three().neighbor(of: 2, .down) == 3)
     }
 
-    func testRightFromOnePrefersMostRecent() {
+    @Test func `Right from one prefers most recent`() {
         var ws = three()
         ws.focus(2)
         ws.focus(1)
-        XCTAssertEqual(ws.neighbor(of: 1, .right), 2)
+        #expect(ws.neighbor(of: 1, .right) == 2)
         ws.focus(3)
         ws.focus(1)
-        XCTAssertEqual(ws.neighbor(of: 1, .right), 3)
+        #expect(ws.neighbor(of: 1, .right) == 3)
     }
 
-    func testNoNeighbourAtEdges() {
-        XCTAssertNil(three().neighbor(of: 1, .left))
-        XCTAssertNil(three().neighbor(of: 1, .up))
-        XCTAssertNil(three().neighbor(of: 2, .right))
-        XCTAssertNil(three().neighbor(of: 3, .down))
+    @Test func `No neighbour at edges`() {
+        #expect(three().neighbor(of: 1, .left) == nil)
+        #expect(three().neighbor(of: 1, .up) == nil)
+        #expect(three().neighbor(of: 2, .right) == nil)
+        #expect(three().neighbor(of: 3, .down) == nil)
     }
 
-    func testFocusDirectionMovesFocus() {
+    @Test func `Focus direction moves focus`() {
         var ws = three()
-        XCTAssertTrue(ws.focus(.left))
-        XCTAssertEqual(ws.focused, 1)
-        XCTAssertFalse(ws.focus(.left))
+        #expect(ws.focus(.left) == true)
+        #expect(ws.focused == 1)
+        #expect(ws.focus(.left) == false)
     }
 
-    func testAccordionNeighboursFollowChildOrder() {
+    @Test func `Accordion neighbours follow child order`() {
         var ws = workspace(3, mode: .accordion)
-        XCTAssertEqual(ws.neighbor(of: 3, .left), 2)
+        #expect(ws.neighbor(of: 3, .left) == 2)
         ws.focus(1)
-        XCTAssertEqual(ws.neighbor(of: 1, .right), 2)
+        #expect(ws.neighbor(of: 1, .right) == 2)
     }
 }
 
-final class SwapAndMoveTests: XCTestCase {
-    func testMoveSwapsWithSiblingWindow() {
+struct SwapAndMoveTests {
+    @Test func `Move swaps with sibling window`() {
         var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
         ws.focus(1)
         ws.move(.right)
-        XCTAssertEqual(shape(ws.root), "h[2 1 3]")
+        #expect(shape(ws.root) == "h[2 1 3]")
     }
 
-    func testMoveOutOfContainerAtEdge() {
+    @Test func `Move out of container at edge`() {
         var ws = three()
-        XCTAssertTrue(ws.move(.right))
-        XCTAssertEqual(shape(ws.root), "h[1 2 3]")
+        #expect(ws.move(.right) == true)
+        #expect(shape(ws.root) == "h[1 2 3]")
     }
 
-    func testMoveAcrossAxisLeavesContainer() {
+    @Test func `Move across axis leaves container`() {
         var ws = three()
         ws.move(.left)
-        XCTAssertEqual(shape(ws.root), "h[1 3 2]")
+        #expect(shape(ws.root) == "h[1 3 2]")
     }
 
-    func testMoveIntoSiblingContainer() {
+    @Test func `Move into sibling container`() {
         var ws = three()
         ws.focus(1)
         ws.move(.right)
-        XCTAssertEqual(shape(ws.root), "v[2 3 1]")
+        #expect(shape(ws.root) == "v[2 3 1]")
     }
 
-    func testMoveAtWorkspaceEdgeDoesNothing() {
+    @Test func `Move at workspace edge does nothing`() {
         var ws = three()
         ws.focus(1)
-        XCTAssertFalse(ws.move(.left))
-        XCTAssertEqual(shape(ws.root), "h[1 v[2 3]]")
+        #expect(ws.move(.left) == false)
+        #expect(shape(ws.root) == "h[1 v[2 3]]")
     }
 
-    func testMovePastARootAccordionEdgeLeavesItForATile() {
+    @Test func `Move past a root accordion edge leaves it for a tile`() {
         var ws = workspace(3, mode: .accordion)
-        XCTAssertTrue(ws.move(.right))
-        XCTAssertEqual(shape(ws.root), "h[ah[1 2] 3]")
-        XCTAssertTrue(ws.move(.left), "moving back enters the accordion at its near edge")
-        XCTAssertEqual(shape(ws.root), "ah[1 2 3]")
+        #expect(ws.move(.right) == true)
+        #expect(shape(ws.root) == "h[ah[1 2] 3]")
+        #expect(ws.move(.left) == true, "moving back enters the accordion at its near edge")
+        #expect(shape(ws.root) == "ah[1 2 3]")
     }
 
-    func testMoveAtTheEdgeOfALoneAccordionWindowDoesNothing() {
+    @Test func `Move at the edge of a lone accordion window does nothing`() {
         var ws = workspace(1, mode: .accordion)
-        XCTAssertFalse(ws.move(.right))
-        XCTAssertEqual(shape(ws.root), "ah[1]")
+        #expect(ws.move(.right) == false)
+        #expect(shape(ws.root) == "ah[1]")
     }
 
-    func testMoveAcrossRootWrapsIt() {
+    @Test func `Move across root wraps it`() {
         var ws = workspace(2)
         ws.focus(1)
         ws.move(.down)
-        XCTAssertEqual(shape(ws.root), "v[2 1]")
+        #expect(shape(ws.root) == "v[2 1]")
     }
 }
 
-final class JoinTests: XCTestCase {
-    func testJoinWrapsNeighbourWindow() {
+struct JoinTests {
+    @Test func `Join wraps neighbour window`() {
         var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
         ws.focus(2)
-        XCTAssertTrue(ws.join(.right))
-        XCTAssertEqual(shape(ws.root), "h[1 v[2 3]]")
-        XCTAssertEqual(ws.focused, 2)
+        #expect(ws.join(.right) == true)
+        #expect(shape(ws.root) == "h[1 v[2 3]]")
+        #expect(ws.focused == 2)
     }
 
-    func testJoinIntoNeighbourContainer() {
+    @Test func `Join into neighbour container`() {
         var ws = three()
         ws.focus(1)
         ws.join(.right)
-        XCTAssertEqual(shape(ws.root), "v[1 2 3]")
+        #expect(shape(ws.root) == "v[1 2 3]")
     }
 
-    func testJoinFromInsideContainer() {
+    @Test func `Join from inside container`() {
         var ws = three()
         ws.join(.left)
-        XCTAssertEqual(shape(ws.root), "h[v[1 3] 2]")
+        #expect(shape(ws.root) == "h[v[1 3] 2]")
     }
 
-    func testJoinWithoutNeighbourFails() {
+    @Test func `Join without neighbour fails`() {
         var ws = three()
         ws.focus(1)
-        XCTAssertFalse(ws.join(.left))
+        #expect(ws.join(.left) == false)
     }
 }
 
-final class ResizeTests: XCTestCase {
-    func testResizeGrowsAlongParentAxis() {
+struct ResizeTests {
+    @Test func `Resize grows along parent axis`() {
         var ws = workspace(2)
         ws.focus(1)
-        XCTAssertTrue(ws.resize(by: 100))
+        #expect(ws.resize(by: 100) == true)
         assertRatios(ws.root.ratios, [0.6, 0.4])
-        XCTAssertEqual(ws.layout().frames[1], rect(0, 0, 600, 600))
+        #expect(ws.layout().frames[1] == rect(0, 0, 600, 600))
     }
 
-    func testResizeUsesNearestParent() {
+    @Test func `Resize uses nearest parent`() {
         var ws = three() // 3 sits in the right column, 600 tall
         ws.resize(by: 60)
-        XCTAssertEqual(shape(ws.root), "h[1 v[2 3]]")
+        #expect(shape(ws.root) == "h[1 v[2 3]]")
         assertRatios(ws.root.ratios, [0.5, 0.5])
-        XCTAssertEqual(ws.layout().frames[3], rect(500, 240, 500, 360))
+        #expect(ws.layout().frames[3] == rect(500, 240, 500, 360))
     }
 
-    func testResizeClampsAtMinimum() {
+    @Test func `Resize clamps at minimum`() {
         var ws = workspace(2)
         ws.resize(by: 5000)
         assertRatios(ws.root.ratios, [0.1, 0.9])
-        XCTAssertFalse(ws.resize(by: 50))
+        #expect(ws.resize(by: 50) == false)
         ws.resize(by: -5000)
         assertRatios(ws.root.ratios, [0.9, 0.1])
     }
 
-    func testResizeKeepsEverySiblingAboveMinimum() {
+    @Test func `Resize keeps every sibling above minimum`() {
         var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
         ws.resize(by: 5000)
         assertRatios(ws.root.ratios, [0.1, 0.1, 0.8])
     }
 
-    func testSingleWindowCannotResize() {
+    @Test func `Single window cannot resize`() {
         var ws = workspace(1)
-        XCTAssertFalse(ws.resize(by: 50))
+        #expect(ws.resize(by: 50) == false)
     }
 }

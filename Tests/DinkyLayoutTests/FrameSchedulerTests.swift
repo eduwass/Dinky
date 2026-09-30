@@ -1,6 +1,6 @@
 import CoreGraphics
 import Foundation
-import XCTest
+import Testing
 @testable import DinkyLayout
 
 /// A pretend window server: windows hold frames, some refuse widths below a minimum, writes can be held.
@@ -41,125 +41,127 @@ private func job(_ pid: Int32, _ id: WindowID, _ x: CGFloat) -> FrameJob {
     FrameJob(pid: pid, id: id, frame: CGRect(x: x, y: 0, width: 100, height: 100))
 }
 
-private func submitAndWait(_ scheduler: FrameScheduler, _ jobs: [FrameJob], file: StaticString = #filePath, line: UInt = #line) -> [FrameResult] {
-    let done = XCTestExpectation(description: "results")
+private func submitAndWait(_ scheduler: FrameScheduler, _ jobs: [FrameJob],
+                           fileID: String = #fileID, filePath: String = #filePath, line: Int = #line, column: Int = #column) -> [FrameResult] {
+    let done = DispatchSemaphore(value: 0)
     var results: [FrameResult] = []
-    scheduler.submit(jobs) { results = $0; done.fulfill() }
-    XCTAssertEqual(XCTWaiter.wait(for: [done], timeout: 2), .completed, file: file, line: line)
+    scheduler.submit(jobs) { results = $0; done.signal() }
+    #expect(done.wait(timeout: .now() + 2) == .success,
+            sourceLocation: SourceLocation(fileID: fileID, filePath: filePath, line: line, column: column))
     return results.sorted { $0.job.id < $1.job.id }
 }
 
-final class FrameSchedulerTests: XCTestCase {
-    func testWritesAndReadsBack() {
+struct FrameSchedulerTests {
+    @Test func `Writes and reads back`() {
         let fake = FakeWindows()
         let results = submitAndWait(fake.scheduler(), [job(1, 10, 0), job(2, 20, 100)])
-        XCTAssertEqual(results.map(\.matched), [true, true])
-        XCTAssertEqual(results.map(\.written), [true, true])
-        XCTAssertEqual(results.map(\.retried), [false, false])
-        XCTAssertEqual(results.map(\.got), [job(1, 10, 0).frame, job(2, 20, 100).frame])
+        #expect(results.map(\.matched) == [true, true])
+        #expect(results.map(\.written) == [true, true])
+        #expect(results.map(\.retried) == [false, false])
+        #expect(results.map(\.got) == [job(1, 10, 0).frame, job(2, 20, 100).frame])
     }
 
-    func testSkipsWindowAlreadyInPlaceWithinOnePoint() {
+    @Test func `Skips window already in place within one point`() {
         let fake = FakeWindows([10: CGRect(x: 0.5, y: 0, width: 100, height: 100.5)])
         let results = submitAndWait(fake.scheduler(), [job(1, 10, 0)])
-        XCTAssertEqual(results.map(\.written), [false])
-        XCTAssertEqual(results.map(\.matched), [true])
-        XCTAssertTrue(fake.writes(to: 10).isEmpty)
+        #expect(results.map(\.written) == [false])
+        #expect(results.map(\.matched) == [true])
+        #expect(fake.writes(to: 10).isEmpty)
     }
 
-    func testPreparesEachProcessOnce() {
+    @Test func `Prepares each process once`() {
         let fake = FakeWindows()
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0), job(1, 11, 100)])
         _ = submitAndWait(scheduler, [job(1, 10, 200), job(2, 20, 0)])
-        XCTAssertEqual(fake.prepared.sorted(), [1, 2])
+        #expect(fake.prepared.sorted() == [1, 2])
     }
 
-    func testNewestFrameWinsWhileQueueIsBusy() {
+    @Test func `Newest frame wins while queue is busy`() {
         let fake = FakeWindows()
         let hold = DispatchSemaphore(value: 0)
         fake.holds[10] = hold
         let scheduler = fake.scheduler()
-        let done = XCTestExpectation(description: "last batch")
+        let done = DispatchSemaphore(value: 0)
         scheduler.submit([job(1, 10, 0)])
         Thread.sleep(forTimeInterval: 0.05)  // the queue is now stuck in window 10's write
         scheduler.submit([job(1, 10, 1), job(1, 11, 1)])
         scheduler.submit([job(1, 11, 2)])
         var last: [FrameResult] = []
-        scheduler.submit([job(1, 10, 3), job(1, 11, 3)]) { last = $0; done.fulfill() }
+        scheduler.submit([job(1, 10, 3), job(1, 11, 3)]) { last = $0; done.signal() }
         hold.signal()
         hold.signal()
-        wait(for: [done], timeout: 2)
-        XCTAssertEqual(fake.writes(to: 10).map(\.minX), [0, 3])
-        XCTAssertEqual(fake.writes(to: 11).map(\.minX), [3])
-        XCTAssertEqual(last.map(\.job.frame.minX), [3, 3])
+        #expect(done.wait(timeout: .now() + 2) == .success)
+        #expect(fake.writes(to: 10).map(\.minX) == [0, 3])
+        #expect(fake.writes(to: 11).map(\.minX) == [3])
+        #expect(last.map(\.job.frame.minX) == [3, 3])
     }
 
-    func testBusyAppDoesNotBlockOthers() {
+    @Test func `Busy app does not block others`() {
         let fake = FakeWindows()
         let hold = DispatchSemaphore(value: 0)
         fake.holds[10] = hold
         let scheduler = fake.scheduler()
         scheduler.submit([job(1, 10, 0)])
         let results = submitAndWait(scheduler, [job(2, 20, 0)])
-        XCTAssertEqual(results.map(\.matched), [true])
-        XCTAssertTrue(fake.writes(to: 10).isEmpty)
+        #expect(results.map(\.matched) == [true])
+        #expect(fake.writes(to: 10).isEmpty)
         hold.signal()
     }
 
-    func testCancelDropsQueuedFrames() {
+    @Test func `Cancel drops queued frames`() {
         let fake = FakeWindows()
         let hold = DispatchSemaphore(value: 0)
         fake.holds[10] = hold
         let scheduler = fake.scheduler()
-        let done = XCTestExpectation(description: "cancelled batch")
+        let done = DispatchSemaphore(value: 0)
         scheduler.submit([job(1, 10, 0)])
         Thread.sleep(forTimeInterval: 0.05)  // the queue is now stuck in window 10's write
         var results: [FrameResult] = []
-        scheduler.submit([job(1, 10, 1), job(1, 11, 1)]) { results = $0; done.fulfill() }
+        scheduler.submit([job(1, 10, 1), job(1, 11, 1)]) { results = $0; done.signal() }
         scheduler.cancel()
         hold.signal()
-        wait(for: [done], timeout: 2)
-        XCTAssertEqual(fake.writes(to: 10).map(\.minX), [0])
-        XCTAssertTrue(fake.writes(to: 11).isEmpty)
-        XCTAssertTrue(results.isEmpty)
-        XCTAssertEqual(submitAndWait(scheduler, [job(1, 11, 2)]).map(\.matched), [true])
+        #expect(done.wait(timeout: .now() + 2) == .success)
+        #expect(fake.writes(to: 10).map(\.minX) == [0])
+        #expect(fake.writes(to: 11).isEmpty)
+        #expect(results.isEmpty)
+        #expect(submitAndWait(scheduler, [job(1, 11, 2)]).map(\.matched) == [true])
     }
 
-    func testCancelStopsTheSecondTry() {
+    @Test func `Cancel stops the second try`() {
         var writes = 0
         let scheduler = FrameScheduler(settle: 0.2, read: { _ in CGRect(x: 0, y: 0, width: 574, height: 100) },
                                        write: { _ in writes += 1 })
-        let done = XCTestExpectation(description: "results")
+        let done = DispatchSemaphore(value: 0)
         var results: [FrameResult] = []
-        scheduler.submit([job(1, 10, 0)]) { results = $0; done.fulfill() }
+        scheduler.submit([job(1, 10, 0)]) { results = $0; done.signal() }
         Thread.sleep(forTimeInterval: 0.1)  // the first write is done and settling
         scheduler.cancel()
-        wait(for: [done], timeout: 2)
-        XCTAssertEqual(writes, 1)
-        XCTAssertEqual(results.map(\.retried), [false])
+        #expect(done.wait(timeout: .now() + 2) == .success)
+        #expect(writes == 1)
+        #expect(results.map(\.retried) == [false])
     }
 
-    func testCompletionWaitsForEveryProcess() {
+    @Test func `Completion waits for every process`() {
         let fake = FakeWindows()
         let results = submitAndWait(fake.scheduler(), [job(1, 10, 0), job(2, 20, 0), job(3, 30, 0)])
-        XCTAssertEqual(results.map(\.job.id), [10, 20, 30])
+        #expect(results.map(\.job.id) == [10, 20, 30])
     }
 
-    func testRefusedSizeIsRetriedOnceAndRecordedAsMinimumOnTheSecondPass() {
+    @Test func `Refused size is retried once and recorded as minimum on the second pass`() {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         let results = submitAndWait(scheduler, [job(1, 10, 0), job(1, 11, 100)])
-        XCTAssertEqual(results.map(\.matched), [false, true])
-        XCTAssertEqual(results.map(\.retried), [true, false])
-        XCTAssertEqual(results[0].got?.width, 574)
-        XCTAssertEqual(fake.writes(to: 10).count, 2)
-        XCTAssertEqual(scheduler.minimumSizes, [:], "one refusal could be an app still catching up")
+        #expect(results.map(\.matched) == [false, true])
+        #expect(results.map(\.retried) == [true, false])
+        #expect(results[0].got?.width == 574)
+        #expect(fake.writes(to: 10).count == 2)
+        #expect(scheduler.minimumSizes == [:], "one refusal could be an app still catching up")
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 0)])
+        #expect(scheduler.minimumSizes == [10: CGSize(width: 574, height: 0)])
     }
 
-    func testAnAppThatCatchesUpShowsNoMinimum() {
+    @Test func `An app that catches up shows no minimum`() {
         var lagging = true
         let scheduler = FrameScheduler(settle: 0, read: { job in
             lagging ? CGRect(x: 0, y: 0, width: 2524, height: 100) : job.frame
@@ -169,110 +171,109 @@ final class FrameSchedulerTests: XCTestCase {
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
         lagging = true
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(scheduler.minimumSizes, [:], "landing where it was put forgets the earlier refusal")
+        #expect(scheduler.minimumSizes == [:], "landing where it was put forgets the earlier refusal")
     }
 
-    func testTwoRefusalsInOnePassCompleteOnceWithBothMinimums() {
+    @Test func `Two refusals in one pass complete once with both minimums`() {
         let fake = FakeWindows(minWidths: [10: 574, 20: 115])
         let scheduler = fake.scheduler()
         var completions = 0
         var minimums: [WindowID: CGSize] = [:]
         _ = submitAndWait(scheduler, [job(1, 10, 0), job(2, 20, 100), job(2, 21, 200)])
-        let done = XCTestExpectation(description: "results")
+        let done = DispatchSemaphore(value: 0)
         scheduler.submit([job(1, 10, 0), job(2, 20, 100), job(2, 21, 200)]) { _ in
             completions += 1
             minimums = scheduler.minimumSizes
-            done.fulfill()
+            done.signal()
         }
-        wait(for: [done], timeout: 2)
+        #expect(done.wait(timeout: .now() + 2) == .success)
         Thread.sleep(forTimeInterval: 0.05)
-        XCTAssertEqual(completions, 1)
-        XCTAssertEqual(minimums, [10: CGSize(width: 574, height: 0), 20: CGSize(width: 115, height: 0)])
+        #expect(completions == 1)
+        #expect(minimums == [10: CGSize(width: 574, height: 0), 20: CGSize(width: 115, height: 0)])
     }
 
-    func testRecordedMinimumIsNotWrittenAgain() {
+    @Test func `Recorded minimum is not written again`() {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
         let again = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(fake.writes(to: 10).count, 4)
-        XCTAssertEqual(again.map(\.written), [false])
+        #expect(fake.writes(to: 10).count == 4)
+        #expect(again.map(\.written) == [false])
     }
 
-    func testMoveOfAWindowAtItsMinimumIsWrittenOnceWithoutRetry() {
+    @Test func `Move of a window at its minimum is written once without retry`() {
         let fake = FakeWindows(minWidths: [10: 574])
         let scheduler = fake.scheduler()
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
         _ = submitAndWait(scheduler, [job(1, 10, 0)])
         let moved = submitAndWait(scheduler, [job(1, 10, 50)])
-        XCTAssertEqual(fake.writes(to: 10).count, 5)
-        XCTAssertEqual(moved.map(\.retried), [false])
+        #expect(fake.writes(to: 10).count == 5)
+        #expect(moved.map(\.retried) == [false])
     }
 
-    func testMinimumsFoundInEachDimensionAreKept() {
+    @Test func `Minimums found in each dimension are kept`() {
         var frame = CGRect.zero
         let scheduler = FrameScheduler(settle: 0, read: { _ in frame }, write: { job in
             frame = CGRect(origin: job.frame.origin, size: job.frame.size.grown(to: CGSize(width: 574, height: 300)))
         })
         for _ in 0..<2 { _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 100, height: 400))]) }
         for _ in 0..<2 { _ = submitAndWait(scheduler, [FrameJob(pid: 1, id: 10, frame: CGRect(x: 0, y: 0, width: 600, height: 100))]) }
-        XCTAssertEqual(scheduler.minimumSizes, [10: CGSize(width: 574, height: 300)])
+        #expect(scheduler.minimumSizes == [10: CGSize(width: 574, height: 300)])
     }
 
-    func testUnreadableWindowIsWrittenOnceAndReportedUnmatched() {
+    @Test func `Unreadable window is written once and reported unmatched`() {
         var writes = 0
         let scheduler = FrameScheduler(settle: 0, read: { _ in nil }, write: { _ in writes += 1 })
         let results = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertEqual(results.map(\.matched), [false])
-        XCTAssertEqual(results.map(\.retried), [false])
-        XCTAssertEqual(writes, 1)
-        XCTAssertEqual(scheduler.minimumSizes, [:])
+        #expect(results.map(\.matched) == [false])
+        #expect(results.map(\.retried) == [false])
+        #expect(writes == 1)
+        #expect(scheduler.minimumSizes == [:])
     }
 
-    func testEmptySubmitCompletesImmediately() {
+    @Test func `Empty submit completes immediately`() {
         let results = submitAndWait(FakeWindows().scheduler(), [])
-        XCTAssertTrue(results.isEmpty)
+        #expect(results.isEmpty)
     }
 
-    func testPlainTilesNeedNoRaises() {
+    @Test func `Plain tiles need no raises`() {
         let layout = workspace(3, gaps: Gaps(all: 8)).layout()
-        XCTAssertEqual(layout.raises(current: [3, 1, 2]), [])
-        XCTAssertEqual(workspace(3).layout().raises(current: [2, 3, 1]), [])
+        #expect(layout.raises(current: [3, 1, 2]) == [])
+        #expect(workspace(3).layout().raises(current: [2, 3, 1]) == [])
     }
 
-    func testAccordionRaisesOnlyWhenOrderDiffers() {
+    @Test func `Accordion raises only when order differs`() {
         let layout = workspace(3, mode: .accordion).layout()
-        XCTAssertEqual(layout.order, [3, 2, 1])
-        XCTAssertEqual(layout.raises(current: [3, 99, 2, 1]), [])
-        XCTAssertEqual(layout.raises(current: [1, 2, 3]), [2, 3], "1 is already below 2, so only 2 and 3 go up")
-        XCTAssertEqual(layout.raises(current: [3, 1, 2]), [], "the front window is on top; which one peeks is not worth a flash")
+        #expect(layout.order == [3, 2, 1])
+        #expect(layout.raises(current: [3, 99, 2, 1]) == [])
+        #expect(layout.raises(current: [1, 2, 3]) == [2, 3], "1 is already below 2, so only 2 and 3 go up")
+        #expect(layout.raises(current: [3, 1, 2]) == [], "the front window is on top; which one peeks is not worth a flash")
     }
 
-    func testAccordionNeighboursOnlyNeedTheFrontWindowOnTop() {
+    @Test func `Accordion neighbours only need the front window on top`() {
         var ws = workspace(3, mode: .accordion)
         ws.focus(2)
         let layout = ws.layout()
-        XCTAssertEqual(layout.order, [2, 1, 3])
-        XCTAssertEqual(layout.raises(current: [2, 3, 1]), [], "1 and 3 peek out at opposite edges, so their order never shows")
-        XCTAssertEqual(layout.raises(current: [3, 2, 1]), [2], "only the front window goes up, nothing flashes above it")
+        #expect(layout.order == [2, 1, 3])
+        #expect(layout.raises(current: [2, 3, 1]) == [], "1 and 3 peek out at opposite edges, so their order never shows")
+        #expect(layout.raises(current: [3, 2, 1]) == [2], "only the front window goes up, nothing flashes above it")
     }
 
-    func testFullscreenRaisesWhenNotInFront() {
+    @Test func `Fullscreen raises when not in front`() {
         var ws = workspace(2)
         ws.toggleFullscreen()
         let layout = ws.layout()
-        XCTAssertEqual(layout.raises(current: [2, 1]), [])
-        XCTAssertEqual(layout.raises(current: [1, 2]), [2])
+        #expect(layout.raises(current: [2, 1]) == [])
+        #expect(layout.raises(current: [1, 2]) == [2])
     }
 }
 
-final class FrameSchedulerStepTests: XCTestCase {
-    func testStepsMoveWhenTheSizeIsUnchangedAndAreNotReadBack() {
+struct FrameSchedulerStepTests {
+    @Test func `Steps move when the size is unchanged and are not read back`() {
         let lock = NSLock()
         var calls: [String] = []
-        let done = expectation(description: "drained")
-        let scheduler = FrameScheduler(settle: 0, read: { _ in XCTFail("steps are not read back"); return nil },
+        let scheduler = FrameScheduler(settle: 0, read: { _ in Issue.record("steps are not read back"); return nil },
                                        write: { job in lock.withLock { calls.append("write \(Int(job.frame.minX))") } },
                                        move: { job in lock.withLock { calls.append("move \(Int(job.frame.minX))") } })
         scheduler.step([job(1, 10, 0)])
@@ -281,16 +282,15 @@ final class FrameSchedulerStepTests: XCTestCase {
         wider.frame.size.width = 200
         scheduler.step([wider])
         scheduler.step([])
-        DispatchQueue.global().asyncAfter(deadline: .now() + 0.2) { done.fulfill() }
-        wait(for: [done], timeout: 1)
+        Thread.sleep(forTimeInterval: 0.2)
         // The first two may coalesce; either way the first write sizes the window and a resize writes again.
         let result = lock.withLock { calls }
-        XCTAssertEqual(result.first?.hasPrefix("write"), true)
-        XCTAssertEqual(result.last, "write 20")
-        XCTAssertFalse(result.dropFirst().dropLast().contains { $0.hasPrefix("write") })
+        #expect(result.first?.hasPrefix("write") == true)
+        #expect(result.last == "write 20")
+        #expect(!result.dropFirst().dropLast().contains { $0.hasPrefix("write") })
     }
 
-    func testASizeAnAnimationStepAskedForIsNotAMinimum() {
+    @Test func `A size an animation step asked for is not a minimum`() {
         // The window is stuck at 300 wide, a size a step asked for: it is catching up, not refusing.
         let lagging = FakeWindows([10: CGRect(x: 0, y: 0, width: 300, height: 100)], minWidths: [10: 300])
         let scheduler = lagging.scheduler()
@@ -298,8 +298,8 @@ final class FrameSchedulerStepTests: XCTestCase {
         step.frame.size.width = 300
         scheduler.step([step])
         let results = submitAndWait(scheduler, [job(1, 10, 0)])
-        XCTAssertTrue(results[0].retried)
-        XCTAssertNil(scheduler.minimumSizes[10])
+        #expect(results[0].retried)
+        #expect(scheduler.minimumSizes[10] == nil)
 
         // Stuck at a size nothing asked for is a minimum.
         let refusing = FakeWindows([20: CGRect(x: 0, y: 0, width: 250, height: 100)], minWidths: [20: 250])
@@ -309,14 +309,14 @@ final class FrameSchedulerStepTests: XCTestCase {
         other.step([small])
         _ = submitAndWait(other, [job(1, 20, 0)])
         _ = submitAndWait(other, [job(1, 20, 0)])
-        XCTAssertEqual(other.minimumSizes[20]?.width, 250)
+        #expect(other.minimumSizes[20]?.width == 250)
     }
 
-    func testAWindowThatLeftShowsNoMinimum() {
+    @Test func `A window that left shows no minimum`() {
         // Gone to native full screen while it was written: whole-display size, somewhere else.
         let scheduler = FrameScheduler(settle: 0, read: { _ in CGRect(x: 0, y: 0, width: 1024, height: 768) }, write: { _ in })
         let results = submitAndWait(scheduler, [job(1, 10, 50)])
-        XCTAssertTrue(results[0].retried)
-        XCTAssertNil(scheduler.minimumSizes[10])
+        #expect(results[0].retried)
+        #expect(scheduler.minimumSizes[10] == nil)
     }
 }

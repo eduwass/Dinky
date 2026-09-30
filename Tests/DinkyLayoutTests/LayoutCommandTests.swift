@@ -1,27 +1,25 @@
 import CoreGraphics
-import XCTest
+import Testing
 @testable import DinkyLayout
 
 /// i3's answer for `move` from every window of h[1 v[2 3]] in every direction.
-final class MoveEveryDirectionTests: XCTestCase {
-    func testEveryDirectionFromEveryWindow() {
-        let expected: [WindowID: [Direction: String]] = [
-            1: [.left: "h[1 v[2 3]]", .right: "v[2 3 1]", .up: "v[1 2 3]", .down: "v[2 3 1]"],
-            2: [.left: "h[1 2 3]", .right: "h[1 3 2]", .up: "v[2 h[1 3]]", .down: "h[1 v[3 2]]"],
-            3: [.left: "h[1 3 2]", .right: "h[1 2 3]", .up: "h[1 v[3 2]]", .down: "v[h[1 2] 3]"],
-        ]
-        for (id, moves) in expected {
-            for (direction, shapeAfter) in moves {
-                var ws = workspace(3)
-                ws.focus(id)
-                ws.move(direction)
-                XCTAssertEqual(shape(ws.root), shapeAfter, "move \(direction) from \(id)")
-                XCTAssertEqual(ws.focused, id, "move \(direction) from \(id) keeps focus")
-            }
-        }
+struct MoveEveryDirectionTests {
+    static let expected: [WindowID: [Direction: String]] = [
+        1: [.left: "h[1 v[2 3]]", .right: "v[2 3 1]", .up: "v[1 2 3]", .down: "v[2 3 1]"],
+        2: [.left: "h[1 2 3]", .right: "h[1 3 2]", .up: "v[2 h[1 3]]", .down: "h[1 v[3 2]]"],
+        3: [.left: "h[1 3 2]", .right: "h[1 2 3]", .up: "h[1 v[3 2]]", .down: "v[h[1 2] 3]"],
+    ]
+
+    @Test(arguments: [1, 2, 3] as [WindowID], [Direction.left, .right, .up, .down])
+    func `Every direction from every window`(id: WindowID, direction: Direction) {
+        var ws = workspace(3)
+        ws.focus(id)
+        ws.move(direction)
+        #expect(shape(ws.root) == Self.expected[id]?[direction])
+        #expect(ws.focused == id, "keeps focus")
     }
 
-    func testMovingOutAtTheEdgeKeepsTheOtherWindowsShares() {
+    @Test func `Moving out at the edge keeps the other windows shares`() {
         var ws = workspace(3)
         ws.focus(1)
         ws.move(.up)
@@ -29,17 +27,17 @@ final class MoveEveryDirectionTests: XCTestCase {
     }
 }
 
-final class FullscreenExitTests: XCTestCase {
-    func testFocusingAnotherWindowEndsFullscreen() {
+struct FullscreenExitTests {
+    @Test func `Focusing another window ends fullscreen`() {
         var ws = workspace(3)
         ws.toggleFullscreen()
         ws.focus(3)
-        XCTAssertEqual(ws.fullscreen, 3)
+        #expect(ws.fullscreen == 3)
         ws.focus(1)
-        XCTAssertNil(ws.fullscreen)
+        #expect(ws.fullscreen == nil)
     }
 
-    func testLayoutCommandsEndFullscreenAndKeepTheTree() {
+    @Test func `Layout commands end fullscreen and keep the tree`() {
         let commands: [(String, (inout Workspace) -> Void)] = [
             ("setMode", { $0.setMode(.tiles) }), ("move", { $0.move(.right) }),
             ("join", { $0.join(.down) }), ("resize", { $0.resize(by: 0) }), ("flatten", { $0.flatten() }),
@@ -48,115 +46,115 @@ final class FullscreenExitTests: XCTestCase {
             var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
             ws.toggleFullscreen()
             command(&ws)
-            XCTAssertNil(ws.fullscreen, name)
+            #expect(ws.fullscreen == nil, "\(name)")
         }
     }
 }
 
-final class AccordionCommandTests: XCTestCase {
-    func testFocusCyclesThroughAccordionOrderAndBringsItToFront() {
+struct AccordionCommandTests {
+    @Test func `Focus cycles through accordion order and brings it to front`() {
         var ws = workspace(3, mode: .accordion)
-        XCTAssertTrue(ws.focus(.left))
-        XCTAssertEqual(ws.focused, 2)
-        XCTAssertEqual(ws.layout().order.first, 2)
-        XCTAssertTrue(ws.focus(.left))
-        XCTAssertEqual(ws.layout().order.first, 1)
-        XCTAssertFalse(ws.focus(.left))
-        XCTAssertTrue(ws.focus(.right))
-        XCTAssertEqual(ws.layout().order.first, 2)
+        #expect(ws.focus(.left) == true)
+        #expect(ws.focused == 2)
+        #expect(ws.layout().order.first == 2)
+        #expect(ws.focus(.left) == true)
+        #expect(ws.layout().order.first == 1)
+        #expect(ws.focus(.left) == false)
+        #expect(ws.focus(.right) == true)
+        #expect(ws.layout().order.first == 2)
     }
 
-    func testTogglingBackToTilesRestoresRatios() {
+    @Test func `Toggling back to tiles restores ratios`() {
         var ws = workspace(3, bounds: rect(0, 0, 3000, 500))
         ws.resize(by: 300)
         let tiles = ws.layout()
         ws.setMode(.accordion)
-        XCTAssertEqual(ws.container(of: 3)?.mode, .accordion)
-        XCTAssertNotEqual(ws.layout(), tiles)
+        #expect(ws.container(of: 3)?.mode == .accordion)
+        #expect(ws.layout() != tiles)
         ws.setMode(.tiles)
-        XCTAssertEqual(ws.container(of: 3)?.mode, .tiles)
-        XCTAssertEqual(ws.layout(), tiles)
+        #expect(ws.container(of: 3)?.mode == .tiles)
+        #expect(ws.layout() == tiles)
     }
 
-    func testContainerOfUnknownWindowIsNil() {
-        XCTAssertNil(workspace(1).container(of: 9))
+    @Test func `Container of unknown window is nil`() {
+        #expect(workspace(1).container(of: 9) == nil)
     }
 
-    func testContainerOfNestedWindow() {
+    @Test func `Container of nested window`() {
         let ws = workspace(3) // 1 on the left, 2 above 3 on the right
-        XCTAssertEqual(ws.container(of: 1)?.orientation, .horizontal)
-        XCTAssertEqual(ws.container(of: 3)?.orientation, .vertical)
-        XCTAssertEqual(ws.container(of: 3).map { shape($0) }, "v[2 3]")
+        #expect(ws.container(of: 1)?.orientation == .horizontal)
+        #expect(ws.container(of: 3)?.orientation == .vertical)
+        #expect(ws.container(of: 3).map { shape($0) } == "v[2 3]")
     }
 }
 
-final class ResizeAxisTests: XCTestCase {
-    func testWidthResizesTheNearestHorizontalContainer() {
+struct ResizeAxisTests {
+    @Test func `Width resizes the nearest horizontal container`() {
         var ws = workspace(3) // 3 sits in the right column
-        XCTAssertTrue(ws.resize(by: 100, along: .horizontal))
+        #expect(ws.resize(by: 100, along: .horizontal) == true)
         assertRatios(ws.root.ratios, [0.4, 0.6])
         assertRatios(ws.root.container(at: [1]).ratios, [0.5, 0.5])
     }
 
-    func testHeightResizesTheColumn() {
+    @Test func `Height resizes the column`() {
         var ws = workspace(3)
-        XCTAssertTrue(ws.resize(by: 60, along: .vertical))
+        #expect(ws.resize(by: 60, along: .vertical) == true)
         assertRatios(ws.root.ratios, [0.5, 0.5])
         assertRatios(ws.root.container(at: [1]).ratios, [0.4, 0.6])
     }
 
-    func testNoContainerAlongTheAxis() {
+    @Test func `No container along the axis`() {
         var ws = workspace(2)
-        XCTAssertFalse(ws.resize(by: 50, along: .vertical))
+        #expect(ws.resize(by: 50, along: .vertical) == false)
     }
 }
 
-final class MinimumSizeTests: XCTestCase {
-    func testTileGrowsToItsMinimumAtItsSiblingsExpense() {
+struct MinimumSizeTests {
+    @Test func `Tile grows to its minimum at its siblings expense`() {
         var ws = workspace(2)
         ws.minimumSizes = [1: CGSize(width: 700, height: 0)]
-        XCTAssertEqual(ws.layout().frames[1], rect(0, 0, 700, 600))
-        XCTAssertEqual(ws.layout().frames[2], rect(700, 0, 300, 600))
+        #expect(ws.layout().frames[1] == rect(0, 0, 700, 600))
+        #expect(ws.layout().frames[2] == rect(700, 0, 300, 600))
         assertRatios(ws.root.ratios, [0.5, 0.5])
     }
 
-    func testMinimumsThatDoNotFitAreIgnored() {
+    @Test func `Minimums that do not fit are ignored`() {
         var ws = workspace(2)
         ws.minimumSizes = [1: CGSize(width: 700, height: 0), 2: CGSize(width: 700, height: 0)]
-        XCTAssertEqual(ws.layout().frames[1], rect(0, 0, 500, 600))
+        #expect(ws.layout().frames[1] == rect(0, 0, 500, 600))
     }
 
-    func testNestedMinimumWidensItsColumn() {
+    @Test func `Nested minimum widens its column`() {
         var ws = workspace(3)
         ws.minimumSizes = [3: CGSize(width: 800, height: 0)]
-        XCTAssertEqual(ws.layout().frames[1], rect(0, 0, 200, 600))
-        XCTAssertEqual(ws.layout().frames[2], rect(200, 0, 800, 300))
+        #expect(ws.layout().frames[1] == rect(0, 0, 200, 600))
+        #expect(ws.layout().frames[2] == rect(200, 0, 800, 300))
     }
 
-    func testSiblingsGiveInProportionAndStopAtTheirOwnMinimum() {
-        XCTAssertEqual(fit([1000, 1000, 1000], minimums: [2000, 0, 0], total: 3000), [2000, 500, 500])
-        XCTAssertEqual(fit([1000, 1000, 1000], minimums: [2000, 800, 0], total: 3000), [2000, 800, 200])
-        XCTAssertEqual(fit([600, 300, 100], minimums: [0, 0, 200], total: 1000), [533.3333333333334, 266.6666666666667, 200])
+    @Test func `Siblings give in proportion and stop at their own minimum`() {
+        #expect(fit([1000, 1000, 1000], minimums: [2000, 0, 0], total: 3000) == [2000, 500, 500])
+        #expect(fit([1000, 1000, 1000], minimums: [2000, 800, 0], total: 3000) == [2000, 800, 200])
+        #expect(fit([600, 300, 100], minimums: [0, 0, 200], total: 1000) == [533.3333333333334, 266.6666666666667, 200])
     }
 
-    func testResizeStopsAtTheMinimum() {
+    @Test func `Resize stops at the minimum`() {
         var ws = workspace(2) // 2 focused
         ws.minimumSizes = [2: CGSize(width: 450, height: 0)]
-        XCTAssertTrue(ws.resize(by: -100))
-        XCTAssertEqual(ws.layout().frames[2]?.width, 450)
-        XCTAssertFalse(ws.resize(by: -100))
+        #expect(ws.resize(by: -100) == true)
+        #expect(ws.layout().frames[2]?.width == 450)
+        #expect(ws.resize(by: -100) == false)
     }
 
-    func testResizeTheSiblingsMinimumSwallowsIsUndone() {
+    @Test func `Resize the siblings minimum swallows is undone`() {
         var ws = workspace(2)
         ws.focus(1)
         ws.minimumSizes = [2: CGSize(width: 500, height: 0)]
-        XCTAssertFalse(ws.resize(by: 100))
+        #expect(ws.resize(by: 100) == false)
         assertRatios(ws.root.ratios, [0.5, 0.5])
     }
 
-    func testAccordionMinimumIncludesThePeekingNeighbours() {
+    @Test func `Accordion minimum includes the peeking neighbours`() {
         let accordion = Node.container(Container(.horizontal, .accordion, [.window(1), .window(2), .window(3)]))
-        XCTAssertEqual(accordion.minimumExtent(.horizontal, gap: 8, padding: 30, [2: CGSize(width: 400, height: 0)]), 460)
+        #expect(accordion.minimumExtent(.horizontal, gap: 8, padding: 30, [2: CGSize(width: 400, height: 0)]) == 460)
     }
 }
