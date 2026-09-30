@@ -97,11 +97,13 @@ final class HoverFocus {
         guard hypot(point.x - lastPoint.x, point.y - lastPoint.y) >= minimumMove else { return }
         lastPoint = point
         noteSpaces()
+        let windows = OnScreenWindows()
+        let under = windows.window(at: point)
         if let parked = parkedAt {
-            guard windowUnder(point) != windowUnder(parked) else { return cancel() }
+            guard under != windows.window(at: parked) else { return cancel() }
             parkedAt = nil
         }
-        guard let id = hoverable(at: point), id != AppState.shared.coordinator?.focusedWindow else { return cancel() }
+        guard let id = hoverable(under), id != AppState.shared.coordinator?.focusedWindow else { return cancel() }
         let spaces = currentSpaces()
         let work = DispatchWorkItem { [weak self] in self?.fire(id, spaces) }
         dwell?.cancel()
@@ -112,7 +114,7 @@ final class HoverFocus {
     private func fire(_ id: WindowID, _ spaces: [UInt64]) {
         dwell = nil
         guard let point = CGEvent(source: nil)?.location, currentSpaces() == spaces,
-              hoverable(at: point) == id, let coordinator = AppState.shared.coordinator,
+              hoverable(OnScreenWindows().window(at: point)) == id, let coordinator = AppState.shared.coordinator,
               id != coordinator.focusedWindow else { return }
         ownActivation = (coordinator.model.windows[id]?.pid ?? 0, uptime())
         coordinator.focus(id)
@@ -127,12 +129,12 @@ final class HoverFocus {
         park()
     }
 
-    /// The tracked window under the pointer, if hover may focus it now.
-    private func hoverable(at point: CGPoint) -> WindowID? {
+    /// The window under the pointer, if it is tracked and hover may focus it now.
+    private func hoverable(_ under: WindowID?) -> WindowID? {
         let state = AppState.shared
         guard state.enabled, !MissionControl.shared.active,
               !CGEventSource.buttonState(.combinedSessionState, button: .left),
-              let coordinator = state.coordinator, let id = windowUnder(point), coordinator.placements[id] != nil,
+              let coordinator = state.coordinator, let id = under, coordinator.placements[id] != nil,
               !SpaceSwitcher.shared.switching else { return nil }
         // A dialog, sheet or alert has keyboard focus when the front app's focused window is one dinky has not
         // placed although it is on a current Space. Hover leaves it alone: focusing another window would bury
@@ -145,36 +147,6 @@ final class HoverFocus {
         if !config.accordionEdges, let container = coordinator.container(of: id), container.mode == .accordion,
            container.children[container.activeIndex] != .window(id) { return nil }
         return id
-    }
-
-    /// The frontmost window at the point among normal, floating and modal levels, if hover may look at it.
-    /// Nil while a menu is open anywhere, a modal panel is up or dinky shows a window of its own, such as
-    /// the update dialog: focusing another window would close or bury them. dinky's border windows are
-    /// looked through; the Dock and Notification Center keep transparent windows over the whole screen at
-    /// higher levels and are passed over.
-    private func windowUnder(_ point: CGPoint) -> WindowID? {
-        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
-        let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
-        let modalLevel = Int(CGWindowLevelForKey(.modalPanelWindow))
-        let layers = info.compactMap { $0[kCGWindowLayer as String] as? Int }
-        if layers.contains(menuLevel) || layers.contains(modalLevel) { return nil }
-        // dinky is an accessory app, so a dialog of its own never makes it the front app: the front app's
-        // focused window stays a tile, and only the window list shows the dialog.
-        let ownDialog = info.contains { w in
-            w[kCGWindowOwnerPID as String] as? pid_t == getpid() && (0...modalLevel).contains(w[kCGWindowLayer as String] as? Int ?? -1)
-                && AppState.shared.coordinator?.isBorderWindow(w[kCGWindowNumber as String] as? UInt32 ?? 0) != true
-        }
-        if ownDialog { return nil }
-        let window = info.first { w in
-            guard let layer = w[kCGWindowLayer as String] as? Int, (0...modalLevel).contains(layer),
-                  let id = w[kCGWindowNumber as String] as? UInt32,
-                  AppState.shared.coordinator?.isBorderWindow(id) != true,
-                  (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
-                  let bounds = w[kCGWindowBounds as String] as? NSDictionary,
-                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { return false }
-            return rect.contains(point)
-        }
-        return window?[kCGWindowNumber as String] as? UInt32
     }
 
     /// Every display's current Space, read fresh.
@@ -198,6 +170,49 @@ final class HoverFocus {
     private func cancel() {
         dwell?.cancel()
         dwell = nil
+    }
+}
+
+/// The windows on screen, read once per look. Nil everywhere while a menu is open anywhere, a modal panel
+/// is up or dinky shows a window of its own, such as the update dialog: focusing another window would close
+/// or bury them. dinky's border windows are looked through; the Dock and Notification Center keep
+/// transparent windows over the whole screen at higher levels and are passed over.
+private struct OnScreenWindows {
+    let blocked: Bool
+    /// Other apps' visible windows at normal, floating and modal levels, front to back.
+    let candidates: [(id: WindowID, rect: CGRect)]
+
+    init() {
+        let info = CGWindowListCopyWindowInfo([.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]] ?? []
+        let menuLevel = Int(CGWindowLevelForKey(.popUpMenuWindow))
+        let modalLevel = Int(CGWindowLevelForKey(.modalPanelWindow))
+        let levels = 0...modalLevel
+        let own = getpid()
+        var blocked = false
+        var candidates: [(id: WindowID, rect: CGRect)] = []
+        for w in info {
+            let layer = w[kCGWindowLayer as String] as? Int
+            if layer == menuLevel || layer == modalLevel { blocked = true }
+            guard let layer, levels.contains(layer) else { continue }
+            let id = w[kCGWindowNumber as String] as? UInt32
+            if w[kCGWindowOwnerPID as String] as? pid_t == own {
+                // dinky is an accessory app, so a dialog of its own never makes it the front app: the front
+                // app's focused window stays a tile, and only the window list shows the dialog.
+                if AppState.shared.coordinator?.isBorderWindow(id ?? 0) != true { blocked = true }
+                continue
+            }
+            guard let id, (w[kCGWindowAlpha as String] as? Double ?? 0) > 0,
+                  let bounds = w[kCGWindowBounds as String] as? NSDictionary,
+                  let rect = CGRect(dictionaryRepresentation: bounds as CFDictionary) else { continue }
+            candidates.append((id, rect))
+        }
+        self.blocked = blocked
+        self.candidates = candidates
+    }
+
+    /// The frontmost candidate at the point, unless hover is blocked.
+    func window(at point: CGPoint) -> WindowID? {
+        blocked ? nil : candidates.first { $0.rect.contains(point) }?.id
     }
 }
 
