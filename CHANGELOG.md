@@ -14,7 +14,7 @@
 
 ### Other
 
-- dinky warns when AeroSpace, Amethyst, yabai or KiwiDesk is also running, with a `!` in the menu bar, a line in the menu and in `dinky doctor`. Two tilers undo each other's layouts, which looks like dinky failing to tile.
+- dinky warns when another window manager is also running, with a `!` in the menu bar, a line in the menu and in `dinky doctor`. Two window managers undo each other's layouts, which looks like dinky failing to tile.
 - The update window shows what changed, and every release is listed at [dinky.rodeo/changelog](https://dinky.rodeo/changelog/).
 
 ### Fixes
