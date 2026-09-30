@@ -45,7 +45,7 @@ struct WindowEvent {
 // Main thread only: SkyLight's callbacks are hopped to the main queue before they touch it.
 final class WindowModel {
     private(set) var windows: [UInt32: Window] = [:]
-    var onChange: ((WindowEvent) -> Void)?
+    private var observers: [(WindowEvent) -> Void] = []
 
     private let ownPID = getpid()
 
@@ -55,6 +55,11 @@ final class WindowModel {
         guard EventHub.shared.subscribe({ [weak self] event in self?.handle(event) }) else { return false }
         seed()
         return true
+    }
+
+    /// Calls `handler` with every change once the model has taken it in, in the order observers were added.
+    func observe(_ handler: @escaping (WindowEvent) -> Void) {
+        observers.append(handler)
     }
 
     // Sanity pass for callers that suspect drift: drops windows that no longer exist,
@@ -86,12 +91,16 @@ final class WindowModel {
         case .windowCreate:
             // A reused ID from another process is a new window.
             if let old = windows[id], old.pid != event.pid { remove(id, kind: .windowDestroy) }
-            if windows[id] == nil { add(id, spaceID: event.spaceID, kind: event.kind) } else { refresh(id, kind: event.kind) }
+            if windows[id] == nil {
+                add(id, spaceID: event.spaceID, kind: event.kind, pid: event.pid)
+            } else {
+                refresh(id, kind: event.kind)
+            }
         case .windowDestroy:
             // JankyBorders treats 1326 as "left this Space"; the window may still exist elsewhere.
-            if dinky_window_info(id).exists { refresh(id, kind: event.kind) } else { remove(id, kind: event.kind) }
+            if dinky_window_info(id).exists { refresh(id, kind: event.kind) } else { remove(id, kind: event.kind, pid: event.pid) }
         case .windowClose:
-            remove(id, kind: event.kind)
+            remove(id, kind: event.kind, pid: event.pid)
         case .spaceChange, .spaceCreated, .spaceDestroyed, .frontApp:
             publish(event.kind, .none, nil, pid: event.pid, spaceID: event.spaceID)
         default:
@@ -103,9 +112,10 @@ final class WindowModel {
         }
     }
 
-    private func add(_ id: UInt32, spaceID: UInt64, kind: DinkyEventKind) {
+    // `pid` is the raw event's, published when the window is not one the model keeps.
+    private func add(_ id: UInt32, spaceID: UInt64, kind: DinkyEventKind, pid: pid_t = 0) {
         guard let window = makeWindow(id, spaceID: spaceID, firstSeen: Date()) else {
-            publish(kind, .none, nil, pid: 0, spaceID: spaceID)
+            publish(kind, .none, nil, pid: pid, spaceID: spaceID)
             return
         }
         windows[id] = window
@@ -113,9 +123,10 @@ final class WindowModel {
         publish(kind, .added, window, pid: window.pid, spaceID: spaceID)
     }
 
-    private func remove(_ id: UInt32, kind: DinkyEventKind) {
+    // `pid` is the raw event's, published when the model did not know the window.
+    private func remove(_ id: UInt32, kind: DinkyEventKind, pid: pid_t = 0) {
         guard let window = windows.removeValue(forKey: id) else {
-            publish(kind, .none, nil, pid: 0)
+            publish(kind, .none, nil, pid: pid)
             return
         }
         watch()
@@ -165,6 +176,7 @@ final class WindowModel {
     }
 
     private func publish(_ kind: DinkyEventKind, _ change: WindowEvent.Change, _ window: Window?, pid: pid_t, spaceID: UInt64 = 0) {
-        onChange?(WindowEvent(kind: kind, change: change, window: window, pid: pid, spaceID: spaceID, time: Date()))
+        let event = WindowEvent(kind: kind, change: change, window: window, pid: pid, spaceID: spaceID, time: Date())
+        observers.forEach { $0(event) }
     }
 }

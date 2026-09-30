@@ -11,15 +11,13 @@ import DinkyPrivate
 // - Opening a document activates the app before its new window exists. An app with no window on the
 //   current Space gets `windowGrace` for one to appear there before it is followed.
 
-var followEnabled = true
-
 private let ms: UInt64 = 1_000_000
 private let arrivalWindow = 300 * ms
 private let goneWindow = 300 * ms
 private let windowGrace = 250 * ms
 
-// The Space-change notification is not reliable for swipes posted by other processes, so the last Space
-// seen on each display is remembered too, and checked on every activation and by a timer.
+// The last Space seen on each display, updated whenever the display model changes and checked again on every
+// activation, since the model may not have caught up with a swipe posted by another process yet.
 private var lastSeenSpaceIDs: [String: UInt64] = [:]
 private var lastSpaceChangeAt: UInt64 = 0
 /// No activation has arrived since the last Space change.
@@ -37,10 +35,10 @@ private let loopFollows = 4
 private let loopWindow = 3_000 * ms
 private let loopPause = 5_000 * ms
 
-// Records the current Space of every display; a difference from the last one recorded is a Space change.
+// Records the current Space of every display as the model has it; a difference from the last one recorded
+// is a Space change.
 private func noteCurrentSpace() {
     let model = AppState.shared.displays
-    model.reconcile()
     let seen = Dictionary(model.displays.map { ($0.uuid, $0.currentSpaceID) }, uniquingKeysWith: { a, _ in a })
     guard seen != lastSeenSpaceIDs else { return }
     lastSeenSpaceIDs = seen
@@ -61,19 +59,7 @@ private func spaceChanged() {
 
 func installActivationFollower() {
     noteCurrentSpace()
-    Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { _ in noteCurrentSpace() }
-    EventHub.shared.subscribe { event in
-        switch event.kind {
-        case .spaceChange:
-            noteCurrentSpace()
-        case .windowClose, .windowDestroy:
-            // Runs before the coordinator's model forgets the window, which knows its owner once it is gone.
-            let pid = event.pid != 0 ? event.pid : AppState.shared.coordinator?.model.windows[event.windowID]?.pid
-            if let pid { lastGone = (pid, uptime()) }
-        default:
-            break
-        }
-    }
+    AppState.shared.displays.observe { _ in noteCurrentSpace() }
     let center = NSWorkspace.shared.notificationCenter
     for name in [NSWorkspace.didTerminateApplicationNotification, NSWorkspace.didHideApplicationNotification] {
         center.addObserver(forName: name, object: nil, queue: .main) { note in
@@ -87,15 +73,27 @@ func installActivationFollower() {
         activePID = app.processIdentifier
         activations += 1
         let name = app.localizedName ?? "?"
-        guard followEnabled else { return }
+        guard AppState.shared.enabled, AppState.shared.config.followAppActivation else { return }
         guard uptime() >= pausedUntil else { return log("activate \(name): not followed, following is paused") }
         guard !isArrivalActivation() else { return log("activate \(name): not followed, macOS activated it on arrival") }
         activated(app.processIdentifier, name: name, previous: previous)
     }
 }
 
-// Consumes the arrival: only the first activation after a Space change can be the one it causes.
+// Remembers the owner of each window that closes, as an app losing a window. Call once, with the coordinator's
+// window model.
+func noteGoneWindows(in model: WindowModel) {
+    model.observe { event in
+        guard [.windowClose, .windowDestroy].contains(event.kind) else { return }
+        let pid = event.window?.pid ?? event.pid
+        if pid != 0 { lastGone = (pid, uptime()) }
+    }
+}
+
+// Consumes the arrival: only the first activation after a Space change can be the one it causes. Reads the
+// displays afresh first, as the activation can arrive before anything told the model about the Space change.
 private func isArrivalActivation() -> Bool {
+    AppState.shared.displays.reconcile()
     noteCurrentSpace()
     defer { arrivalPending = false }
     return arrivalPending && uptime() - lastSpaceChangeAt < arrivalWindow
