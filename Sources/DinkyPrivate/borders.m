@@ -62,7 +62,7 @@ static CGRect outer_frame(CGRect frame, double width)
 // Moves, copies the level and sub-level and orders next to the target, in one transaction.
 // SLSGetWindowSubLevel needs Screen Recording and returns 0 without it (JankyBorders
 // 7ba72e5), which is every normal window's sub-level anyway.
-static void place(uint32_t border, uint32_t target, CGPoint origin, DinkyBorderOrder order)
+static void place(uint32_t border, uint32_t target, CGPoint origin, DinkyBorderOrder order, bool synchronous)
 {
     int cid = dinky_connection();
     int64_t level = 0;
@@ -76,7 +76,7 @@ static void place(uint32_t border, uint32_t target, CGPoint origin, DinkyBorderO
         SLSTransactionSetWindowSubLevel(transaction, border, SLSGetWindowSubLevel(cid, target));
     }
     SLSTransactionOrderWindow(transaction, border, order, target);
-    SLSTransactionCommit(transaction, 0);
+    SLSTransactionCommit(transaction, synchronous);
     CFRelease(transaction);
 }
 
@@ -127,14 +127,16 @@ void dinky_border_update(uint32_t border, uint32_t target, CGRect frame, int cor
     SLSDisableUpdate(cid);
     SLSSetWindowShape(cid, border, 0, 0, region);
     draw(border, outer.size, cornerRadius, color, width);
-    place(border, target, outer.origin, order);
+    // Finish placement before screen updates resume; an asynchronous commit can expose
+    // the reshaped border at its temporary origin for a frame during a focus redraw.
+    place(border, target, outer.origin, order, true);
     SLSReenableUpdate(cid);
     CFRelease(region);
 }
 
 void dinky_border_move(uint32_t border, uint32_t target, CGRect frame, double width, DinkyBorderOrder order)
 {
-    place(border, target, outer_frame(frame, width).origin, order);
+    place(border, target, outer_frame(frame, width).origin, order, false);
 }
 
 void dinky_border_move_to_space(uint32_t border, uint64_t spaceID)
