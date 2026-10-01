@@ -23,7 +23,7 @@ plutil -replace CFBundleVersion -string "$BUILD" "$APP/Contents/Info.plist"
 
 # The app icon: Resources/Dinky.icon (Icon Composer) compiled into Assets.car and an icns fallback.
 ICON_OUT="$(mktemp -d)"
-xcrun actool Resources/Dinky.icon --compile "$ICON_OUT" --platform macosx --minimum-deployment-target 15.0 \
+xcrun actool "$PWD/Resources/Dinky.icon" --compile "$ICON_OUT" --platform macosx --minimum-deployment-target 15.0 \
   --app-icon Dinky --include-all-app-icons --output-partial-info-plist "$ICON_OUT/partial.plist" >/dev/null
 mkdir -p "$APP/Contents/Resources"
 cp "$ICON_OUT/Assets.car" "$ICON_OUT/Dinky.icns" "$APP/Contents/Resources/"
