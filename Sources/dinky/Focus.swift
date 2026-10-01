@@ -41,6 +41,8 @@ func frontWindowID() -> UInt32 {
 /// no tree models (e.g. `focusOnScreen` when the coordinator is not running); a window the coordinator models is
 /// focused through `Coordinator.focus(_:)`, which also arms the grace against stale focus reads.
 func focusWindow(pid: pid_t, id: UInt32) {
+    // Focus is on a window again, even when it is the one that had it before a `focus-monitor`.
+    AppState.shared.displays.focusOverride = nil
     if let display = AppState.shared.displays.display(ofWindow: id) {
         noteOwnSwitch(to: display.currentSpaceID, on: display.uuid)
     }

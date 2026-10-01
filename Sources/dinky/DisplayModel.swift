@@ -83,6 +83,8 @@ final class DisplayModel {
             settledSpaceIDs[display.uuid] = display.currentSpaceID
         }
         guard fresh != displays else { return }
+        // Displays coming and going (as around sleep) leave the focus where the windows are.
+        if Set(fresh.map(\.uuid)) != Set(displays.map(\.uuid)) { focusOverride = nil }
         // A disconnected display takes its history with it.
         previousSpaceIDs = previousSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
         settledSpaceIDs = settledSpaceIDs.filter { uuid, _ in fresh.contains { $0.uuid == uuid } }
