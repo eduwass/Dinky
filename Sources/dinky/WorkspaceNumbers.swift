@@ -6,7 +6,10 @@ import DinkyPrivate
 // where `[workspace-to-display]` puts them, else on the main display. `arrange()` makes the Spaces match: it
 // runs `WorkspacePlan`'s steps (create a Space, move a Space's windows, remove an empty Space) until there are
 // none left. It runs at launch, on config reload, and a moment after displays or Spaces come and go. Between
-// runs a workspace stays on its Space by ID, wherever macOS moves that Space. Main thread only.
+// runs a workspace stays on its Space by ID, wherever macOS moves that Space.
+// A display that goes away has macOS pour the windows of its Spaces onto another display's first Space, which
+// is workspace 1's. So the workspace of every window is noted while the displays are settled, and once the
+// Spaces are arranged after a display change, windows found off their workspace go back to it. Main thread only.
 final class WorkspaceNumbers {
     /// Workspace number to Space.
     private(set) var binding: [Int: UInt64] = [:]
@@ -15,6 +18,14 @@ final class WorkspaceNumbers {
     private var arranging = false
     /// Spaces this removed, whose `spaceDestroyed` events are not news.
     private var removed: Set<UInt64> = []
+    /// The workspace each window was on while the displays were settled. See `noteHomes()`.
+    private var homes: [UInt32: Int] = [:]
+    /// The last note of homes, kept only if the displays are still the same at the next one.
+    private var pendingHomes: [UInt32: Int]?
+    /// The displays as the last display change left them.
+    private var knownDisplays: Set<String> = []
+    /// Set by a display coming or going, until an arrangement completes and windows are back on their workspaces.
+    private var displaced = false
 
     var count: Int { AppState.shared.config.workspaces }
 
@@ -33,20 +44,23 @@ final class WorkspaceNumbers {
     /// Starts following display and Space changes. Call once, after the first `arrange()`.
     func start() {
         let model = AppState.shared.displays
-        var known = Set(model.displays.map(\.uuid))
+        knownDisplays = Set(model.displays.map(\.uuid))
         var main = model.displays.first(where: \.isMain)?.uuid
         // A display coming or going, or another becoming main, moves workspaces.
         model.observe { [weak self] model in
+            guard let self else { return }
             let now = Set(model.displays.map(\.uuid))
             let nowMain = model.displays.first(where: \.isMain)?.uuid
-            guard now != known || nowMain != main else { return }
-            let (connected, disconnected) = (now.subtracting(known), known.subtracting(now))
-            (known, main) = (now, nowMain)
+            guard now != knownDisplays || nowMain != main else { return }
+            let (connected, disconnected) = (now.subtracting(knownDisplays), knownDisplays.subtracting(now))
+            (knownDisplays, main) = (now, nowMain)
             if !connected.isEmpty { print("displays: connected \(connected.sorted())") }
             if !disconnected.isEmpty { print("displays: disconnected \(disconnected.sorted())") }
             fflush(stdout)
-            self?.arrangeSoon()
+            if !connected.isEmpty || !disconnected.isEmpty { displaced = true }
+            arrangeSoon()
         }
+        Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.noteHomes() }
         // A Space removed in Mission Control leaves its workspace without one.
         EventHub.shared.subscribe { [weak self] event in
             guard let self, event.kind == .spaceDestroyed, !arranging, removed.remove(event.spaceID) == nil else { return }
@@ -81,6 +95,7 @@ final class WorkspaceNumbers {
             return !Set(binding.values).isSubset(of: model.displays.flatMap(\.userSpaces))
         }
         if unlisted() { _ = waitUntil(2) { !unlisted() } }
+        var completed = false
         for _ in 0..<50 {
             model.reconcile()
             let displays = model.displays.map {
@@ -91,13 +106,20 @@ final class WorkspaceNumbers {
             let before = binding
             let step = plan.step(displays, binding: binding, occupied: occupied)
             binding = step.binding
-            guard let action = step.action else { break }
+            guard let action = step.action else {
+                completed = true
+                break
+            }
             guard perform(action) else {
                 // A workspace whose windows did not all move stays where they are, so the next run moves it again.
                 if case .move = action { binding = before }
                 print("workspaces: stopped; the next display change or config reload tries again")
                 break
             }
+        }
+        if displaced, completed {
+            returnDisplaced()
+            displaced = false
         }
         // Observers hear the result once, not every step on the way.
         if binding != start {
@@ -106,6 +128,48 @@ final class WorkspaceNumbers {
         }
         fflush(stdout)
         AppState.shared.coordinator?.reconcile()
+    }
+
+    /// The displays connected now, as WindowServer lists them. The display model hears of a change a moment
+    /// after macOS has started moving windows for it.
+    private var onlineDisplays: Set<String> {
+        Set(dinky_displays().filter { $0.displayID != 0 && CGDisplayIsOnline($0.displayID) != 0 }.map(\.uuid))
+    }
+
+    /// Notes which workspace each window is on, once a second. A note is kept only when the displays are the
+    /// same a second later, so windows macOS is pouring off a display that is going away are never noted there.
+    private func noteHomes() {
+        guard !displaced, !arranging, onlineDisplays == knownDisplays, let model = AppState.shared.coordinator?.model else {
+            pendingHomes = nil
+            return
+        }
+        if let pendingHomes { homes = pendingHomes }
+        var noted: [UInt32: Int] = [:]
+        for window in model.windows.values where window.isNormal && !window.isMinimized {
+            if let n = number(of: dinky_window_space_id(window.id)) { noted[window.id] = n }
+        }
+        pendingHomes = noted
+    }
+
+    /// Moves windows that a display change left off their workspace back onto it.
+    private func returnDisplaced() {
+        let model = AppState.shared.displays
+        var targets: [UInt32: UInt64] = [:]
+        for (id, n) in homes {
+            let space = dinky_window_space_id(id)
+            // A window on a full-screen Space, or gone, stays put.
+            guard let target = binding[n], space != target,
+                  model.display(containingSpace: space)?.userSpaces.contains(space) == true else { continue }
+            targets[id] = target
+        }
+        guard !targets.isEmpty else { return }
+        for (target, moving) in Dictionary(grouping: targets.keys, by: { targets[$0]! }) {
+            var ids = moving
+            _ = dinky_move_windows_to_space(&ids, Int32(ids.count), target)
+        }
+        let arrived = { targets.filter { dinky_window_space_id($0.key) == $0.value }.count }
+        _ = waitUntil(1) { arrived() == targets.count }
+        print("workspaces: returned \(arrived()) of \(targets.count) windows a display change moved off their workspace")
     }
 
     /// The Spaces among `spaces` with windows dinky would tile or restore there: helper windows some apps keep
