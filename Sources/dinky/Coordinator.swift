@@ -47,6 +47,10 @@ final class Coordinator {
     private var lastFocused: WindowID = 0
     /// A window dinky just focused, and until when focus reads that disagree are taken as stale.
     private var focusing: (id: WindowID, until: Date)?
+    /// Trees to place without gliding the next time they are applied: after displays come or go, apps have
+    /// moved the windows of Spaces that were not on screen to frames of their own, and a glide from there
+    /// would only show the mess.
+    private var snap: Set<UInt64> = []
 
     init(displays: DisplayModel, config: Config) {
         self.displays = displays
@@ -56,7 +60,14 @@ final class Coordinator {
     func start() {
         model.observe { [weak self] event in self?.handle(event) }
         animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
-        displays.observe { [weak self] _ in self?.reconcile() }
+        var known = Set(displays.displays.map(\.uuid))
+        displays.observe { [weak self] displays in
+            guard let self else { return }
+            let now = Set(displays.displays.map(\.uuid))
+            if now != known { snap.formUnion(workspaces.keys) }
+            known = now
+            reconcile()
+        }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
@@ -306,7 +317,7 @@ final class Coordinator {
                 }
             }
         }
-        guard animates else { return write() }
+        guard animates, snap.remove(key) == nil else { return write() }
         // Stacking first, so the window coming to the front of an accordion slides in on top.
         applier.raiseIntoOrder(layout, pids: pids, front: workspace.focused)
         let starts = Dictionary(uniqueKeysWithValues: layout.order.compactMap { id in
