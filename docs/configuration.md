@@ -95,7 +95,9 @@ listed ones whose display isn't connected, live on the main display.
 When a display comes or goes, dinky moves the workspace's windows, layout
 included, to a Space on its display and removes the Space left behind. Empty
 leftover Spaces are removed; ones with windows are left alone, unnumbered. A
-display with no workspaces keeps one unnumbered Space.
+display with no workspaces keeps one unnumbered Space. Windows macOS piles onto
+another workspace when a display goes away, as around sleep, go back to their
+own workspace once the displays settle.
 
 ## `[display.<pattern>]`
 
