@@ -6,6 +6,9 @@ private func parse(_ s: String) throws -> Command { try Command.parse(s) }
 struct QueryParseTests {
     @Test func `Debug state`() throws {
         #expect(try parse("debug-state") == .debugState)
+        #expect(try parse("list-modes") == .listModes(current: false))
+        #expect(try parse("list-modes --current") == .listModes(current: true))
+        #expect(throws: (any Error).self) { try parse("list-modes --all") }
         #expect(throws: (any Error).self) { try parse("debug-state --all") }
     }
 

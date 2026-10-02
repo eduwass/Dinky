@@ -10,8 +10,8 @@ final class HotkeyEngine {
     private var modes: [String: [KeyPress: [String]]] = [:]
     private(set) var currentMode = "main"
     var enabled = true
-    /// Called with the new mode's name whenever the mode changes.
-    var onModeChange: ((String) -> Void)?
+    /// Called with the new mode's name and the previous one whenever the mode changes.
+    var onModeChange: ((_ mode: String, _ previous: String) -> Void)?
     private var tap: CFMachPort?
 
     /// `onCommands` is called on the main queue with the binding's commands, in order.
@@ -37,8 +37,9 @@ final class HotkeyEngine {
 
     private func enter(_ name: String) {
         guard name != currentMode else { return }
+        let previous = currentMode
         currentMode = name
-        onModeChange?(name)
+        onModeChange?(name, previous)
     }
 
     /// Creates the tap on the current run loop. False if it could not (Accessibility missing).

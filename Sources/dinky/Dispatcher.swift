@@ -92,6 +92,11 @@ enum Dispatcher {
             return .ok(listWorkspaces(query))
         case .listMonitors(let query):
             return .ok(listMonitors(query))
+        case .listModes(let current):
+            let state = AppState.shared
+            if current { return .ok(state.hotkeys.currentMode) }
+            let names = state.config.modes.keys.sorted()
+            return .ok((names.filter { $0 == "main" } + names.filter { $0 != "main" }).joined(separator: "\n"))
         case .debugState:
             guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
             return .ok(coordinator.debugState())

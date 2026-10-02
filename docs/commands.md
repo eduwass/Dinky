@@ -32,7 +32,7 @@ prints it.
 | `mode <name>` | Switch binding mode. |
 | `reload-config` | Reload the config. |
 | `enable <on\|off\|toggle>` | Turn dinky on or off. Off restores windows. |
-| `list-workspaces`, `list-windows`, `list-monitors`, `list-displays` | See [Scripting](#scripting). `list-displays` = `list-monitors`. |
+| `list-workspaces`, `list-windows`, `list-monitors`, `list-displays`, `list-modes` | See [Scripting](#scripting). `list-displays` = `list-monitors`. |
 | `debug-state` | Tiling state as JSON, for bug reports. |
 | `exec-and-forget <shell command>` | Run with `/bin/sh -c` without waiting. Output goes to the log. |
 
@@ -83,6 +83,7 @@ command name.
 | `list-workspaces` | `--all`, `--focused`, `--monitor <focused\|all\|n>...`, `--visible [no]`, `--empty [no]`, `--format` | `%{workspace}` |
 | `list-windows` | `--all`, `--focused`, `--monitor <focused\|all\|n>...`, `--workspace <focused\|visible\|n>...`, `--app-bundle-id <id>`, `--format` | `%{window-id}%{right-padding} \| %{app-name}%{right-padding} \| %{window-title}` |
 | `list-monitors` | `--focused [no]`, `--format` | `%{monitor-id}%{right-padding} \| %{monitor-name}` |
+| `list-modes` | `--current` | Mode names, `main` first |
 
 </div>
 
@@ -108,10 +109,12 @@ startup = ['exec-and-forget brew services restart sketchybar']
 workspace-changing = ['exec-and-forget sketchybar --trigger workspace_changing DINKY_DISPLAY=$DINKY_DISPLAY DINKY_WORKSPACE=$DINKY_WORKSPACE']
 workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change WORKSPACE=$DINKY_WORKSPACE']
 focus-changed = ['exec-and-forget sketchybar --trigger focus_changed']
+mode-changed = ['exec-and-forget sketchybar --trigger mode_changed MODE=$DINKY_MODE']
 ```
 
 The workspace hooks set `DINKY_WORKSPACE` (empty on a full-screen Space),
 `DINKY_PREV_WORKSPACE` and `DINKY_DISPLAY` (1-based). `workspace-changing`
 fires only for dinky's own switches, so draw the target there and the real
-state on `workspace-changed`, which always follows. `exec-and-forget` has
-Homebrew on `PATH`.
+state on `workspace-changed`, which always follows. `mode-changed` sets
+`DINKY_MODE` and `DINKY_PREV_MODE`; `dinky list-modes --current` prints the
+mode at any time. `exec-and-forget` has Homebrew on `PATH`.

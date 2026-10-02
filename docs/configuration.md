@@ -152,7 +152,7 @@ environment `exec-and-forget` gets.
 | `workspace-changing` | When a dinky switch starts, before it lands. |
 | `workspace-changed` | When a display's workspace changes, or a switch gives up. |
 | `focus-changed` | When focus changes, debounced 50 ms. |
-| `mode-changed` | When the binding mode changes. |
+| `mode-changed` | When the binding mode changes. Sets `DINKY_MODE` and `DINKY_PREV_MODE`. |
 
 ## `[[rules]]`
 
@@ -254,7 +254,8 @@ duration-ms = 150               # roughly how long a window takes to arrive
 [drag]
 placeholders = true             # outline where a dragged tile came from and the tile it will swap with
 
-# dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY.
+# dinky commands run on events. exec-and-forget gets $DINKY_WORKSPACE, $DINKY_PREV_WORKSPACE, $DINKY_DISPLAY,
+# and $DINKY_MODE, $DINKY_PREV_MODE in mode-changed.
 # [hooks]
 # startup = ['exec-and-forget brew services restart sketchybar']
 # workspace-changed = ['exec-and-forget sketchybar --trigger workspace_change']

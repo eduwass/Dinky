@@ -3,7 +3,7 @@ import Foundation
 // The config's `[hooks]`: `workspace-changing` when dinky starts or retargets a switch, `workspace-changed`
 // when any display's current workspace changes (dinky's switches and native ones alike) or a dinky switch
 // gives up, `focus-changed` when the focused window changes, debounced, `mode-changed` when the binding mode
-// changes, and `startup` once. Started once the coordinator has read the windows and
+// changes, with the new mode and the previous one, and `startup` once. Started once the coordinator has read the windows and
 // displays, so startup fires nothing but `startup`. Main thread only.
 final class Hooks {
     /// The workspace number each display was last seen on, by UUID; "" off the numbered workspaces.
@@ -19,7 +19,9 @@ final class Hooks {
         SpaceSwitcher.shared.onTarget = { [weak self] uuid, target in self?.switchTargeted(uuid, target) }
         SpaceSwitcher.shared.onGiveUp = { [weak self] uuid in self?.switchGaveUp(uuid) }
         state.coordinator?.onFocusChange = { [weak self] in self?.focusChanged() }
-        state.hotkeys.onModeChange = { _ in run(AppState.shared.config.hooks.modeChanged) }
+        state.hotkeys.onModeChange = { mode, previous in
+            run(AppState.shared.config.hooks.modeChanged, env: ["DINKY_MODE": mode, "DINKY_PREV_MODE": previous])
+        }
         run(state.config.hooks.startup)
     }
 

@@ -71,6 +71,8 @@ extension Command {
             description: "Print displays as 'number | name'. Format variables: " + vars(MonitorQuery.variables) + "."),
         Doc(syntax: "list-displays [--focused [no]] [--format <format>]",
             description: "The same as list-monitors."),
+        Doc(syntax: "list-modes [--current]",
+            description: "Print the binding modes in the config, one per line, main first. --current prints the mode dinky is in."),
         Doc(syntax: "debug-state",
             description: "Print the tiling state as JSON: displays, each workspace's tree and expected frames, "
                 + "placements and windows. For tests and bug reports."),
