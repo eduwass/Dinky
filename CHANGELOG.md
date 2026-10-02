@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Obsidian and other Electron apps tile again when they stop listing their windows to Accessibility. Before, such a window kept its slot in the layout but never moved.
+
 ## 0.10
 
 ### Scripting

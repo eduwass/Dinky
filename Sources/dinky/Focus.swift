@@ -10,15 +10,26 @@ func windowPID(_ wid: UInt32) -> pid_t? {
 }
 
 // A non-zero `timeout` (seconds) bounds how long AX calls on the app and the window may block.
+// Electron apps like Obsidian can answer AXWindows with an empty list while still naming the window
+// as their main or focused one, so those are asked too.
 func axWindow(pid: pid_t, wid: UInt32, timeout: Float = 0) -> AXUIElement? {
     let app = AXUIElementCreateApplication(pid)
     if timeout > 0 { AXUIElementSetMessagingTimeout(app, timeout) }
     var value: CFTypeRef?
-    guard AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value) == .success,
-          let windows = value as? [AXUIElement],
-          let window = windows.first(where: { axWindowID($0) == wid }) else { return nil }
+    AXUIElementCopyAttributeValue(app, kAXWindowsAttribute as CFString, &value)
+    let windows = value as? [AXUIElement] ?? []
+    guard let window = windows.first(where: { axWindowID($0) == wid })
+        ?? [kAXMainWindowAttribute, kAXFocusedWindowAttribute].lazy.compactMap({ axElement(app, $0) })
+            .first(where: { axWindowID($0) == wid }) else { return nil }
     if timeout > 0 { AXUIElementSetMessagingTimeout(window, timeout) }
     return window
+}
+
+private func axElement(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
+    var value: CFTypeRef?
+    guard AXUIElementCopyAttributeValue(element, attribute as CFString, &value) == .success,
+          let value, CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+    return (value as! AXUIElement)
 }
 
 private func axWindowID(_ element: AXUIElement) -> UInt32 {
