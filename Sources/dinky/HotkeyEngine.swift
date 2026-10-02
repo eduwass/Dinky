@@ -8,7 +8,7 @@ import Foundation
 final class HotkeyEngine {
     private let onCommands: ([String]) -> Void
     private var modes: [String: [KeyPress: [String]]] = [:]
-    private var currentMode = "main"
+    private(set) var currentMode = "main"
     var enabled = true
     /// Called with the new mode's name whenever the mode changes.
     var onModeChange: ((String) -> Void)?

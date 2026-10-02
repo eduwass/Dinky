@@ -1,4 +1,5 @@
 import AppKit
+import DinkyConfig
 import DinkyPrivate
 import Sparkle
 
@@ -82,13 +83,22 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         statusItem.button?.appearsDisabled = !state.enabled
     }
 
-    // Every action is a command string, run exactly as `dinky <command>` would run it.
+    /// The focused mode's bindings while the menu is built, so each item shows its key.
+    private var bindings = MenuBindings(nil)
+
+    // Every action is a command string, run exactly as `dinky <command>` would run it, and shows the key
+    // bound to that command in the current mode.
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
         let state = AppState.shared
+        let mode = state.hotkeys.currentMode
+        bindings = MenuBindings(state.config.modes[mode])
         let count = state.numbers.count
         let current = state.displays.focusedDisplay().flatMap(state.numbers.current(on:))
         menu.addItem(withTitle: "Workspace \(current.map { "\($0)" } ?? "?") of \(count)", action: nil, keyEquivalent: "")
+        if mode != "main" {
+            menu.addItem(withTitle: "Mode: \(mode)", action: nil, keyEquivalent: "")
+        }
         if let error = state.configError {
             menu.addItem(withTitle: "Config error: \(error)", action: nil, keyEquivalent: "")
         }
@@ -106,12 +116,68 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
             moveTo.addItem(item(title, "move-window-to-workspace \(n)", enabled: n != current))
             moveFollow.addItem(item(title, "move-window-to-workspace \(n) --follow", enabled: n != current))
         }
+        for menu in [go, moveTo, moveFollow] { menu.addItem(.separator()) }
+        go.addItem(item("Previous", "workspace prev"))
+        go.addItem(item("Next", "workspace next"))
+        go.addItem(item("Back and Forth", "workspace-back-and-forth"))
+        moveTo.addItem(item("Previous", "move-window-to-workspace prev"))
+        moveTo.addItem(item("Next", "move-window-to-workspace next"))
+        moveFollow.addItem(item("Previous", "move-window-to-workspace prev --follow"))
+        moveFollow.addItem(item("Next", "move-window-to-workspace next --follow"))
         menu.addItem(submenu("Go to Workspace", go))
         menu.addItem(submenu("Move Window to Workspace", moveTo))
         menu.addItem(submenu("Move Window and Follow", moveFollow))
+        menu.addItem(.separator())
+
+        menu.addItem(submenu("Focus", directions("focus")))
+        menu.addItem(submenu("Move Window", directions("move")))
+        menu.addItem(submenu("Join With", directions("join-with")))
+        menu.addItem(submenu("Resize", items([
+            ("Grow", "resize smart +50"), ("Shrink", "resize smart -50"),
+            ("Wider", "resize width +50"), ("Narrower", "resize width -50"),
+            ("Taller", "resize height +50"), ("Shorter", "resize height -50"),
+        ])))
+        menu.addItem(submenu("Layout", items([
+            ("Tiles", "layout tiles"), ("Accordion", "layout accordion"), nil,
+            ("Horizontal", "layout horizontal"), ("Vertical", "layout vertical"),
+            ("Follow Longer Side", "layout auto"), nil,
+            ("Toggle Floating", "layout floating tiling"),
+        ])))
+        menu.addItem(item("Fullscreen", "fullscreen"))
+        menu.addItem(item("Balance Sizes", "balance-sizes"))
+        menu.addItem(item("Flatten Workspace Tree", "flatten-workspace-tree"))
+        menu.addItem(.separator())
+
+        menu.addItem(submenu("Display", items([
+            ("Focus Left", "focus-monitor left"), ("Focus Down", "focus-monitor down"),
+            ("Focus Up", "focus-monitor up"), ("Focus Right", "focus-monitor right"),
+            ("Focus Next", "focus-monitor next"), ("Focus Previous", "focus-monitor prev"), nil,
+            ("Move Window to Next", "move-window-to-display next"),
+            ("Move Window to Previous", "move-window-to-display prev"),
+            ("Move Window to Next and Follow", "move-window-to-display next --follow"),
+            ("Move Window to Previous and Follow", "move-window-to-display prev --follow"),
+        ])))
+        let modes = NSMenu()
+        let names = state.config.modes.keys.sorted()
+        for name in names.filter({ $0 == "main" }) + names.filter({ $0 != "main" }) {
+            let it = item(name, "mode \(name)")
+            it.state = name == mode ? .on : .off
+            modes.addItem(it)
+        }
+        menu.addItem(submenu("Mode", modes))
+        // Bindings no item above runs, such as several commands at once or exec-and-forget.
+        let others = bindings.unshown
+        if !others.isEmpty {
+            let other = NSMenu()
+            for binding in others {
+                other.addItem(item(binding.commands.joined(separator: "; "), binding.commands, key: binding.combo))
+            }
+            menu.addItem(submenu("Other Key Bindings", other))
+        }
+        menu.addItem(.separator())
+
         menu.addItem(item("Re-tile", "retile"))
         menu.addItem(item("Reload Config", "reload-config"))
-        menu.addItem(.separator())
         let enabled = item("Enabled", "enable toggle")
         enabled.state = state.enabled ? .on : .off
         menu.addItem(enabled)
@@ -127,12 +193,33 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func item(_ title: String, _ command: String, enabled: Bool = true) -> NSMenuItem {
+        item(title, [command], key: bindings.combo(for: command), enabled: enabled)
+    }
+
+    private func item(_ title: String, _ commands: [String], key: KeyCombo?, enabled: Bool = true) -> NSMenuItem {
         let it = NSMenuItem(title: title, action: #selector(runCommand(_:)), keyEquivalent: "")
         it.target = self
-        it.representedObject = command
-        it.toolTip = "dinky \(command)"
+        it.representedObject = commands
+        it.toolTip = commands.map { "dinky \($0)" }.joined(separator: "\n")
         it.isEnabled = enabled
+        if let (equivalent, mask) = key?.menuKey {
+            it.keyEquivalent = equivalent
+            it.keyEquivalentModifierMask = mask
+        }
         return it
+    }
+
+    /// A menu of titled commands, nil for a separator.
+    private func items(_ entries: [(String, String)?]) -> NSMenu {
+        let menu = NSMenu()
+        for entry in entries {
+            menu.addItem(entry.map { item($0.0, $0.1) } ?? .separator())
+        }
+        return menu
+    }
+
+    private func directions(_ command: String) -> NSMenu {
+        items(["left", "down", "up", "right"].map { ($0.capitalized, "\(command) \($0)") })
     }
 
     private func submenu(_ title: String, _ menu: NSMenu) -> NSMenuItem {
@@ -146,11 +233,13 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func runCommand(_ sender: NSMenuItem) {
-        guard let command = sender.representedObject as? String else { return }
-        let reply = handleCommand(command)
-        if !reply.ok {
-            fputs("\(command): \(reply.text)\n", stderr)
-            NSSound.beep()
+        guard let commands = sender.representedObject as? [String] else { return }
+        for command in commands {
+            let reply = handleCommand(command)
+            if !reply.ok {
+                fputs("\(command): \(reply.text)\n", stderr)
+                NSSound.beep()
+            }
         }
     }
 }

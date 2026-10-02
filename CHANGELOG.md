@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The menu bar menu has every command: focus, move, join, resize, layout, displays and modes as well as workspaces. Each item shows the key bound to it, and bindings no item covers are listed under Other Key Bindings.
+
 ## 0.8
 
 ### Fixes

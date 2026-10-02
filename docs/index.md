@@ -76,7 +76,8 @@ once to turn off "When switching to an application, switch to a Space with
 open windows" (Desktop & Dock > Mission Control). With that off, Cmd-Tab and
 Dock clicks switch Spaces the fast way instead of sliding. Saying no is fine.
 
-The menu bar shows the current workspace. `dinky doctor` checks the config and
+The menu bar shows the current workspace. Its menu has every command, each with
+the key bound to it in the current mode. `dinky doctor` checks the config and
 the macOS settings dinky depends on.
 
 Run one tiling window manager at a time. With AeroSpace, Amethyst, yabai or
