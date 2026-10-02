@@ -51,6 +51,8 @@ extension Command {
             description: "Give every window on the focused workspace an equal share of its container."),
         Doc(syntax: "retile",
             description: "Re-read every window and re-apply the layout of every workspace on screen."),
+        Doc(syntax: "clear-minimum-sizes",
+            description: "Forget the minimum window sizes dinky has learned for every app, and re-apply every layout."),
         Doc(syntax: "mode <name>",
             description: "Switch to a binding mode from the config, such as 'main' or 'service'."),
         Doc(syntax: "reload-config",

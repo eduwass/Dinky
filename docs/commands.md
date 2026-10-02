@@ -28,6 +28,7 @@ prints it.
 | `flatten-workspace-tree` | Put every window back into the workspace's configured layout. |
 | `balance-sizes` | Give every window an equal share. |
 | `retile` | Re-read windows and re-apply every layout. |
+| `clear-minimum-sizes` | Forget the minimum window sizes learned for every app and re-apply every layout. |
 | `mode <name>` | Switch binding mode. |
 | `reload-config` | Reload the config. |
 | `enable <on\|off\|toggle>` | Turn dinky on or off. Off restores windows. |

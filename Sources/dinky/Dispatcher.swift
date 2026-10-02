@@ -71,6 +71,10 @@ enum Dispatcher {
             guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
             coordinator.reconcile()
             return .ok("retiled")
+        case .clearMinimumSizes:
+            guard let coordinator = AppState.shared.coordinator else { return .error("tiling is not running") }
+            coordinator.clearMinimumSizes()
+            return .ok("cleared minimum sizes")
         case .mode(let name):
             guard AppState.shared.config.modes[name] != nil else { return .error("no mode '\(name)' in the config") }
             AppState.shared.hotkeys.setMode(name)

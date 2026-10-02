@@ -126,6 +126,11 @@ public final class FrameScheduler: @unchecked Sendable {
         }
     }
 
+    /// Forgets every minimum size and refusal, so windows are asked for their tiles again.
+    public func forgetMinimums() {
+        lock.withLock { minimums = [:]; candidates = [:] }
+    }
+
     /// Drops every frame not written yet, including a second try already under way. Completions still run,
     /// with the results of what was written.
     public func cancel() {

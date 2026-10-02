@@ -78,6 +78,8 @@ extension Command {
             return none ? .balanceSizes : nil
         case "retile":
             return none ? .retile : nil
+        case "clear-minimum-sizes":
+            return none ? .clearMinimumSizes : nil
         case "mode":
             return one.map { .mode($0) }
         case "reload-config":

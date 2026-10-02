@@ -100,7 +100,8 @@ defaults write com.apple.dock workspaces-auto-swoosh -bool true && killall Dock
 - dinky creates and removes Spaces to keep one per workspace, but leaves a
   leftover Space with windows alone.
 - Apps refuse some sizes (Safari's minimum width, Terminal's grid). dinky lays
-  out around them, but tiles can overlap or leave gaps.
+  out around them, but tiles can overlap or leave gaps. It remembers each app's
+  minimum size; Clear Saved Minimum Sizes in the menu forgets them.
 - macOS cannot focus a window on another Space, so dinky switches first.
 
 ## Credits

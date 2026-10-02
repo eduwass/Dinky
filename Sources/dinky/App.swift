@@ -177,6 +177,7 @@ final class DinkyApp: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         menu.addItem(item("Re-tile", "retile"))
+        menu.addItem(item("Clear Saved Minimum Sizes", "clear-minimum-sizes"))
         menu.addItem(item("Reload Config", "reload-config"))
         let enabled = item("Enabled", "enable toggle")
         enabled.state = state.enabled ? .on : .off

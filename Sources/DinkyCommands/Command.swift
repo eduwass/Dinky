@@ -23,6 +23,7 @@ public enum Command: Equatable, Sendable {
     case flattenWorkspaceTree
     case balanceSizes
     case retile
+    case clearMinimumSizes
     case mode(String)
     case reloadConfig
     case enable(Toggle)

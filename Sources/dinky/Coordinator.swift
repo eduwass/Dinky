@@ -135,6 +135,13 @@ final class Coordinator {
         flush()
     }
 
+    /// Forgets every minimum size learned and re-applies every tree, so windows are asked for their tiles again.
+    func clearMinimumSizes() {
+        applier.forgetMinimums()
+        dirty.formUnion(workspaces.keys)
+        flush()
+    }
+
     /// Bounds and gaps of every tree from the display its Space is on now, which can have moved, resized or become
     /// main, or be another display, as when macOS moves a disconnected display's Spaces. A tree whose Space is on
     /// no display is left as it is.

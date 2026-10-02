@@ -57,6 +57,13 @@ final class FrameApplier {
         scheduler.forget(id)
     }
 
+    /// Forgets every minimum size learned, this session's and the saved ones.
+    func forgetMinimums() {
+        scheduler.forgetMinimums()
+        lock.withLock { appMinimums = [:] }
+        try? FileManager.default.removeItem(at: Self.minimumsURL)
+    }
+
     /// Drops every frame not written yet.
     func cancel() { scheduler.cancel() }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Clear Saved Minimum Sizes in the menu, or `dinky clear-minimum-sizes`, forgets the minimum window sizes dinky has learned for each app, so windows can tile smaller again after an app lowers its minimum.
+
 ## 0.9
 
 ### Menu
