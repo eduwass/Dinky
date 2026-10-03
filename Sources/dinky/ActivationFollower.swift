@@ -165,20 +165,21 @@ private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UIn
 
 // Switches to the Space of the app's main window, the one Cmd-Tab brings forward, or else of its frontmost one.
 // The window server's order across Spaces is not the order the app last used its windows in, so on its own it can
-// pick another Space than the window the app makes key.
+// pick another Space than the window the app makes key. Once there, brings the window forward.
 private func follow(_ pid: pid_t, name: String) {
     let model = AppState.shared.displays
     guard uptime() >= pausedUntil else { return log("activate \(name): not followed, following is paused") }
     let windows = normalWindows(of: pid, [.optionAll])
     let main = mainWindowID(of: pid)
     let candidates = windows.contains(main) ? [main] + windows : windows
-    guard let (space, display) = candidates.lazy.compactMap({ wid -> (UInt64, Display)? in
+    guard let (window, space, display) = candidates.lazy.compactMap({ wid -> (UInt32, UInt64, Display)? in
         let sid = dinky_window_space_id(wid)
-        return model.display(containingSpace: sid).map { (sid, $0) }
+        return model.display(containingSpace: sid).map { (wid, sid, $0) }
     }).first else {
         return log("activate \(name): not followed, no display has its windows' Spaces \(windowSpaces(of: pid))")
     }
-    guard space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else {
+    guard space != display.currentSpaceID,
+          switchSpace(toSpaceID: space, on: display, landed: { bringForward(window, of: pid, name: name) }) else {
         return log("activate \(name): not followed, already on Space \(space)")
     }
     let numbers = AppState.shared.numbers
@@ -186,4 +187,18 @@ private func follow(_ pid: pid_t, name: String) {
         + " on \(display.name.isEmpty ? "display \(display.id)" : display.name)"
     log(text)
     noteFollow(text)
+}
+
+// macOS activates an app on every Space a swipe passes and on the one it lands on, and the arrival rule takes the
+// first of those for its own. One of them can leave another app in front of the one the user chose: one whose window
+// is on top there, or one picked on a Space passed on the way that also has a window here. Focus the window once
+// the display is on its Space.
+private func bringForward(_ window: UInt32, of pid: pid_t, name: String) {
+    guard NSWorkspace.shared.frontmostApplication?.processIdentifier != pid || frontWindowID() != window else { return }
+    log("activate \(name): brought its window forward after the switch")
+    if let coordinator = AppState.shared.coordinator, coordinator.model.windows[window] != nil {
+        coordinator.focus(window)
+    } else {
+        focusWindow(pid: pid, id: window)
+    }
 }
