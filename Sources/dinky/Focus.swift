@@ -37,6 +37,13 @@ private func axWindowID(_ element: AXUIElement) -> UInt32 {
     return _AXUIElementGetWindow(element, &wid) == .success ? wid : 0
 }
 
+/// The app's main window, wherever it is: the one activating the app brings forward. 0 if it has none.
+func mainWindowID(of pid: pid_t) -> UInt32 {
+    let app = AXUIElementCreateApplication(pid)
+    AXUIElementSetMessagingTimeout(app, 0.25)
+    return axElement(app, kAXMainWindowAttribute).map(axWindowID) ?? 0
+}
+
 func frontWindowID() -> UInt32 {
     guard let app = NSWorkspace.shared.frontmostApplication else { return 0 }
     var value: CFTypeRef?

@@ -163,13 +163,20 @@ private func normalWindows(of pid: pid_t, _ options: CGWindowListOption) -> [UIn
     }
 }
 
-// Switches to the Space of the app's frontmost window.
+// Switches to the Space of the app's main window, the one Cmd-Tab brings forward, or else of its frontmost one.
+// The window server's order across Spaces is not the order the app last used its windows in, so on its own it can
+// pick another Space than the window the app makes key.
 private func follow(_ pid: pid_t, name: String) {
     let model = AppState.shared.displays
     guard uptime() >= pausedUntil else { return log("activate \(name): not followed, following is paused") }
-    let windowSpaceIDs = windowSpaces(of: pid)
-    guard let (space, display) = windowSpaceIDs.lazy.compactMap({ sid in model.display(containingSpace: sid).map { (sid, $0) } }).first else {
-        return log("activate \(name): not followed, no display has its windows' Spaces \(windowSpaceIDs)")
+    let windows = normalWindows(of: pid, [.optionAll])
+    let main = mainWindowID(of: pid)
+    let candidates = windows.contains(main) ? [main] + windows : windows
+    guard let (space, display) = candidates.lazy.compactMap({ wid -> (UInt64, Display)? in
+        let sid = dinky_window_space_id(wid)
+        return model.display(containingSpace: sid).map { (sid, $0) }
+    }).first else {
+        return log("activate \(name): not followed, no display has its windows' Spaces \(windowSpaces(of: pid))")
     }
     guard space != display.currentSpaceID, switchSpace(toSpaceID: space, on: display) else {
         return log("activate \(name): not followed, already on Space \(space)")

@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Cmd-Tab to an app with windows on several workspaces goes to the workspace of the window the app brings forward. Before, dinky could switch to another of its workspaces, where the app's window stayed behind another app's.
+
 ## 0.11
 
 ### Fixes
