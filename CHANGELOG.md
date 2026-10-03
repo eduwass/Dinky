@@ -2,7 +2,9 @@
 
 ## Unreleased
 
-- Obsidian and other Electron apps tile again when they stop listing their windows to Accessibility. Before, such a window kept its slot in the layout but never moved.
+### Fixes
+
+- Obsidian and other Electron apps tile again. Their windows could keep a slot in the layout while staying where they were, with other windows tiling around the empty slot.
 
 ## 0.10
 
