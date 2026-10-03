@@ -2,8 +2,9 @@
 
 ## Unreleased
 
-- Cmd-Tab to an app with windows on several workspaces goes to the workspace of the window the app brings forward. Before, dinky could switch to another of its workspaces, where the app's window stayed behind another app's.
-- Cmd-Tab to an app on a workspace two or more away brings its window forward on arrival. macOS could activate another app on a workspace passed on the way, and that app stayed in front.
+### Fixes
+
+- Cmd-Tab to an app on another workspace brings that app's window to the front when you get there. Before, another app could stay in front, and for an app with windows on several workspaces dinky could go to the wrong one.
 
 ## 0.11
 
