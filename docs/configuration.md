@@ -26,6 +26,7 @@ permalink: /configuration/
 | `default-layout` | `'tiles'` | `'tiles'` (the existing dwindle layout), `'dwindle'`, `'accordion'`, or `'fixed'`. |
 | `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
+| `float-windows-without-fullscreen` | `true` | Float windows that can't go full screen, such as Finder's copy progress, About This Mac and Calculator. Terminals and editors that can hide their title bar still tile. A `layout tiling` rule tiles a window anyway. |
 
 ## `[workspace.<number>]`
 
@@ -157,7 +158,8 @@ environment `exec-and-forget` gets.
 ## `[[rules]]`
 
 Every rule whose conditions all match a new window runs, in order. Dialogs,
-sheets, panels and fixed-size windows float without one.
+sheets, panels and fixed-size windows float without one, as do windows that
+can't go full screen while `float-windows-without-fullscreen` is on.
 
 | Key | |
 |---|---|
@@ -206,6 +208,7 @@ workspaces = 5                  # across all displays, one native Space each
 default-layout = 'tiles'        # tiles (dwindle) | dwindle | accordion | fixed
 default-tiling = true           # false leaves workspaces untiled unless overridden
 follow-app-activation = true    # Cmd-Tab and Dock clicks switch Spaces the fast way
+float-windows-without-fullscreen = true   # progress windows, About, Calculator and the like float
 
 # Example: only tile workspace 2 in a fixed 2x3 template.
 # Empty cells stay empty; a seventh window adds a column by default.

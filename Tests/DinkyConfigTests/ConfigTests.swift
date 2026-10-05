@@ -11,6 +11,7 @@ struct ConfigTests {
         #expect(config.defaultLayout == .tiles)
         #expect(config.defaultTiling)
         #expect(config.followAppActivation)
+        #expect(config.floatWindowsWithoutFullscreen)
         #expect(config.accordion.padding == 30)
         #expect(config.accordion.orientation == .auto)
         #expect(config.gaps == Gaps())
@@ -52,11 +53,13 @@ struct ConfigTests {
         workspaces = 3
         default-layout = 'accordion'
         follow-app-activation = false
+        float-windows-without-fullscreen = false
         """)
         #expect(!config.startAtLogin)
         #expect(config.workspaces == 3)
         #expect(config.defaultLayout == .accordion)
         #expect(!config.followAppActivation)
+        #expect(!config.floatWindowsWithoutFullscreen)
         assertError("workspaces = 0\n", path: "workspaces", line: 1, contains: "at least 1")
         assertError("default-layout = 'stack'\n", path: "default-layout", line: 1, contains: "'tiles', 'dwindle', 'accordion', 'fixed'")
     }

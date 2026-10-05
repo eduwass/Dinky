@@ -58,6 +58,11 @@
       "default": true,
       "description": "When Cmd-Tab or a Dock click activates an app on another Space, switch there with the fast switch."
     },
+    "float-windows-without-fullscreen": {
+      "type": "boolean",
+      "default": true,
+      "description": "Float windows that can't go full screen, such as Finder's copy progress, About This Mac and Calculator. A `layout tiling` rule tiles one anyway."
+    },
     "accordion": {
       "type": "object",
       "additionalProperties": false,

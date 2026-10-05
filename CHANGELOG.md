@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+### Tiling
+
+- Windows that can't go full screen float on their own, like Finder's copy progress window, About This Mac and Calculator. Terminals and editors that can hide their title bar still tile. Set `float-windows-without-fullscreen = false` to tile them as before, or tile a single app with a `layout tiling` rule.
+
 ## 0.12
 
 ### Fixes
