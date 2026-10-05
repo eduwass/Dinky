@@ -40,7 +40,9 @@ configs, hooks, or scripts may break, saying exactly what to change.
 
 Show the final `## Unreleased` section verbatim with the version it will ship as, and get approval for
 that concrete release unless it was already given in this conversation for the same version and notes.
-Ask again only if the version or notes materially change. A readiness review alone does not authorize
+Ask again only if the version or notes materially change. Put the notes in the approval question itself
+(the question text or an option's preview), since text before the question may not be visible while the
+user answers. A readiness review alone does not authorize
 publication.
 
 ## Publish
