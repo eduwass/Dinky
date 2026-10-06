@@ -30,6 +30,7 @@ func runHelp() -> Int32 {
         ("recover", "Ask the running app to restore windows a crashed session left tiled."),
         ("debug events|windows", "Print the live window event stream, or the current windows, for bug reports."),
         ("doctor [--config <path>]", "Check the config and the macOS settings dinky depends on. Exit 1 on errors."),
+        ("version, -v, --version", "Print the version and build number."),
     ]
     print("usage: dinky <command>, sent to the running app over \(socketPath)\n")
     for doc in Command.all { print("  \(doc.syntax)\n      \(doc.description)") }

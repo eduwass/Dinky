@@ -37,7 +37,7 @@ case "recover": exit(runRecover())
 case "debug": exit(runDebug(rest))
 case "doctor": exit(runDoctor(rest))
 case "help", "--help", "-h": exit(runHelp())
-case "version", "--version":
+case "version", "--version", "-v":
     let info = Bundle.main.infoDictionary
     print("dinky \(info?["CFBundleShortVersionString"] ?? "dev") (\(info?["CFBundleVersion"] ?? "0"))")
     exit(0)
