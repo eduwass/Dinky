@@ -19,6 +19,8 @@ permalink: /configuration/
 
 ## Top level
 
+<div class="wide-table" markdown="1">
+
 | Key | Default | |
 |---|---|---|
 | `start-at-login` | `true` | Register as a login item. |
@@ -27,6 +29,8 @@ permalink: /configuration/
 | `default-tiling` | `true` | Set `false` to leave workspaces untiled unless overridden. |
 | `follow-app-activation` | `true` | Cmd-Tab and Dock clicks switch Spaces the fast way. Needs the macOS "switch to a Space with open windows" setting off. |
 | `float-windows-without-fullscreen` | `true` | Float windows that can't go full screen, such as Finder's copy progress, About This Mac and Calculator. Terminals and editors that can hide their title bar still tile. A `layout tiling` rule tiles a window anyway. |
+
+</div>
 
 ## `[workspace.<number>]`
 
@@ -68,17 +72,25 @@ numbering starts at 1.
 
 ## `[accordion]`
 
+<div class="wide-table" markdown="1">
+
 | Key | Default | |
 |---|---|---|
 | `padding` | `30` | Points the neighbours peek out by. |
 | `orientation` | `'auto'` | On switching to accordion, `'auto'` runs along the container's longer side; `'keep'` keeps its orientation. An orientation set with `layout` is always kept. |
 
+</div>
+
 ## `[gaps]`
+
+<div class="wide-table" markdown="1">
 
 | Key | Default | |
 |---|---|---|
 | `inner` | `8` | Between windows. Or `{ horizontal = 8, vertical = 6 }`. |
 | `outer` | `8` | To the screen edge. Or `{ top = 44, bottom = 8, left = 8, right = 8 }`, or `outer.top = 44`. |
+
+</div>
 
 ## `[workspace-to-display]`
 
@@ -112,6 +124,8 @@ gaps.outer.top = 44
 
 ## `[borders]`
 
+<div class="wide-table" markdown="1">
+
 | Key | Default | |
 |---|---|---|
 | `enabled` | `true` | |
@@ -121,7 +135,11 @@ gaps.outer.top = 44
 | `order` | `'below'` | `'above'` draws a click-through ring over the window. |
 | `exclude-apps` | `[]` | Bundle IDs that get no border. |
 
+</div>
+
 ## `[focus-follows-mouse]`
+
+<div class="wide-table" markdown="1">
 
 | Key | Default | |
 |---|---|---|
@@ -129,23 +147,35 @@ gaps.outer.top = 44
 | `delay-ms` | `100` | How long the pointer must rest. |
 | `accordion-edges` | `true` | Resting on a peeking accordion edge focuses that window. |
 
+</div>
+
 ## `[animations]`
+
+<div class="wide-table" markdown="1">
 
 | Key | Default | |
 |---|---|---|
 | `enabled` | `true` | Windows glide to their tiles instead of jumping. Off while macOS's Reduce Motion is on. |
 | `duration-ms` | `150` | Roughly how long a window takes to arrive, up to 1000. `0` jumps. |
 
+</div>
+
 ## `[drag]`
+
+<div class="wide-table" markdown="1">
 
 | Key | Default | |
 |---|---|---|
 | `placeholders` | `true` | While you drag a tiled window, outline the tile it came from and the tile it will swap with. |
 
+</div>
+
 ## `[hooks]`
 
 Commands run on events. See [Scripting](commands.md#scripting) for the
 environment `exec-and-forget` gets.
+
+<div class="wide-table" markdown="1">
 
 | Key | Runs |
 |---|---|
@@ -155,11 +185,15 @@ environment `exec-and-forget` gets.
 | `focus-changed` | When focus changes, debounced 50 ms. |
 | `mode-changed` | When the binding mode changes. Sets `DINKY_MODE` and `DINKY_PREV_MODE`. |
 
+</div>
+
 ## `[[rules]]`
 
 Every rule whose conditions all match a new window runs, in order. Dialogs,
 sheets, panels and fixed-size windows float without one, as do windows that
 can't go full screen while `float-windows-without-fullscreen` is on.
+
+<div class="wide-table" markdown="1">
 
 | Key | |
 |---|---|
@@ -168,6 +202,8 @@ can't go full screen while `float-windows-without-fullscreen` is on.
 | `title` | Case-insensitive regex. |
 | `kind` | `'normal'`, `'dialog'`, `'sheet'` or `'panel'`. |
 | `run` | Required. A command or a list. |
+
+</div>
 
 ```toml
 [[rules]]
