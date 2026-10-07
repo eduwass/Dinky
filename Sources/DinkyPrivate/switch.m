@@ -1,4 +1,5 @@
 #import "switch.h"
+#import "compat.h"
 #import "query.h"
 
 #import <AppKit/AppKit.h>
@@ -333,6 +334,7 @@ static bool mimi_post_swipes(double sign, int count, CGDirectDisplayID displayID
 
     bool augmented = requires_augmentation();
     bool posted = true;
+    if (dinky_post_legacy_swipes(sign, count, warp)) count = 0;
     for (int i = 0; i < count && posted; i++) {
         posted = augmented ? mimi_post_swipe(sign) : legacy_post_swipe(sign, i == count - 1);
     }
