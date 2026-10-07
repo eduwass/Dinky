@@ -1,4 +1,5 @@
 #import "events.h"
+#import "compat.h"
 #import "query.h"
 #import "skylight.h"
 
@@ -127,6 +128,7 @@ DinkyWindowInfo dinky_window_info(uint32_t windowID)
             }
             if (radii) CFRelease(radii);
         }
+        if (!SLSWindowIteratorGetCornerRadii) info.cornerRadius = DINKY_LEGACY_CORNER_RADIUS;
     }
     if (iterator) CFRelease(iterator);
     CFRelease(query);
