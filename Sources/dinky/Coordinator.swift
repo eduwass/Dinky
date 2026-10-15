@@ -61,12 +61,16 @@ final class Coordinator {
         model.observe { [weak self] event in self?.handle(event) }
         animator.onArrive = { [weak self] ids in self?.borders?.arrived(ids) }
         var known = Set(displays.displays.map(\.uuid))
+        var areas = Dictionary(displays.displays.map { ($0.uuid, $0.visibleArea) }, uniquingKeysWith: { a, _ in a })
         displays.observe { [weak self] displays in
             guard let self else { return }
             let now = Set(displays.displays.map(\.uuid))
             if now != known { snap.formUnion(workspaces.keys) }
             known = now
+            let resized = displays.displays.filter { d in areas[d.uuid].map { $0 != d.visibleArea } ?? false }
+            areas = Dictionary(displays.displays.map { ($0.uuid, $0.visibleArea) }, uniquingKeysWith: { a, _ in a })
             reconcile()
+            fitHiddenSpaces(on: resized)
         }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
@@ -288,6 +292,19 @@ final class Coordinator {
         dirty = []
         guard enabled else { return }
         for key in keys where isVisible(key) { apply(key) }
+    }
+
+    /// The menu bar or Dock hid or showed: lays out the display's other Spaces now too, so their windows are in
+    /// place before they are switched to rather than moving into place after. Frames only: raising a window on
+    /// another Space could switch to it.
+    private func fitHiddenSpaces(on resized: [Display]) {
+        guard enabled else { return }
+        for key in workspaces.keys where !isVisible(key) && resized.contains(where: { $0.userSpaces.contains(key) }) {
+            guard let layout = workspaces[key]?.layout() else { continue }
+            applier.step(layout.order.compactMap { id in
+                model.windows[id].map { FrameJob(pid: $0.pid, id: id, frame: layout.frames[id]!) }
+            })
+        }
     }
 
     /// Whether the Space is a display's current one.
