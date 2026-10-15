@@ -14,6 +14,8 @@ let package = Package(
             name: "DinkyPrivate",
             linkerSettings: [
                 .unsafeFlags(["-F/System/Library/PrivateFrameworks", "-framework", "SkyLight"]),
+                // Weakly imported and macOS 26 only: an older SDK's SkyLight lacks it, so let it resolve at run time.
+                .unsafeFlags(["-Xlinker", "-U", "-Xlinker", "_SLSWindowIteratorGetCornerRadii"]),
                 .linkedFramework("ApplicationServices"),
                 .linkedFramework("AppKit"),
             ]
