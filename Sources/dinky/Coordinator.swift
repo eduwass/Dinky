@@ -69,6 +69,8 @@ final class Coordinator {
             known = now
             let resized = displays.displays.filter { d in areas[d.uuid].map { $0 != d.visibleArea } ?? false }
             areas = Dictionary(displays.displays.map { ($0.uuid, $0.visibleArea) }, uniquingKeysWith: { a, _ in a })
+            // A new visible area snaps rather than animates, so the windows follow the menu bar at once.
+            for display in resized { snap.formUnion(workspaces.keys.filter { display.userSpaces.contains($0) }) }
             reconcile()
             fitHiddenSpaces(on: resized)
         }

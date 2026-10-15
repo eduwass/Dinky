@@ -69,6 +69,14 @@ final class DisplayModel {
                                                           object: nil, queue: .main) { [weak self] _ in
             self?.reconcile()
         }
+        // Hiding or showing the menu bar changes the visible area. Without this the poll below finds it up to half
+        // a second late; the screen's visible frame follows the setting a few ms after it, so look a few times.
+        DistributedNotificationCenter.default().addObserver(forName: .init("AppleInterfaceMenuBarHidingChangedNotification"),
+                                                            object: nil, queue: .main) { [weak self] _ in
+            for delay in [0, 0.01, 0.03, 0.06, 0.1, 0.2, 0.4] {
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) { self?.reconcile() }
+            }
+        }
         // Neither notification is reliable for swipes posted by other processes.
         Timer.scheduledTimer(withTimeInterval: 0.5, repeats: true) { [weak self] _ in self?.reconcile() }
     }
