@@ -95,6 +95,10 @@ final class Coordinator {
             let before = known
             known = displays.displays
             if Set(known.map(\.uuid)) != Set(before.map(\.uuid)) { snap.formUnion(workspaces.keys) }
+            // A new visible area snaps rather than animates, so the windows follow the menu bar at once.
+            for display in known where before.first(where: { $0.uuid == display.uuid }).map({ $0.visibleArea != display.visibleArea }) ?? false {
+                snap.formUnion(workspaces.keys.filter { display.userSpaces.contains($0) })
+            }
             // Switching Space is not worth re-reading every window and re-applying every tree.
             if Self.onlySwitchedSpaces(from: before, to: known) { spacesShown(before: before) } else { reconcile() }
         }
