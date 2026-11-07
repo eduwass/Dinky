@@ -41,6 +41,7 @@ extension Config {
 
     [scrolling]
     column-width = 0.49             # a new column's share of the display; a lone column fills it
+    fill = false                    # stretch columns that fit to fill the display instead of centring them
 
     [master]
     size = 0.6                      # the master's share of the display beside the stack; alone it fills it

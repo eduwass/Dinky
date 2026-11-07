@@ -175,6 +175,7 @@ do nothing while it holds one window.
 | Key | Default | |
 |---|---|---|
 | `column-width` | `0.49` | A new column's width, as a share of the display inside the outer gaps, from `0.1` to `1`. Omarchy's `0.49` fits two columns side by side. |
+| `fill` | `false` | Columns that fit on the display grow in proportion to fill it instead of being centred, so the strip scrolls only once they don't. |
 
 </div>
 
@@ -577,6 +578,7 @@ orientation = 'auto'            # auto: run along the container's longer side | 
 
 [scrolling]
 column-width = 0.49             # a new column's share of the display; a lone column fills it
+fill = false                    # stretch columns that fit to fill the display instead of centring them
 
 [master]
 size = 0.6                      # the master's share of the display beside the stack; alone it fills it

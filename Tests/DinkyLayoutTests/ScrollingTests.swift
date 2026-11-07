@@ -32,6 +32,19 @@ struct ScrollingGeometryTests {
         #expect(ws.layout().frames[2] == rect(500, 0, 490, 600))
     }
 
+    @Test func `With fill, columns that fit grow to fill the screen`() {
+        var ws = strip(2, width: 0.33)
+        ws.fillColumns = true
+        #expect(ws.layout().frames[1] == rect(-peek, 0, 525, 600))
+        #expect(ws.layout().frames[2] == rect(500, 0, 525, 600))
+    }
+
+    @Test func `With fill, columns that don't fit keep their width and scroll`() {
+        var ws = strip(4, width: 0.33)
+        ws.fillColumns = true
+        #expect(lefts(ws) == lefts(strip(4, width: 0.33)))
+    }
+
     @Test func `Inner and outer gaps match on both sides`() {
         let ws = strip(2, width: 0.49, gaps: Gaps(all: 10))
         #expect(ws.layout().frames[1] == rect(15, 10, 480, 580))

@@ -88,6 +88,7 @@ struct SchemaTests {
 
         [scrolling]
         column-width = 0.5
+        fill = true
 
         [master]
         size = 0.55

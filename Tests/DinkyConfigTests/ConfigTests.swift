@@ -278,6 +278,7 @@ struct ConfigTests {
     @Test func scrolling() throws {
         #expect(Config().scrolling.columnWidth == 0.49)
         #expect(try Config.parse("[scrolling]\ncolumn-width = 0.5\n").scrolling.columnWidth == 0.5)
+        #expect(try Config.parse("[scrolling]\nfill = true\n").scrolling.fill)
         #expect(try Config.parse("default-layout = 'scrolling'\n").defaultLayout == .scrolling)
         assertError("[scrolling]\ncolumn-width = 1.5\n", path: "scrolling.column-width", line: 2, contains: "0.1 to 1")
     }

@@ -3,7 +3,8 @@ import CoreGraphics
 // The scrolling layout, after Hyprland's (and niri's): the root is a row of columns, each a window or a stack of
 // windows, as wide as its own share of the screen whatever the number of columns, so the row runs past the
 // screen edges and scrolls to keep the focused column in view. A lone column fills the screen, columns that fit
-// are centred, and focusing a column scrolls just far enough to show it whole.
+// are centred (or, with `fillColumns`, stretched to fill the screen), and focusing a column scrolls just far
+// enough to show it whole.
 //
 // macOS cannot clip another app's window at the screen edge, so a window scrolled out of view is parked
 // instead: on an edge with nothing beyond it, it hangs off the screen with `peek` points left on, in a gutter
@@ -56,11 +57,19 @@ extension Workspace {
     /// as wide as the screen; any other is its share of it, grown to fit its windows' minimum widths.
     func columnSpans(in area: CGRect) -> [(start: CGFloat, width: CGFloat)] {
         let count = root.children.count, gap = gaps.horizontal
-        var start: CGFloat = 0
-        return root.children.indices.map { i in
+        var widths: [CGFloat] = root.children.indices.map { i in
             let insets = (i > 0 ? gap / 2 : 0) + (i < count - 1 ? gap / 2 : 0)
             let minimum = root.children[i].minimumExtent(.horizontal, gap: gap, padding: accordionPadding, minimumSizes)
-            let width = count == 1 ? area.width : max((area.width * CGFloat(width(ofColumn: i))).rounded(), minimum + insets)
+            return count == 1 ? area.width : max((area.width * CGFloat(width(ofColumn: i))).rounded(), minimum + insets)
+        }
+        // Columns that fit between the outer gaps grow in proportion to fill them, the last taking the rounding.
+        let total = widths.reduce(0, +), full = gaps.inset(bounds).width
+        if fillColumns, count > 1, total < full {
+            for i in widths.indices.dropLast() { widths[i] = (widths[i] * full / total).rounded() }
+            widths[count - 1] = full - widths.dropLast().reduce(0, +)
+        }
+        var start: CGFloat = 0
+        return widths.map { width in
             defer { start += width }
             return (start, width)
         }
