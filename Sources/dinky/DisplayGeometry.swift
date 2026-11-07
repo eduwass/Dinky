@@ -1,6 +1,7 @@
 import AppKit
 import DinkyConfig
 import DinkyLayout
+import DinkyPrivate
 
 /// The NSScreen showing a display.
 func screen(of id: CGDirectDisplayID) -> NSScreen? {
@@ -8,10 +9,18 @@ func screen(of id: CGDirectDisplayID) -> NSScreen? {
     return NSScreen.screens.first { ($0.deviceDescription[number] as? NSNumber)?.uint32Value == id }
 }
 
+/// The menu bar's height as each display's visible frame last showed it, for `menuBarCorrected`.
+private var menuBarInsets: [CGDirectDisplayID: CGFloat] = [:]
+
 /// The frame minus menu bar and Dock, in CG coordinates (top-left origin at the primary display).
+/// The menu bar's edge comes from WindowServer, not NSScreen alone, which can miss a quick hide or show.
 func visibleArea(of id: CGDirectDisplayID) -> CGRect? {
     guard let primary = NSScreen.screens.first, let screen = screen(of: id) else { return nil }
-    let visible = screen.visibleFrame
+    let safeTop = screen.safeAreaInsets.top
+    let inset = screen.frame.maxY - screen.visibleFrame.maxY
+    if inset > safeTop { menuBarInsets[id] = inset }
+    let visible = menuBarCorrected(visible: screen.visibleFrame, screen: screen.frame, safeTop: safeTop,
+                                   autohides: dinky_menu_bar_autohides(), knownInset: menuBarInsets[id])
     return CGRect(x: visible.minX, y: primary.frame.maxY - visible.maxY, width: visible.width, height: visible.height)
 }
 

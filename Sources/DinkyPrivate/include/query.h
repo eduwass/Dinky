@@ -42,4 +42,7 @@ uint64_t dinky_window_space_id(uint32_t windowID);
 // Window IDs on a Space, filtered like yabai space_window_list.
 NSArray<NSNumber *> *dinky_space_window_ids(uint64_t spaceID, bool includeMinimized);
 
+// Whether the menu bar hides itself, as WindowServer has it now. NSScreen's visible frame can lag behind it.
+bool dinky_menu_bar_autohides(void);
+
 NS_ASSUME_NONNULL_END

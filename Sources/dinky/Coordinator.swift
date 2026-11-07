@@ -74,6 +74,15 @@ final class Coordinator {
             reconcile()
             fitHiddenSpaces(on: resized)
         }
+        // A frame written while the menu bar still slides can land clamped under it, and nothing else asks again.
+        // Lay out once more after the last flip, when holding the toggle key has stopped.
+        var settle: DispatchWorkItem?
+        DistributedNotificationCenter.default().addObserver(forName: .init("AppleInterfaceMenuBarHidingChangedNotification"),
+                                                            object: nil, queue: .main) { [weak self] _ in
+            settle?.cancel()
+            settle = DispatchWorkItem { self?.reconcile() }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: settle!)
+        }
         // A hidden app's windows can read as shown when their hide event arrives; re-read them once it is hidden.
         let center = NSWorkspace.shared.notificationCenter
         for name in [NSWorkspace.didHideApplicationNotification, NSWorkspace.didUnhideApplicationNotification] {
