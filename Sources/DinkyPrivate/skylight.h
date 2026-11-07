@@ -7,6 +7,7 @@ extern int SLSMainConnectionID(void);
 extern CFArrayRef SLSCopyManagedDisplaySpaces(int cid);
 extern uint64_t SLSManagedDisplayGetCurrentSpace(int cid, CFStringRef uuid);
 extern int SLSSpaceGetType(int cid, uint64_t sid);
+extern CGError SLSGetMenuBarAutohideEnabled(int cid, int *enabled);
 extern CFArrayRef SLSCopySpacesForWindows(int cid, int selector, CFArrayRef window_list);
 extern CFArrayRef SLSCopyWindowsWithOptionsAndTags(int cid, uint32_t owner, CFArrayRef spaces, uint32_t options, uint64_t *set_tags, uint64_t *clear_tags);
 

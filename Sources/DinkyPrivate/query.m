@@ -134,3 +134,11 @@ NSArray<NSNumber *> *dinky_space_window_ids(uint64_t spaceID, bool includeMinimi
     CFRelease(windows);
     return result;
 }
+
+bool dinky_menu_bar_autohides(void)
+{
+    // WindowServer writes one byte here, so read only that.
+    int enabled = 0;
+    SLSGetMenuBarAutohideEnabled(dinky_connection(), &enabled);
+    return (enabled & 0xff) != 0;
+}
